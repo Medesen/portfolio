@@ -1,0 +1,18 @@
+# Base training config. Schema and defaults come from the Pydantic TrainConfig
+# (registered in ConfigStore as base_train); this file only does composition:
+# it selects the default model from the `model` config group.
+defaults:
+  - base_train
+  - model: gbm
+  - override hydra/job_logging: stdout
+  - _self_
+
+hydra:
+  run:
+    dir: .
+  sweep:
+    dir: outputs/multirun
+    subdir: ${hydra.job.num}
+  output_subdir: null
+  job:
+    chdir: false

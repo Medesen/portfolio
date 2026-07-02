@@ -48,6 +48,27 @@ A production-ready ML service I built to predict customer churn with complete en
 
 ---
 
+### 3. Config-Driven ML - Hydra + Pydantic Configuration Layer
+
+**Status:** Complete  
+**Domain:** Configuration management for ML experiments  
+**Pattern:** Pydantic schemas as single source of truth → Hydra composition → validated CLI  
+**Tech Stack:** Hydra, Pydantic v2, scikit-learn, Docker
+
+A small, config-driven training pipeline I built to demonstrate a pattern I consider essential for experiment-heavy ML work: Hydra for config composition and CLI overrides, Pydantic for schema validation, joined at a single validated boundary. The ML task (regression on scikit-learn's bundled diabetes dataset) is deliberately simple — the configuration layer is the point. Everything runs locally in Docker with no API keys and no downloads at runtime.
+
+**Highlights:**
+- Every hyperparameter overridable from the CLI, validated before training starts
+- Swappable model families via a config group backed by a discriminated union
+- Named experiment configs that inherit from a base and change only what differs
+- Multirun sweeps (both models × three seeds) with zero extra code
+- Config snapshot saved per run — any run can be re-scored from its output directory alone
+- ~2 minute setup time, fully reproducible
+
+**[View Project →](config_driven_ml/)**
+
+---
+
 ## What This Portfolio Demonstrates
 
 ### Engineering Practices
@@ -62,7 +83,7 @@ A production-ready ML service I built to predict customer churn with complete en
 
 **ML/AI:** Retrieval-augmented generation, classification models (Random Forest, XGBoost, Logistic Regression), embedding models, vector databases, LLM integration, hyperparameter tuning, threshold optimization, drift detection, evaluation frameworks
 
-**Software Engineering:** REST APIs (FastAPI), modular architecture, dependency injection, configuration management, state tracking, logging, type hints, comprehensive testing (unit/integration/e2e)
+**Software Engineering:** REST APIs (FastAPI), modular architecture, dependency injection, configuration management (Hydra + Pydantic), state tracking, logging, type hints, comprehensive testing (unit/integration/e2e)
 
 **MLOps:** MLflow experiment tracking, model registry, CI/CD pipelines (GitHub Actions), security scanning, load testing, Kubernetes deployment
 
@@ -118,6 +139,19 @@ ML-portfolio/
 │   ├── Dockerfile             # Container definition
 │   ├── docker-compose.yml     # Orchestration (API, MLflow, monitoring)
 │   └── Makefile              # 40+ command shortcuts
+├── config_driven_ml/           # Project 3: Hydra + Pydantic config layer
+│   ├── README.md               # Complete documentation
+│   ├── src/mlctl/              # Source code
+│   │   ├── config_layer.py    # The bridge: ConfigStore registration + validated boundary
+│   │   ├── config_models.py   # Pydantic schemas (single source of truth)
+│   │   ├── configs/           # Base + named experiment YAML configs
+│   │   ├── pipeline.py        # Train/evaluate logic
+│   │   └── main.py            # CLI router
+│   ├── tests/                  # 12 tests (schema, composition, roundtrip)
+│   ├── Dockerfile              # Container definition
+│   ├── docker-compose.yml      # Single-service orchestration
+│   ├── Makefile               # Command shortcuts
+│   └── setup.sh / setup.ps1   # Automated setup scripts
 └── [future projects...]        # More projects coming soon
 ```
 
@@ -255,7 +289,8 @@ Based on the completed projects, I've demonstrated proficiency with:
 
 **Python Ecosystem:**
 - FastAPI (REST API development)
-- Pydantic (data validation)
+- Pydantic (data validation, config schemas with discriminated unions)
+- Hydra (config composition, CLI overrides, multirun sweeps)
 - Type hints and modern Python features
 - pytest for comprehensive testing (unit/integration/e2e)
 - YAML-based configuration management
@@ -303,7 +338,7 @@ I built these projects to demonstrate end-to-end capability - from problem defin
 
 ---
 
-**Last Updated:** November 2025  
-**Current Projects:** 2 complete, more coming soon  
+**Last Updated:** July 2026  
+**Current Projects:** 3 complete, more coming soon  
 **License:** See individual project directories for license details
 

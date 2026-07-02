@@ -1,0 +1,14 @@
+# Named experiment: ridge baseline with strong regularization.
+# Demonstrates overriding the base config's model-group selection.
+#
+# Usage:
+#   mlctl train --config-name=ridge_strong
+defaults:
+  - train
+  - override /model: ridge
+  - _self_
+
+experiment_name: ridge_strong
+
+model:
+  alpha: 10.0

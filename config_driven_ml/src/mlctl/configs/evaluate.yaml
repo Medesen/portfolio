@@ -1,0 +1,11 @@
+defaults:
+  - base_evaluate
+  - override hydra/job_logging: stdout
+  - _self_
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false
