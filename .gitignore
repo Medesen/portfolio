@@ -263,3 +263,7 @@ end2end_churn/secrets/*.secret
 # Load test reports and results (Issue 8)
 end2end_churn/tests/locust_report.html
 end2end_churn/tests/locust_results*.csv
+# Local working artifacts (kept out of the repo)
+end2end_churn/models/
+end2end_churn/run_ci_checks_locally.sh
+rag_pipeline/TODO.txt
