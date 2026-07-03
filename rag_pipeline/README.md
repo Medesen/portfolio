@@ -64,8 +64,8 @@ Based on this analysis, I recommend fixed chunking for technical documentation r
 **For Linux/macOS:**
 ```bash
 # Clone the repository and navigate to project
-git clone https://github.com/Medesen/ML-portfolio.git
-cd ML-portfolio/rag_pipeline
+git clone https://github.com/Medesen/portfolio.git
+cd portfolio/rag_pipeline
 
 # Run automated setup (builds containers, downloads model, processes data)
 make setup
@@ -76,8 +76,8 @@ make setup
 Option 1 - PowerShell (Recommended):
 ```powershell
 # Clone the repository and navigate to project
-git clone https://github.com/Medesen/ML-portfolio.git
-cd ML-portfolio\rag_pipeline
+git clone https://github.com/Medesen/portfolio.git
+cd portfolio\rag_pipeline
 
 # Run automated setup (builds containers, downloads model, processes data)
 .\setup.ps1
@@ -86,8 +86,8 @@ cd ML-portfolio\rag_pipeline
 Option 2 - Git Bash / WSL2:
 ```bash
 # Clone the repository and navigate to project
-git clone https://github.com/Medesen/ML-portfolio.git
-cd ML-portfolio/rag_pipeline
+git clone https://github.com/Medesen/portfolio.git
+cd portfolio/rag_pipeline
 
 # Run automated setup (builds containers, downloads model, processes data)
 make setup
@@ -693,7 +693,7 @@ See [LICENSE](LICENSE) file for details.
 
 - **Scikit-learn Documentation:** https://scikit-learn.org/
 - **Dataset Source:** https://scikit-learn.org/dev/versions.html (1.7.2 stable)
-- **Part of ML Portfolio:** [ML-portfolio](../)
+- **Part of ML Portfolio:** [portfolio](../)
 
 ---
 

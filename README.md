@@ -98,7 +98,7 @@ A small, config-driven training pipeline I built to demonstrate a pattern I cons
 ## Repository Structure
 
 ```
-ML-portfolio/
+portfolio/
 ├── README.md                    # Portfolio overview (this file)
 ├── rag_pipeline/                # Project 1: RAG system with evaluation
 │   ├── README.md               # Complete documentation
@@ -216,8 +216,8 @@ Each project uses `make` commands for all operations, providing a consistent int
 
 ```bash
 # Clone the repository
-git clone https://github.com/Medesen/ML-portfolio.git
-cd ML-portfolio
+git clone https://github.com/Medesen/portfolio.git
+cd portfolio
 
 # Navigate to a specific project
 cd rag_pipeline
@@ -334,7 +334,7 @@ I built these projects to demonstrate end-to-end capability - from problem defin
 ## Contact & Links
 
 - **GitHub:** [github.com/Medesen](https://github.com/Medesen)
-- **Portfolio Repository:** [ML-portfolio](https://github.com/Medesen/ML-portfolio)
+- **Portfolio Repository:** [portfolio](https://github.com/Medesen/portfolio)
 
 ---
 

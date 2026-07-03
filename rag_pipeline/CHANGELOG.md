@@ -413,6 +413,6 @@ reranking:
 ---
 
 **Maintained by:** Mikkel Nielsen  
-**Repository:** https://github.com/Medesen/ML-portfolio/rag_pipeline  
+**Repository:** https://github.com/Medesen/portfolio/rag_pipeline  
 **License:** MIT (see LICENSE file)
 

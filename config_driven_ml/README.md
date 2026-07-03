@@ -41,8 +41,8 @@ A small, config-driven ML training pipeline built to demonstrate a pattern I con
 **For Linux/macOS:**
 ```bash
 # Clone the repository and navigate to project
-git clone https://github.com/Medesen/ML-portfolio.git
-cd ML-portfolio/config_driven_ml
+git clone https://github.com/Medesen/portfolio.git
+cd portfolio/config_driven_ml
 
 # Run automated setup (builds image, trains baseline model)
 make setup
@@ -50,8 +50,8 @@ make setup
 
 **For Windows (PowerShell):**
 ```powershell
-git clone https://github.com/Medesen/ML-portfolio.git
-cd ML-portfolio\config_driven_ml
+git clone https://github.com/Medesen/portfolio.git
+cd portfolio\config_driven_ml
 .\setup.ps1
 ```
 
@@ -266,7 +266,7 @@ This project is part of an ML portfolio. See main repository for license details
 
 - **Hydra Documentation:** https://hydra.cc/
 - **Pydantic Documentation:** https://docs.pydantic.dev/
-- **Part of ML Portfolio:** [ML-portfolio](../)
+- **Part of ML Portfolio:** [portfolio](../)
 
 ---
 

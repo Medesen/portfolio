@@ -1,6 +1,6 @@
 # Customer Churn Prediction - Production ML Pipeline
 
-[![CI Pipeline](https://github.com/Medesen/ML-portfolio/workflows/CI%20-%20End2End%20Churn%20Prediction/badge.svg)](https://github.com/Medesen/ML-portfolio/actions/workflows/ci-end2end-churn.yml)
+[![CI Pipeline](https://github.com/Medesen/portfolio/workflows/CI%20-%20End2End%20Churn%20Prediction/badge.svg)](https://github.com/Medesen/portfolio/actions/workflows/ci-end2end-churn.yml)
 
 A production-ready ML service that predicts customer churn for a telecom dataset. I built this to demonstrate end-to-end ML engineering: from training with hyperparameter tuning to serving via REST API, with MLflow experiment tracking, drift detection, monitoring dashboards, and a full CI/CD pipeline. Everything runs in Docker with zero local setup required.
 
@@ -75,8 +75,8 @@ Just install Docker and run `make setup`. No Python, pip, or conda needed.
 **For Linux/macOS:**
 ```bash
 # Clone the repository and navigate to project
-git clone https://github.com/Medesen/ML-portfolio.git
-cd ML-portfolio/end2end_churn
+git clone https://github.com/Medesen/portfolio.git
+cd portfolio/end2end_churn
 
 # Run automated setup (builds containers, trains model)
 make setup
@@ -87,8 +87,8 @@ make setup
 Option 1 - PowerShell (Recommended):
 ```powershell
 # Clone the repository and navigate to project
-git clone https://github.com/Medesen/ML-portfolio.git
-cd ML-portfolio\end2end_churn
+git clone https://github.com/Medesen/portfolio.git
+cd portfolio\end2end_churn
 
 # Run automated setup (builds containers, trains model)
 .\setup.ps1
@@ -97,8 +97,8 @@ cd ML-portfolio\end2end_churn
 Option 2 - Git Bash / WSL2:
 ```bash
 # Clone the repository and navigate to project
-git clone https://github.com/Medesen/ML-portfolio.git
-cd ML-portfolio/end2end_churn
+git clone https://github.com/Medesen/portfolio.git
+cd portfolio/end2end_churn
 
 # Run automated setup (builds containers, trains model)
 make setup
@@ -1024,7 +1024,7 @@ This project is part of an ML portfolio. See main repository for license details
 ## Related Links
 
 - **Dataset Source:** [Kaggle Telco Customer Churn](https://www.kaggle.com/blastchar/telco-customer-churn)
-- **Part of ML Portfolio:** [ML-portfolio](../)
+- **Part of ML Portfolio:** [portfolio](../)
 
 ---
 
