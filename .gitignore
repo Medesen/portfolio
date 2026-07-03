@@ -214,7 +214,7 @@ env/
 ENV/
 .venv
 .venv*
-rag_pipeline/venv/
+rag_pipeline/.venv/
 
 # Backup of md files should not be tracked
 rag_pipeline/old_md_files_backup/
@@ -224,7 +224,6 @@ rag_pipeline/data/processed/
 rag_pipeline/data/vector_store/
 rag_pipeline/data/state/
 rag_pipeline/logs/
-rag_pipeline/QnA_pedantic_hiring_manager_(ClaudeSonnet4.5).txt
 rag_pipeline/project_analysis.txt
 rag_pipeline/SUMMARY.txt
 rag_pipeline/rag_pipeline_backup_2025-11-21_before_major_revision/
@@ -252,7 +251,6 @@ end2end_churn/configs/
 end2end_churn/htmlcov/
 end2end_churn/.coverage
 end2end_churn/.pytest_cache/
-end2end_churn/old_docs/
 end2end_churn/project_analysis.txt
 
 # Secrets should never be committed (Security)
@@ -265,5 +263,10 @@ end2end_churn/tests/locust_report.html
 end2end_churn/tests/locust_results*.csv
 # Local working artifacts (kept out of the repo)
 end2end_churn/models/
-end2end_churn/run_ci_checks_locally.sh
 rag_pipeline/TODO.txt
+
+# Preserved local-only files copied from ML-portfolio-old — keep OUT of the public repo
+end2end_churn/old_docs/
+end2end_churn/run_ci_checks_locally.sh
+rag_pipeline/notebooks/evaluation_analysis.ipynb
+rag_pipeline/QnA_pedantic_hiring_manager_(ClaudeSonnet4.5).txt

@@ -63,8 +63,8 @@ nbformat>=5.9.0              # Notebook format support
 #   The container has everything it needs from requirements.txt
 #
 # Recommended setup for local development:
-#   python3 -m venv venv
-#   source venv/bin/activate  # On Windows: venv\Scripts\activate
+#   python3 -m venv .venv
+#   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 #   pip install -r requirements-dev.txt
 #   pre-commit install  # Optional: Enable git hooks
 #
