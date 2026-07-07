@@ -69,6 +69,27 @@ A small, config-driven training pipeline I built to demonstrate a pattern I cons
 
 ---
 
+### 4. Demand Forecasting - Promo-Aware Retail Forecasting with Econometric Lift Estimation
+
+**Status:** Complete  
+**Domain:** Retail demand forecasting & promotion-effect estimation  
+**Key Findings:** Global LightGBM improves MASE by 35% over seasonal-naive across 118 SKUs; SARIMAX wins on the high-volume subset; promotions multiply expected daily sales ≈ 4.6× (PPML, 95% CI [+307%, +429%])  
+**Tech Stack:** LightGBM, statsmodels (SARIMAX, PPML), pandas, Docker
+
+A forecasting system I built to compare classical and ML approaches the way time-series work should be evaluated: rolling-origin backtests against a seasonal-naive baseline, never a random split. A single global LightGBM (Tweedie objective, P10/P50/P90 quantiles) covers all 118 daily series; per-series SARIMAX with promotion regressors is fit where its assumptions hold — and wins there, which is the honest headline. A PPML fixed-effects panel regression estimates the promotion lift with cluster-robust inference. The dataset (5 years of daily pasta sales with per-SKU promo flags, CC BY) ships in the repo: no accounts, no API keys.
+
+**Highlights:**
+- Rolling-origin evaluation: 12 expanding-window folds × 28-day horizon
+- Metrics chosen for zero-inflated count data (MASE/WAPE, not sMAPE) with reasoning on record
+- Quantile forecasts with pinball loss and interval-coverage evaluation (0.778 vs 0.80 target)
+- PPML promo-lift estimation with SKU fixed effects and stated identification assumptions
+- Leakage tests that corrupt the future and assert forecasts don't move
+- 20 tests, ~5 minute setup, fully reproducible (`make reproduce` regenerates every README number)
+
+**[View Project →](demand_forecasting/)**
+
+---
+
 ## What This Portfolio Demonstrates
 
 ### Engineering Practices
@@ -152,6 +173,22 @@ portfolio/
 │   ├── docker-compose.yml      # Single-service orchestration
 │   ├── Makefile               # Command shortcuts
 │   └── setup.sh / setup.ps1   # Automated setup scripts
+├── demand_forecasting/         # Project 4: Forecasting + promo-lift estimation
+│   ├── README.md               # Complete documentation
+│   ├── DATA_NOTES.md           # EDA findings → design decisions
+│   ├── src/demandcast/         # Source code
+│   │   ├── data/              # Loader w/ validation, Italian holiday calendar
+│   │   ├── evaluation/        # Rolling-origin folds, backtest runner, metrics
+│   │   ├── models/            # Baselines, SARIMAX, global LightGBM + quantiles
+│   │   ├── analysis/          # PPML promo-lift, forecast plots
+│   │   └── main.py            # CLI: backtest / promo-lift / plot-forecast
+│   ├── tests/                  # 20 tests (leakage, estimator recovery, metrics)
+│   ├── data/raw/               # Bundled dataset (872 KB, CC BY) + provenance
+│   ├── assets/                 # Example forecast figure
+│   ├── Dockerfile              # Container definition
+│   ├── docker-compose.yml      # Single-service orchestration
+│   ├── Makefile               # Command shortcuts incl. `make reproduce`
+│   └── setup.sh / setup.ps1   # Automated setup scripts
 └── [future projects...]        # More projects coming soon
 ```
 
@@ -178,7 +215,6 @@ This portfolio is actively expanding. Planned additions include:
 **Classic ML:**
 - **Tabular ML** - Feature engineering, experiment tracking, SHAP, model cards
 - **Causal inference** - A/B testing, CUPED, uplift modeling
-- **Time-series forecasting** - ARIMA/Prophet vs XGBoost vs deep learning
 - **Recommender system** - Two-tower retrieval + ranking, offline metrics
 - **Data pipeline orchestration** - Airflow/Prefect, data quality, versioning
 - **Analytics & storytelling** - SQL, interactive viz, insights reports
@@ -282,6 +318,8 @@ Based on the completed projects, I've demonstrated proficiency with:
 **ML/AI Frameworks:**
 - scikit-learn (Random Forest, Logistic Regression)
 - XGBoost (gradient boosting)
+- LightGBM (Tweedie & quantile objectives, native API)
+- statsmodels (SARIMAX state-space models, PPML/GLM panel regression)
 - Sentence-transformers (embedding models)
 - ChromaDB (vector database)
 - Ollama (local LLM inference)
@@ -315,6 +353,8 @@ Based on the completed projects, I've demonstrated proficiency with:
 **Evaluation & Metrics:**
 - Classification metrics (ROC AUC, precision, recall, F1)
 - Information Retrieval metrics (Recall@k, MRR, NDCG)
+- Forecasting metrics (MASE, WAPE, pinball loss, interval coverage) with rolling-origin backtesting
+- Econometric inference (fixed-effects panel regression, cluster-robust SEs)
 - Drift detection (PSI, distribution monitoring)
 - Systematic comparative evaluation
 - Test set design and curation
@@ -339,6 +379,6 @@ I built these projects to demonstrate end-to-end capability - from problem defin
 ---
 
 **Last Updated:** July 2026  
-**Current Projects:** 3 complete, more coming soon  
+**Current Projects:** 4 complete, more coming soon  
 **License:** See individual project directories for license details
 

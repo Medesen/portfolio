@@ -1,0 +1,112 @@
+"""CLI entry point: ``demandcast backtest --model seasonal_naive``."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import pandas as pd
+
+from demandcast.data import load_long
+from demandcast.evaluation import make_folds, run_backtest, score
+from demandcast.models import MODELS, Sarimax, select_skus
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="demandcast",
+        description="Demand forecasting and promo-effect estimation on daily pasta sales.",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    bt = sub.add_parser("backtest", help="Rolling-origin backtest of one model")
+    bt.add_argument("--model", choices=sorted(MODELS), required=True)
+    bt.add_argument("--n-folds", type=int, default=12)
+    bt.add_argument("--horizon", type=int, default=28, help="trading days ahead")
+    bt.add_argument(
+        "--subset",
+        choices=["all", "sarimax"],
+        default=None,
+        help="restrict to the SARIMAX SKU subset for apples-to-apples "
+        "comparison (default: all, except for --model sarimax which "
+        "always runs on its subset)",
+    )
+    bt.add_argument("--out", type=Path, default=Path("outputs"))
+
+    pl = sub.add_parser(
+        "promo-lift", help="Fixed-effects promo-lift estimation (PPML + OLS robustness)"
+    )
+    pl.add_argument("--out", type=Path, default=Path("outputs"))
+
+    pf = sub.add_parser(
+        "plot-forecast", help="Plot one SKU's 28-day forecast with P10-P90 band"
+    )
+    pf.add_argument(
+        "--preds", type=Path, default=Path("outputs/backtest_lgbm_preds.csv"),
+        help="predictions CSV from `backtest --model lgbm`",
+    )
+    pf.add_argument("--sku", default=None, help="default: auto-picked example SKU")
+    pf.add_argument("--fold", type=int, default=None, help="default: last fold")
+    pf.add_argument("--out", type=Path, default=Path("outputs/forecast_example.png"))
+
+    args = parser.parse_args()
+
+    if args.command == "plot-forecast":
+        from demandcast.analysis.plots import plot_forecast
+
+        preds = pd.read_csv(args.preds, parse_dates=["date"])
+        out = plot_forecast(preds, load_long(), sku=args.sku, fold=args.fold, out=args.out)
+        print(f"wrote {out}")
+        return
+
+    if args.command == "promo-lift":
+        from demandcast.analysis.promo_lift import estimate_promo_lift
+
+        long = load_long()
+        result = estimate_promo_lift(long)
+        print(result.ppml)
+        print(result.ols_log1p)
+        print("\nPPML lift by brand:")
+        print(result.by_brand.round(2).to_string())
+        args.out.mkdir(parents=True, exist_ok=True)
+        result.by_brand.to_csv(args.out / "promo_lift_by_brand.csv")
+        return
+
+    if args.command == "backtest":
+        long = load_long()
+
+        subset = args.subset or ("sarimax" if args.model == Sarimax.name else "all")
+        if subset == "sarimax":
+            long_eval = long[long["sku"].isin(select_skus(long))]
+        else:
+            long_eval = long
+
+        folds = make_folds(long_eval["date"], n_folds=args.n_folds, horizon=args.horizon)
+        model = MODELS[args.model](long)  # full frame = promo/calendar schedule only
+        preds = run_backtest(long_eval, model, folds)
+        scores = score(preds, long_eval)
+
+        tag = model.name if subset == "all" else f"{model.name}_subset-{subset}"
+        args.out.mkdir(parents=True, exist_ok=True)
+        preds.to_csv(args.out / f"backtest_{tag}_preds.csv", index=False)
+        scores.to_csv(args.out / f"backtest_{tag}_scores.csv")
+
+        print(
+            f"\n{model.name} — {args.n_folds} folds x {args.horizon} trading days"
+            f" — {long_eval['sku'].nunique()} SKUs ({subset})"
+        )
+        print(scores.round(3).to_string())
+
+        if any(c.startswith("y_q") for c in preds.columns):
+            from demandcast.evaluation.metrics import score_quantiles
+
+            qs = score_quantiles(preds)
+            print("\nquantile forecasts:")
+            print(qs.round(3).to_string())
+            cov = qs.attrs.get("coverage_p10_p90")
+            if cov is not None:
+                print(f"P10-P90 empirical coverage: {cov:.3f} (target 0.80)")
+
+
+if __name__ == "__main__":
+    main()

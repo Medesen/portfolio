@@ -1,0 +1,28 @@
+[project]
+name = "demand-forecasting"
+version = "0.1.0"
+description = "Retail demand forecasting with promo-effect estimation: baselines vs SARIMAX vs global LightGBM under rolling-origin evaluation"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "statsmodels>=0.14",
+    "lightgbm>=4.3",
+    "holidays>=0.46",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+demandcast = "demandcast.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/demandcast"]
