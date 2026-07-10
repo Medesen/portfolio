@@ -53,3 +53,7 @@ Makefile text eol=lf
 *.tar binary
 *.tgz binary
 
+# Bundled datasets - store byte-for-byte so documented checksums stay valid
+# (the Hillstrom CSV ships with CRLF line endings; do not normalize them)
+causal_uplift/data/raw/hillstrom_email.csv binary
+

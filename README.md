@@ -90,6 +90,26 @@ A forecasting system I built to compare classical and ML approaches the way time
 
 ---
 
+### 5. Experimentation & Uplift - A/B Analysis, CUPED, and Targeting on a Randomized Trial
+
+**Status:** Complete  
+**Domain:** Marketing experimentation & causal inference (commercial)  
+**Key Findings:** On a randomized e-mail trial, the men's e-mail has the larger *average* effect but the women's e-mail carries the real treatment-effect *heterogeneity*; targeting the top 30% by predicted uplift captures ~55% of the incremental visits of mailing everyone; CUPED yields only ~0–3% variance reduction here — an honest null explained by weak pre-period covariates  
+**Tech Stack:** scikit-learn, LightGBM (S/T/X-learners), statsmodels, scipy, Docker
+
+An experimentation-and-uplift study I built to work through the three questions a commercial data scientist asks of an experiment: *did it work* (ATE with unpooled CIs, minimum-detectable-effect, and multiplicity control), *can we measure it more cheaply* (CUPED and Lin regression adjustment — reported honestly, including where they don't help), and *whom should we target* (S/T/X-learner uplift models evaluated with Qini curves on a held-out split, turned into a concrete top-k targeting policy). Built on Kevin Hillstrom's classic 64,000-customer randomized e-mail dataset, which ships in the repo: no accounts, no API keys, no downloads.
+
+**Highlights:**
+- Randomization verified (max |SMD| 0.014) before any outcome is touched
+- ATEs with unpooled CIs, minimum-detectable-effect, and Holm/BH multiplicity control across the arm × outcome grid
+- CUPED + Lin (2013) regression adjustment, with the honest ~0–3% variance reduction this data allows — mechanism validated on synthetic data where reduction = ρ² exactly
+- S/T/X-learner uplift models evaluated by Qini on a held-out split, with a decile table and a top-k targeting simulation vs response-model and random targeting
+- 17 tests incl. estimator-recovery on known synthetic truth, ~5 minute setup, fully reproducible (`make reproduce` regenerates every number and the figure)
+
+**[View Project →](causal_uplift/)**
+
+---
+
 ## What This Portfolio Demonstrates
 
 ### Engineering Practices
@@ -189,6 +209,21 @@ portfolio/
 │   ├── docker-compose.yml      # Single-service orchestration
 │   ├── Makefile               # Command shortcuts incl. `make reproduce`
 │   └── setup.sh / setup.ps1   # Automated setup scripts
+├── causal_uplift/              # Project 5: Experimentation, CUPED & uplift modeling
+│   ├── README.md               # Complete documentation
+│   ├── DATA_NOTES.md           # EDA findings → design decisions
+│   ├── src/upliftlab/          # Source code
+│   │   ├── data/              # Loader + validation; synthetic RCT generator
+│   │   ├── experiment/        # Balance (SMD), ATE inference, CUPED / adjustment
+│   │   ├── uplift/            # S/T/X-learners; Qini, deciles, targeting
+│   │   └── main.py            # CLI: balance / ate / cuped / uplift / all
+│   ├── tests/                  # 17 tests incl. estimator-recovery on known truth
+│   ├── data/raw/               # Bundled dataset (3.96 MB) + provenance
+│   ├── assets/                 # Qini curve figure
+│   ├── Dockerfile              # Container definition
+│   ├── docker-compose.yml      # Single-service orchestration
+│   ├── Makefile               # Command shortcuts incl. `make reproduce`
+│   └── setup.sh / setup.ps1   # Automated setup scripts
 └── [future projects...]        # More projects coming soon
 ```
 
@@ -214,7 +249,6 @@ This portfolio is actively expanding. Planned additions include:
 
 **Classic ML:**
 - **Tabular ML** - Feature engineering, experiment tracking, SHAP, model cards
-- **Causal inference** - A/B testing, CUPED, uplift modeling
 - **Recommender system** - Two-tower retrieval + ranking, offline metrics
 - **Data pipeline orchestration** - Airflow/Prefect, data quality, versioning
 - **Analytics & storytelling** - SQL, interactive viz, insights reports
@@ -355,6 +389,7 @@ Based on the completed projects, I've demonstrated proficiency with:
 - Information Retrieval metrics (Recall@k, MRR, NDCG)
 - Forecasting metrics (MASE, WAPE, pinball loss, interval coverage) with rolling-origin backtesting
 - Econometric inference (fixed-effects panel regression, cluster-robust SEs)
+- Causal inference & experimentation (randomized ATE, CUPED variance reduction, uplift/Qini, Holm/BH multiplicity control)
 - Drift detection (PSI, distribution monitoring)
 - Systematic comparative evaluation
 - Test set design and curation
@@ -379,6 +414,6 @@ I built these projects to demonstrate end-to-end capability - from problem defin
 ---
 
 **Last Updated:** July 2026  
-**Current Projects:** 4 complete, more coming soon  
+**Current Projects:** 5 complete, more coming soon  
 **License:** See individual project directories for license details
 
