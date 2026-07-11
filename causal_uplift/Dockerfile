@@ -13,9 +13,15 @@ RUN groupadd -g ${GID} app && useradd -m -u ${UID} -g ${GID} app
 
 WORKDIR /app
 
+# Dependencies come from requirements.lock (pip-compile of pyproject.toml, incl.
+# the dev extra) so rebuilds are reproducible; installed before the source copy
+# so code changes don't invalidate the dependency layer.
+COPY requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
+
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install --no-cache-dir ".[dev]"
+RUN pip install --no-cache-dir --no-deps .
 
 COPY data ./data
 COPY tests ./tests
