@@ -30,10 +30,10 @@ This document describes the complete architecture of the RAG Pipeline system, in
 │         ↓                                                           │
 │  [1] PREPROCESSING → Structured JSON (420 files, ~4 MB)           │
 │         ↓                                                           │
-│  [2] CHUNKING → 3 Strategies → 4006 Total Chunks                  │
-│         ├─ Fixed: 1595 chunks (512 tokens, 50 overlap)            │
-│         ├─ Semantic: 736 chunks (natural boundaries)               │
-│         └─ Hierarchical: 1675 chunks (structure-aware)             │
+│  [2] CHUNKING → 3 Strategies → ~4,000 Total Chunks                │
+│         ├─ Fixed: ~1,600 chunks (512 tokens, 50 overlap)          │
+│         ├─ Semantic: ~740 chunks (natural boundaries)              │
+│         └─ Hierarchical: ~1,700 chunks (structure-aware)           │
 │         ↓                                                           │
 │  [3] EMBEDDING → Sentence-Transformers (all-MiniLM-L6-v2)         │
 │         ↓                                                           │
@@ -77,17 +77,17 @@ Structured JSON (420 files, ~4 MB)
     ├─ doc_id, title, content, doc_type
     └─ metadata (sections, file_size, etc.)
     ↓ [ITERATION 2: Chunking]
-Text Chunks (4006 total)
-    ├─ Fixed: 1595 chunks (~384 words each)
-    ├─ Semantic: 736 chunks (~1000 words each)
-    └─ Hierarchical: 1675 chunks (variable size)
+Text Chunks (~4,000 total)
+    ├─ Fixed: ~1,600 chunks (~384 words each)
+    ├─ Semantic: ~740 chunks (~1000 words each)
+    └─ Hierarchical: ~1,700 chunks (variable size)
     ↓ [ITERATION 2: Embedding]
 Vector Embeddings (384 dimensions each)
     ↓ [ITERATION 2: Storage]
 ChromaDB Collections (3 separate)
-    ├─ Collection "fixed": 1595 embeddings
-    ├─ Collection "semantic": 736 embeddings
-    └─ Collection "hierarchical": 1675 embeddings
+    ├─ Collection "fixed": ~1,600 embeddings
+    ├─ Collection "semantic": ~740 embeddings
+    └─ Collection "hierarchical": ~1,700 embeddings
     ↓ [ITERATION 3: Query]
 User Query → Query Rewriting (LLM) → Rewritten Query
     ↓ [ITERATION 3: Embedding]
@@ -441,12 +441,12 @@ Collections are independent - allows querying single or multiple strategies.
 - Throughput: ~12 files/second
 
 **Chunking:**
-- 420 docs → 4006 chunks
+- 420 docs → ~4,000 chunks
 - Time: ~5-10 seconds total
 - Breakdown: Fixed (3s), Semantic (2s), Hierarchical (4s)
 
 **Embedding:**
-- 4006 chunks → 384-dim vectors
+- ~4,000 chunks → 384-dim vectors
 - Time: ~70-80 seconds (CPU)
 - Throughput: ~50 chunks/second
 - GPU would be 5-10x faster
@@ -463,11 +463,11 @@ Collections are independent - allows querying single or multiple strategies.
 
 ### Scalability Projections
 
-**Current scale** (420 docs, 4006 chunks):
+**Current scale** (420 docs, ~4,000 chunks):
 - Query latency: ~1.2s
 - Memory: ~500 MB
 
-**10x scale** (4160 docs, 40,000 chunks):
+**10x scale** (~4,200 docs, ~40,000 chunks):
 - Query latency: ~2-3s (ChromaDB efficient with HNSW)
 - Memory: ~1 GB
 

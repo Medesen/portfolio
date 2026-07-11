@@ -9,8 +9,8 @@ Write-Host "This script will:" -ForegroundColor White
 Write-Host "  1. Build Docker containers" -ForegroundColor White
 Write-Host "  2. Start Ollama LLM service" -ForegroundColor White
 Write-Host "  3. Download Llama 3.2 model (~2GB)" -ForegroundColor White
-Write-Host "  4. Preprocess 416 documents" -ForegroundColor White
-Write-Host "  5. Build vector index (3 strategies, 4006 chunks)" -ForegroundColor White
+Write-Host "  4. Preprocess 420 documents" -ForegroundColor White
+Write-Host "  5. Build vector index (3 chunking strategies)" -ForegroundColor White
 Write-Host ""
 Write-Host "Estimated time: 5-10 minutes (depending on internet speed)" -ForegroundColor Yellow
 Write-Host ""
@@ -83,7 +83,7 @@ Write-Host ""
 
 # Step 4: Run preprocessing
 Write-Host "================================================================================" -ForegroundColor Cyan
-Write-Host "⚙️  Step 4/5: Preprocessing corpus (416 documents)..." -ForegroundColor Cyan
+Write-Host "⚙️  Step 4/5: Preprocessing corpus (420 documents)..." -ForegroundColor Cyan
 Write-Host "================================================================================" -ForegroundColor Cyan
 docker compose run --rm rag-pipeline preprocess
 if ($LASTEXITCODE -ne 0) {

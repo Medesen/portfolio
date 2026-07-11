@@ -153,9 +153,9 @@ portfolio/
 │   │   ├── generation/        # LLM integration
 │   │   ├── evaluation/        # Metrics & analysis
 │   │   └── utils/             # Config, logging
-│   ├── tests/                  # 18 unit tests (21% coverage)
+│   ├── tests/                  # 93 unit tests
 │   ├── data/
-│   │   ├── corpus/            # Scikit-learn docs (416 files, tracked)
+│   │   ├── corpus/            # Scikit-learn docs (420 files, tracked)
 │   │   └── evaluation/        # Test set (35 Q&A pairs, tracked)
 │   ├── config/
 │   │   └── config.yaml        # YAML configuration
