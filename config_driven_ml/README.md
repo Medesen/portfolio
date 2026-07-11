@@ -258,7 +258,8 @@ Yes. Docker Desktop covers all three; see the platform notes in [Quick Start](#q
 
 ## License
 
-This project is part of an ML portfolio. See main repository for license details.
+MIT — see the repository [LICENSE](../LICENSE). The diabetes dataset is
+bundled with scikit-learn itself; no data files ship in this project.
 
 ---
 

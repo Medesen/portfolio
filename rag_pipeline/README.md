@@ -685,7 +685,8 @@ Yes, the system is modular. You would need to:
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE) for details, including third-party component
+notes. The repository-wide [LICENSE](../LICENSE) applies the same terms.
 
 ---
 

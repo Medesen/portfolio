@@ -1017,7 +1017,8 @@ Zero dollars for local execution. Everything runs on your machine using open-sou
 
 ## License
 
-This project is part of an ML portfolio. See main repository for license details.
+MIT — see the repository [LICENSE](../LICENSE). The bundled Telco Customer
+Churn dataset is IBM sample data (via Kaggle) and carries its own terms.
 
 ---
 

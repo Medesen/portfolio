@@ -415,5 +415,5 @@ I built these projects to demonstrate end-to-end capability - from problem defin
 
 **Last Updated:** July 2026  
 **Current Projects:** 5 complete, more coming soon  
-**License:** See individual project directories for license details
+**License:** MIT — see [LICENSE](LICENSE). Bundled datasets carry their own terms, noted in each project's data documentation.
 

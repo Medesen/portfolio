@@ -235,7 +235,10 @@ causal_uplift/
 - **One experiment, one horizon.** Effects are the two-week campaign response; no
   long-run or repeated-exposure dynamics are in the data.
 
-## Dataset License & Citation
+## License, Dataset License & Citation
+
+The code in this project is MIT-licensed — see the repository
+[LICENSE](../LICENSE).
 
 Bundled dataset: Kevin Hillstrom's *MineThatData E-Mail Analytics And Data Mining
 Challenge* (2008) — the canonical public uplift benchmark. No formal license text

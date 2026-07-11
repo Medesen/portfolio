@@ -181,7 +181,10 @@ demand_forecasting/
 - **The lift estimate is an average.** A single promo coefficient hides heterogeneity (depth of discount is unobserved in this dataset; lift varies by brand as shown). With promo-depth data, an elasticity model would be the next step.
 - **Hierarchy is unused.** The SKUs belong to 4 brands; hierarchical reconciliation (brand/total coherence) is a natural extension — it is what the dataset's source paper (Mancuso et al. 2021) studies.
 
-## Dataset License & Citation
+## License, Dataset License & Citation
+
+The code in this project is MIT-licensed — see the repository
+[LICENSE](../LICENSE).
 
 Bundled dataset: "Hierarchical Sales Data" (UCI #611 / Mendeley `njdkntcpc9`), CC BY — details and citation in [data/raw/README.md](data/raw/README.md). Please cite Mancuso, Piccialli & Sudoso (2021), *Expert Systems with Applications* 182:115102 if you reuse the data.
 
