@@ -35,6 +35,8 @@ ENV/
 # Logs
 logs/
 *.log
+# One-off console captures of setup runs (e.g. `./setup.sh | tee setup_log.txt`)
+setup_log.txt
 
 # =============================================================================
 # Data Directories
