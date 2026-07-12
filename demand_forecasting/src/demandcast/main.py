@@ -9,7 +9,7 @@ import pandas as pd
 
 from demandcast.data import load_long
 from demandcast.evaluation import make_folds, run_backtest, score
-from demandcast.models import MODELS, Sarimax, select_skus
+from demandcast.models import MODELS, LgbmForecaster, Sarimax, select_skus
 
 
 def main() -> None:
@@ -30,6 +30,14 @@ def main() -> None:
         help="restrict to the SARIMAX SKU subset for apples-to-apples "
         "comparison (default: all, except for --model sarimax which "
         "always runs on its subset)",
+    )
+    bt.add_argument(
+        "--objective",
+        choices=["tweedie", "poisson", "l2"],
+        default=None,
+        help="LightGBM point-forecast objective for the DATA_NOTES §2 ablation "
+        "(lgbm only; default tweedie). poisson/l2 runs skip the quantile "
+        "companions, which are identical across objectives",
     )
     bt.add_argument("--out", type=Path, default=Path("outputs"))
 
@@ -81,18 +89,33 @@ def main() -> None:
         else:
             long_eval = long
 
+        if args.objective and args.model != LgbmForecaster.name:
+            parser.error("--objective only applies to --model lgbm")
+        objective = args.objective or "tweedie"
+
         folds = make_folds(long_eval["date"], n_folds=args.n_folds, horizon=args.horizon)
-        model = MODELS[args.model](long)  # full frame = promo/calendar schedule only
+        if args.model == LgbmForecaster.name:
+            # full frame = promo/calendar schedule only
+            model = LgbmForecaster(
+                full_long=long,
+                objective=objective,
+                quantiles=(0.1, 0.5, 0.9) if objective == "tweedie" else (),
+            )
+        else:
+            model = MODELS[args.model](long)
         preds = run_backtest(long_eval, model, folds)
         scores = score(preds, long_eval)
 
-        tag = model.name if subset == "all" else f"{model.name}_subset-{subset}"
+        model_tag = model.name
+        if args.model == LgbmForecaster.name and objective != "tweedie":
+            model_tag = f"{model.name}-{objective}"
+        tag = model_tag if subset == "all" else f"{model_tag}_subset-{subset}"
         args.out.mkdir(parents=True, exist_ok=True)
         preds.to_csv(args.out / f"backtest_{tag}_preds.csv", index=False)
         scores.to_csv(args.out / f"backtest_{tag}_scores.csv")
 
         print(
-            f"\n{model.name} — {args.n_folds} folds x {args.horizon} trading days"
+            f"\n{model_tag} — {args.n_folds} folds x {args.horizon} trading days"
             f" — {long_eval['sku'].nunique()} SKUs ({subset})"
         )
         print(scores.round(3).to_string())

@@ -27,8 +27,20 @@ No SKU is dead, none enters late or exits early — all 118 are kept.
 - **sMAPE is out, WAPE is in.** With this many zero-actuals, sMAPE is
   undefined/explosive on exactly the days that matter. Metrics: **MASE**
   (scale-free, seasonal-naive-normalized, the headline), **RMSE**, **WAPE**.
-- **LightGBM uses a count-appropriate objective** (Tweedie/Poisson compared
-  against L2 as an ablation) rather than plain regression by default.
+- **LightGBM uses a count-appropriate objective.** The ablation (12 rolling
+  folds × 28 trading days, all 118 SKUs, point forecast only; reproduce with
+  `make backtest ARGS="--model lgbm --objective poisson"` / `l2`):
+
+  | Objective | MASE | WAPE | RMSE | MASE, low-volume tercile |
+  |---|---|---|---|---|
+  | **Tweedie (power 1.2)** | **0.652** | **0.644** | 5.23 | **0.64** |
+  | Poisson | 0.658 | 0.646 | 5.19 | 0.65 |
+  | plain L2 | 0.725 | 0.677 | **5.13** | 0.81 |
+
+  Tweedie and Poisson are nearly tied. Plain L2 posts the best RMSE — a
+  metric fast movers dominate — while degrading sharply in scale-free terms
+  on the slow movers (low-tercile MASE 0.81 vs 0.64), which is exactly the
+  regime the count objectives exist for. Tweedie stays the default.
 - **SARIMAX is fit on high-volume, low-intermittency SKUs** where a Gaussian
   ARMA approximation is defensible, and the writeup says so explicitly —
   fitting SARIMAX to a 76%-zeros count series and calling the result a fair

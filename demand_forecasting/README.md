@@ -99,7 +99,7 @@ demandcast backtest --model seasonal_naive
 
 ### Modelling judgment
 
-- **Right tool, right regime.** SARIMAX is fit only where its Gaussian assumptions roughly hold (an explicit, documented selection rule: top-8 volume, ≤ 10% zero days) — and it wins there. The global LightGBM covers the full assortment with a Tweedie objective suited to zero-inflated counts. The comparison is run on the common subset instead of pretending one tool fits every series.
+- **Right tool, right regime.** SARIMAX is fit only where its Gaussian assumptions roughly hold (an explicit, documented selection rule: top-8 volume, ≤ 10% zero days) — and it wins there. The global LightGBM covers the full assortment with a Tweedie objective suited to zero-inflated counts (ablated against Poisson and plain L2 in [DATA_NOTES.md](DATA_NOTES.md) §2 — L2 wins only on fast-mover-dominated RMSE). The comparison is run on the common subset instead of pretending one tool fits every series.
 - **Uncertainty as a first-class output.** Quantile LightGBM produces P10/P50/P90 forecasts evaluated with pinball loss and interval coverage — what a supply planner sizing safety stock actually consumes.
 - **Known-in-advance covariates, stated explicitly.** The promotion calendar and holiday calendar are treated as known at forecast time (retail promos are planned weeks ahead). This is standard practice, but it is an assumption, so it is documented rather than smuggled in.
 

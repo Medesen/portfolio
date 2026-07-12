@@ -12,9 +12,10 @@ calendar features are exempt from the shift because they are known in
 advance (the promo calendar is planned weeks ahead; see DATA_NOTES.md).
 
 **Objective.** Tweedie (variance power 1.2) as the default for zero-inflated
-counts (DATA_NOTES.md §2). Quantile models for P10/P50/P90 share the same
-features and ride along in the same backtest, giving prediction intervals —
-what a supply planner actually consumes.
+counts, with Poisson and plain L2 available via ``--objective`` for the
+ablation reported in DATA_NOTES.md §2. Quantile models for P10/P50/P90 share
+the same features and ride along in the same backtest, giving prediction
+intervals — what a supply planner actually consumes.
 
 Hyperparameters are sensible fixed values, deliberately not tuned: with 12
 folds × 4 models the honest tuning protocol (nested validation) would
@@ -45,6 +46,11 @@ LGB_PARAMS = {
     "verbosity": -1,
 }
 NUM_BOOST_ROUND = 1000
+
+#: Point-forecast objectives for the DATA_NOTES §2 ablation. Tweedie is the
+#: count-appropriate default; the LightGBM objective string for "l2" is
+#: "regression". tweedie_variance_power only applies to tweedie.
+OBJECTIVES = {"tweedie": "tweedie", "poisson": "poisson", "l2": "regression"}
 
 CATEGORICAL = ["sku", "brand"]
 
@@ -99,12 +105,20 @@ FEATURES = (
 class LgbmForecaster:
     name = "lgbm"
 
-    def __init__(self, full_long: pd.DataFrame, quantiles: tuple[float, ...] = (0.1, 0.5, 0.9)):
+    def __init__(
+        self,
+        full_long: pd.DataFrame,
+        quantiles: tuple[float, ...] = (0.1, 0.5, 0.9),
+        objective: str = "tweedie",
+    ):
         """``full_long`` supplies the promo/calendar schedule and the feature
         grid; sales targets for training only ever come from the per-fold
         train slice (and features are >= HORIZON days old by construction)."""
+        if objective not in OBJECTIVES:
+            raise ValueError(f"objective must be one of {sorted(OBJECTIVES)}, got {objective!r}")
         self._features = build_features(full_long)
         self._quantiles = quantiles
+        self._objective = objective
 
     def fit_predict(self, train: pd.DataFrame, fold: Fold) -> pd.DataFrame:
         feats = self._features
@@ -130,8 +144,13 @@ class LgbmForecaster:
         test_rows = feats[feats["date"].isin(fold.test_dates)]
         X_te = test_rows[FEATURES]
 
+        point_params = dict(LGB_PARAMS)
+        if self._objective != "tweedie":
+            point_params["objective"] = OBJECTIVES[self._objective]
+            point_params.pop("tweedie_variance_power")
+
         out = test_rows[["date", "sku"]].copy()
-        out["y_pred"] = self._fit_one(LGB_PARAMS, X_tr, y_tr, X_val, y_val, X_te)
+        out["y_pred"] = self._fit_one(point_params, X_tr, y_tr, X_val, y_val, X_te)
         for q in self._quantiles:
             params = {**LGB_PARAMS, "objective": "quantile", "alpha": q}
             params.pop("tweedie_variance_power")
