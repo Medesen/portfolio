@@ -1,0 +1,45 @@
+name: CI - Causal Uplift
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'causal_uplift/**'
+      - '.github/workflows/ci-causal-uplift.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'causal_uplift/**'
+      - '.github/workflows/ci-causal-uplift.yml'
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: causal_uplift
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies (from lock file)
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.lock
+          pip install --no-deps .
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v

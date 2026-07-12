@@ -1,0 +1,45 @@
+name: CI - Demand Forecasting
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'demand_forecasting/**'
+      - '.github/workflows/ci-demand-forecasting.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'demand_forecasting/**'
+      - '.github/workflows/ci-demand-forecasting.yml'
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: demand_forecasting
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies (from lock file)
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.lock
+          pip install --no-deps .
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v

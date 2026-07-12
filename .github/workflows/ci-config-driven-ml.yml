@@ -1,0 +1,45 @@
+name: CI - Config-Driven ML
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config_driven_ml/**'
+      - '.github/workflows/ci-config-driven-ml.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'config_driven_ml/**'
+      - '.github/workflows/ci-config-driven-ml.yml'
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: config_driven_ml
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies (from lock file)
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.lock
+          pip install --no-deps .
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v
