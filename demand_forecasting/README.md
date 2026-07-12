@@ -23,10 +23,11 @@ The global model improves MASE by 35% over seasonal-naive, *uniformly across vol
 | Model | MASE | WAPE | RMSE |
 |---|---|---|---|
 | **SARIMAX (promo + holiday exog)** | **0.659** | **0.513** | 11.33 |
-| global LightGBM | 0.692 | 0.528 | 10.65 |
+| LightGBM (trained on the 8-SKU subset) | 0.692 | 0.528 | 10.65 |
+| LightGBM (global training, evaluated on the subset) | 0.693 | 0.531 | 10.81 |
 | seasonal-naive | 1.043 | 0.835 | 18.01 |
 
-SARIMAX *wins* on this subset. That is the honest headline of the comparison: a well-specified per-series classical model is hard to beat on long, regular, high-volume series — the global ML model earns its keep on *breadth*, covering all 118 series including the intermittent ones where a Gaussian state-space model has no business being fit.
+SARIMAX *wins* on this subset — against LightGBM under **both** training scopes: trained on the 8 SKUs alone and trained globally on all 118 with cross-learning (`--train-scope global`), which lands within noise of the subset-trained run. That is the honest headline of the comparison: a well-specified per-series classical model is hard to beat on long, regular, high-volume series, and cross-learning has nothing to add where each series already carries years of its own history. The global ML model earns its keep on *breadth* — the other 110 series, including the intermittent ones where a Gaussian state-space model has no business being fit.
 
 **Promotion lift (PPML, SKU + calendar fixed effects, SEs clustered by SKU, n = 212,164):**
 

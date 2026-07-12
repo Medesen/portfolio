@@ -32,6 +32,14 @@ def main() -> None:
         "always runs on its subset)",
     )
     bt.add_argument(
+        "--train-scope",
+        choices=["subset", "global"],
+        default="subset",
+        help="when evaluating on a subset with --model lgbm: train on the "
+        "subset itself (default) or on the full 118-SKU panel (global "
+        "cross-learning, still evaluated on the subset only)",
+    )
+    bt.add_argument(
         "--objective",
         choices=["tweedie", "poisson", "l2"],
         default=None,
@@ -92,6 +100,13 @@ def main() -> None:
         if args.objective and args.model != LgbmForecaster.name:
             parser.error("--objective only applies to --model lgbm")
         objective = args.objective or "tweedie"
+        if args.train_scope == "global" and (
+            args.model != LgbmForecaster.name or subset == "all"
+        ):
+            parser.error(
+                "--train-scope global requires --model lgbm and a subset "
+                "evaluation (it widens the training pool beyond the subset)"
+            )
 
         folds = make_folds(long_eval["date"], n_folds=args.n_folds, horizon=args.horizon)
         if args.model == LgbmForecaster.name:
@@ -103,20 +118,27 @@ def main() -> None:
             )
         else:
             model = MODELS[args.model](long)
-        preds = run_backtest(long_eval, model, folds)
+        preds = run_backtest(
+            long_eval, model, folds,
+            train_long=long if args.train_scope == "global" else None,
+        )
         scores = score(preds, long_eval)
 
         model_tag = model.name
         if args.model == LgbmForecaster.name and objective != "tweedie":
             model_tag = f"{model.name}-{objective}"
         tag = model_tag if subset == "all" else f"{model_tag}_subset-{subset}"
+        scope_note = ""
+        if args.train_scope == "global":
+            tag += "_train-global"
+            scope_note = ", trained on the full panel"
         args.out.mkdir(parents=True, exist_ok=True)
         preds.to_csv(args.out / f"backtest_{tag}_preds.csv", index=False)
         scores.to_csv(args.out / f"backtest_{tag}_scores.csv")
 
         print(
             f"\n{model_tag} — {args.n_folds} folds x {args.horizon} trading days"
-            f" — {long_eval['sku'].nunique()} SKUs ({subset})"
+            f" — {long_eval['sku'].nunique()} SKUs ({subset}{scope_note})"
         )
         print(scores.round(3).to_string())
 

@@ -67,17 +67,26 @@ def make_folds(
     return sorted(folds, key=lambda f: f.fold)
 
 
-def run_backtest(long: pd.DataFrame, model: Forecaster, folds: list[Fold]) -> pd.DataFrame:
+def run_backtest(
+    long: pd.DataFrame,
+    model: Forecaster,
+    folds: list[Fold],
+    train_long: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Run ``model`` over all folds; return stacked predictions with actuals.
 
     The model only ever sees rows with ``date <= fold.train_end`` — the test
-    slice is used exclusively to attach ``y_true`` afterwards. A coverage
-    check fails loudly if the model drops SKUs or dates instead of letting
-    missing predictions silently vanish from the metrics.
+    slice is used exclusively to attach ``y_true`` afterwards. ``train_long``
+    optionally widens the training pool (e.g. the full 118-SKU panel while
+    evaluating on a subset); evaluation rows and the coverage check always
+    come from ``long``. A coverage check fails loudly if the model drops SKUs
+    or dates instead of letting missing predictions silently vanish from the
+    metrics.
     """
+    source = long if train_long is None else train_long
     out = []
     for fold in folds:
-        train = long[long["date"] <= fold.train_end]
+        train = source[source["date"] <= fold.train_end]
         test = long[long["date"].isin(fold.test_dates)]
 
         pred = model.fit_predict(train, fold)

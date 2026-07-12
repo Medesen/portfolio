@@ -50,6 +50,29 @@ def test_lgbm_smoke_backtest_with_quantiles(toy_long):
     assert preds["y_q10"].mean() < preds["y_q90"].mean()
 
 
+def test_train_long_widens_pool_without_leaking_dates(toy_long):
+    """With train_long, the model trains on the wider panel but never sees
+    dates past the fold origin; evaluation stays on the subset frame."""
+    folds = make_folds(toy_long["date"], n_folds=1, horizon=14, stride=14)
+    subset = toy_long[toy_long["sku"] == "A_1"]
+    seen = []
+
+    class Spy:
+        name = "spy"
+
+        def fit_predict(self, train, fold):
+            seen.append((train["date"].max(), set(train["sku"])))
+            out = subset[subset["date"].isin(fold.test_dates)][["date", "sku"]].copy()
+            out["y_pred"] = 1.0
+            return out
+
+    preds = run_backtest(subset, Spy(), folds, train_long=toy_long)
+    max_date, skus = seen[0]
+    assert max_date <= folds[0].train_end
+    assert skus == {"A_1", "A_2", "B_1"}          # widened training pool
+    assert set(preds["sku"]) == {"A_1"}           # evaluation stays on the subset
+
+
 def test_lgbm_no_leakage_from_test_window(toy_long):
     folds = make_folds(toy_long["date"], n_folds=1, horizon=14, stride=14)
     preds_clean = run_backtest(toy_long, LgbmForecaster(full_long=toy_long), folds)
