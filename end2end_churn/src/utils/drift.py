@@ -97,9 +97,11 @@ def detect_numeric_drift(
     current_mean = float(current_values.mean())
     current_std = float(current_values.std())
     
-    # Method 1: Relative changes (fast, interpretable)
-    mean_change = abs(current_mean - reference_stats['mean']) / (reference_stats['mean'] + 1e-10)
-    std_change = abs(current_std - reference_stats['std']) / (reference_stats['std'] + 1e-10)
+    # Method 1: Relative changes (fast, interpretable). The denominator must be
+    # the ABSOLUTE reference value: a signed denominator makes the change
+    # negative for negative-mean features, so drift could never trigger there.
+    mean_change = abs(current_mean - reference_stats['mean']) / (abs(reference_stats['mean']) + 1e-10)
+    std_change = abs(current_std - reference_stats['std']) / (abs(reference_stats['std']) + 1e-10)
     
     relative_drift = (mean_change > threshold) or (std_change > threshold)
     

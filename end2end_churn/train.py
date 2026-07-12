@@ -589,7 +589,13 @@ def compute_reference_statistics(
                     'median': float(values.median()),
                     'q25': float(values.quantile(0.25)),
                     'q75': float(values.quantile(0.75)),
-                    'missing_rate': float(X[col].isna().mean())
+                    'missing_rate': float(X[col].isna().mean()),
+                    # Reference sample for the KS test in detect_numeric_drift
+                    # (which is skipped without 'samples'); capped at 1000
+                    # values to keep the model metadata small.
+                    'samples': values.sample(
+                        min(len(values), 1000), random_state=42
+                    ).tolist()
                 }
     
     # Categorical feature distributions (for PSI)

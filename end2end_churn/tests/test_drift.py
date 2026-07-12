@@ -358,3 +358,58 @@ def test_analyze_drift_summary_counts():
     # At least the shifted feature2 should be detected
     assert result['summary']['n_features_drifted'] >= 1
 
+
+# =============================================================================
+# Regression Tests: negative-mean denominator and KS-test activation
+# =============================================================================
+
+@pytest.mark.unit
+def test_detect_numeric_drift_negative_reference_mean():
+    """A shifted negative-mean feature must register relative drift.
+
+    Regression test: with a signed denominator the relative change comes out
+    negative for negative-mean references, so drift could never trigger.
+    """
+    reference = {'mean': -10.0, 'std': 2.0}
+    rng = np.random.default_rng(42)
+    current = pd.Series(rng.normal(-13.0, 2.0, 500))  # 30% mean shift
+
+    result = detect_numeric_drift(reference, current, threshold=0.2)
+
+    assert result['metrics']['mean_change'] > 0
+    assert result['metrics']['relative_drift_detected'] is True
+    assert result['drift_detected'] is True
+
+
+@pytest.mark.unit
+def test_production_reference_stats_activate_ks_test():
+    """The stats produced by train.compute_reference_statistics must switch on
+    the KS branch of detect_numeric_drift (it is skipped without 'samples').
+
+    Regression test: the KS path was dead code in production because the
+    training pipeline never stored reference samples in the metadata.
+    """
+    from train import compute_reference_statistics
+
+    rng = np.random.default_rng(0)
+    X = pd.DataFrame({
+        'tenure': rng.normal(30.0, 10.0, 2000),
+        'contract': rng.choice(['month', 'year'], 2000)
+    })
+    y = pd.Series(rng.integers(0, 2, 2000))
+
+    stats = compute_reference_statistics(X, y, ['tenure'], ['contract'])
+
+    assert 'samples' in stats['numeric']['tenure']
+    assert len(stats['numeric']['tenure']['samples']) == 1000  # capped
+
+    # Same distribution: the KS test actually runs and reports its statistic
+    same = pd.Series(rng.normal(30.0, 10.0, 500))
+    result = detect_numeric_drift(stats['numeric']['tenure'], same)
+    assert result['metrics']['ks_statistic'] is not None
+
+    # Clear distribution shift: the KS branch flags drift
+    shifted = pd.Series(rng.normal(60.0, 10.0, 500))
+    result = detect_numeric_drift(stats['numeric']['tenure'], shifted)
+    assert result['metrics']['ks_drift_detected'] is True
+
