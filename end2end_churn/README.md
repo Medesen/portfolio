@@ -12,7 +12,7 @@ A production-ready ML service that predicts customer churn for a telecom dataset
 **Best Performance:** ROC AUC 0.840 (held-out test set)  
 **Supported Models:** Random Forest, XGBoost, Logistic Regression  
 **Tech Stack:** FastAPI, MLflow, Prometheus/Grafana, Docker, Kubernetes  
-**Test Coverage:** 175+ tests, 89% coverage
+**Test Coverage:** 180+ tests, 90% coverage (full suite, measured in CI-equivalent Docker run)
 
 **Model Performance (held-out test set, F1-tuned threshold ≈ 0.38):**
 - ROC AUC: 0.840
@@ -140,7 +140,7 @@ I built a complete ML service with training, serving, and monitoring. The traini
 
 The API layer uses FastAPI with Pydantic for request validation, includes rate limiting per endpoint, and implements proper error handling with request tracing. I added drift detection that monitors numeric features (mean/std changes), categorical features (Population Stability Index), and prediction distributions. When drift crosses thresholds, the system can trigger automatic retraining.
 
-The monitoring stack uses Prometheus for metrics collection (latency histograms, request counts, drift events) and Grafana for visualization. I built three dashboards: API overview, latency/SLO tracking, and ML-specific metrics. The test suite has 175+ tests covering unit, integration, and end-to-end workflows, achieving 89% coverage.
+The monitoring stack uses Prometheus for metrics collection (latency histograms, request counts, drift events) and Grafana for visualization. I built three dashboards: API overview, latency/SLO tracking, and ML-specific metrics. The test suite has 180+ tests covering unit, integration, and end-to-end workflows, achieving 90% coverage across the full suite; CI enforces a coverage floor on the unit-test job.
 
 Deployment is fully containerized—everything runs in Docker with no local Python setup required. The CI/CD pipeline on GitHub Actions runs linting, tests, security scanning, and load testing on every push. Kubernetes manifests include auto-scaling, health probes, resource limits, and ingress configuration.
 
@@ -169,9 +169,9 @@ Deployment is fully containerized—everything runs in Docker with no local Pyth
 
 ### Test Suite Overview
 
-The project includes 175+ tests (89% coverage) demonstrating patterns for all major components: preprocessing, training pipeline, model factory, API endpoints, drift detection, threshold tuning, and monitoring integration.
+The project includes 180+ tests (90% full-suite coverage) demonstrating patterns for all major components: preprocessing, training pipeline, model factory, API endpoints, drift detection, threshold tuning, and monitoring integration.
 
-**Test Results:** 175+ tests passing | 89% code coverage
+**Test Results:** 180+ tests passing | 90% full-suite code coverage
 
 **Production considerations:** This test suite is comprehensive for a portfolio project but not exhaustive. For production, I would add property-based testing, chaos engineering tests, performance regression tests, and more extensive edge case coverage.
 
@@ -587,8 +587,8 @@ Returns 429 (Too Many Requests) when exceeded.
 
 GitHub Actions workflow runs on every PR/push:
 
-1. **Code Quality** - flake8, black, isort, mypy
-2. **Unit Tests** - 175+ tests with coverage
+1. **Code Quality** - flake8, black, isort blocking; mypy advisory
+2. **Unit Tests** - with an enforced coverage floor
 3. **Integration Tests** - API endpoint validation
 4. **E2E Tests** - Full training workflows
 5. **Docker Build** - Production image validation
@@ -828,10 +828,12 @@ All strategies are computed during training and saved in metadata. The API autom
 
 ### Type Safety
 
-- Strict mypy configuration (`disallow_untyped_defs = true`)
-- TypedDict for structured data
-- Generic type annotations throughout
-- 100% type coverage in core layers
+- mypy configured strict in `pyproject.toml` (`disallow_untyped_defs = true`)
+- TypedDict for structured data; generic type annotations throughout
+- **Honest status:** mypy currently reports ~108 errors, mostly ML-library
+  interface friction, so it runs as an *advisory, non-blocking* CI step;
+  burning that debt down is future work. Formatting (black) and import order
+  (isort) *are* blocking CI gates.
 
 ### Request Tracing
 

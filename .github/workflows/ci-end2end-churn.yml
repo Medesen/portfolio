@@ -53,17 +53,19 @@ jobs:
           # Check for complexity and style (allow longer lines for ML code)
           flake8 . --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics --exclude=venv,mlruns,mlartifacts
       
-      - name: Check code formatting with black
+      - name: Check code formatting with black (blocking)
         run: |
-          black --check --diff . || echo "Code formatting issues found (non-blocking)"
-      
-      - name: Check import order with isort
+          black --check --diff .
+
+      - name: Check import order with isort (blocking)
         run: |
-          isort --check-only --diff . || echo "Import order issues found (non-blocking)"
-      
-      - name: Type check with mypy (strict mode - Issue 3)
+          isort --check-only --diff .
+
+      - name: Type check with mypy (advisory, non-blocking)
         run: |
-          mypy src/ serve.py train.py --config-file pyproject.toml || echo "Type checking issues found (non-blocking due to ML library limitations)"
+          # Known debt: ~108 errors, mostly ML-library interface friction.
+          # Advisory until burned down — the README states this honestly.
+          mypy src/ serve.py train.py --config-file pyproject.toml || echo "Type checking issues found (advisory, non-blocking)"
 
   # =============================================================================
   # Job 2: Unit Tests
@@ -93,7 +95,9 @@ jobs:
       
       - name: Run unit tests
         run: |
-          pytest -v -m unit --cov=src --cov-report=xml --cov-report=term
+          # Coverage floor: unit-only coverage measured at 58% (2026-07-12);
+          # floor set just below so real regressions fail while noise doesn't.
+          pytest -v -m unit --cov=src --cov-fail-under=55 --cov-report=xml --cov-report=term
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
