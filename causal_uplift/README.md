@@ -90,8 +90,10 @@ large.*
 Ranking by predicted **uplift** beats both random targeting and the naive
 "response model" (target whoever is most likely to visit) at every depth —
 mailing only the **top 30%** captures **55%** of the incremental visits that
-mailing everyone would. At the experiment-wide ~**$7.11 of incremental spend per
-incremental visit**, that top-10% group is worth ~**$710 per 1,000 mailed**. The
+mailing everyone would. At ~**$9.38 of incremental spend per incremental visit**
+— the ratio of the spend and visit ATEs, experiment-wide; indicative only, since
+spend's ATE carries a wide CI — that top-10% group is worth ~**$936 per 1,000
+mailed**. The
 decile table shows why it works: the model concentrates a ~10pp visit uplift in
 its top two deciles and correctly assigns near-zero (even negative) uplift to the
 bottom deciles — the prior men's-merchandise buyers whom the women's e-mail turns

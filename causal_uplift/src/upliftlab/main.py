@@ -160,11 +160,23 @@ def run_uplift(
     print("\nTargeting simulation — incremental VISITS per 1,000 mailed (model targets visit):")
     print(tbl.round(3).to_string(index=False))
 
-    treated = df[df["segment"] == treatment]
-    rev_per_visit = treated["spend"].sum() / max(1.0, treated["visit"].sum())
-    print(f"\nApprox. revenue lens: ~${rev_per_visit:.2f} incremental spend per incremental "
-          f"visit (experiment-wide), so the top-{int(TARGET_KS[0] * 100)}% uplift group is "
-          f"worth ~${tbl.iloc[0]['uplift_visits/1k'] * rev_per_visit:,.0f} / 1,000 mailed.")
+    # Revenue lens: "incremental spend per incremental visit" is the ratio of the
+    # two arm-level ATEs on the full experiment — not average spend per visit in
+    # the treated arm, which mostly reflects visits that would have happened
+    # anyway. Spend's ATE carries a wide CI (~99% zeros), so dollars are
+    # indicative; the treated-arm figure is kept as a conservative cross-check.
+    arm = df[df["segment"] == treatment]
+    ctrl = df[df["segment"] == CONTROL]
+    ate_visit_all = arm["visit"].mean() - ctrl["visit"].mean()
+    ate_spend_all = arm["spend"].mean() - ctrl["spend"].mean()
+    incr_spend_per_visit = ate_spend_all / ate_visit_all
+    treated_spend_per_visit = arm["spend"].sum() / max(1.0, arm["visit"].sum())
+    print(f"\nRevenue lens: ~${incr_spend_per_visit:.2f} incremental spend per incremental "
+          f"visit (ratio of ATEs, experiment-wide), so the top-{int(TARGET_KS[0] * 100)}% "
+          f"uplift group is worth ~${tbl.iloc[0]['uplift_visits/1k'] * incr_spend_per_visit:,.0f} "
+          f"/ 1,000 mailed. Spend's wide CI makes these dollar figures indicative. "
+          f"(Conservative cross-check: average spend per visit among the treated "
+          f"= ~${treated_spend_per_visit:.2f}.)")
     print("\nReading: ranking by predicted uplift beats random at every depth and front-loads "
           f"incremental visits into the top deciles (top 30% captures "
           f"{tbl.loc[tbl['k'] == 0.3, 'uplift_capture_%'].iloc[0]:.0f}% of the visits that "
