@@ -94,10 +94,14 @@ mailing everyone would. At ~**$9.38 of incremental spend per incremental visit**
 — the ratio of the spend and visit ATEs, experiment-wide; indicative only, since
 spend's ATE carries a wide CI — that top-10% group is worth ~**$936 per 1,000
 mailed**. The
-decile table shows why it works: the model concentrates a ~10pp visit uplift in
-its top two deciles and correctly assigns near-zero (even negative) uplift to the
-bottom deciles — the prior men's-merchandise buyers whom the women's e-mail turns
-*off* (DATA_NOTES §3).
+decile table shows both the strength and the honest limit of the ranking: the
+model concentrates a ~10pp observed visit uplift in its top two deciles, and
+observed uplift declines broadly through decile 6. Below that, each decile
+(~1,280 customers) carries a standard error of ~2pp, so the bottom-decile
+estimates are statistically indistinguishable from noise. The model *predicts*
+negative uplift for its bottom decile — consistent with the prior
+men's-merchandise buyers whom the women's e-mail turns *off* (DATA_NOTES §3) —
+but the held-out data is too noisy to confirm that sign.
 
 One honest note: the *simplest* learner (S-learner) edges the fancier X-learner
 here (normalized Qini 0.06 vs 0.04). When heterogeneity is modest, meta-learner

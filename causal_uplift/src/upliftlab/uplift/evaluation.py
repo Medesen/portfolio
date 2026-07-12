@@ -78,7 +78,10 @@ def uplift_by_group(score, y, t, n_groups: int = 10) -> pd.DataFrame:
     """Observed uplift within score-ranked groups (group 1 = highest predicted).
 
     A well-ranked model produces a roughly monotone decreasing observed-uplift
-    column — the empirical check that the score means something.
+    column — the empirical check that the score means something. ``se`` is the
+    Welch standard error of each group's observed uplift (same form as
+    ``diff_in_means``); with only ~n/n_groups units per group it is sizeable,
+    so single-group wiggles should be read against it, not as signal.
     """
     df = pd.DataFrame({"score": np.asarray(score, float), "y": np.asarray(y, float), "t": np.asarray(t, float)})
     # Rank descending, then cut into equal groups; guard against ties collapsing bins.
@@ -93,6 +96,10 @@ def uplift_by_group(score, y, t, n_groups: int = 10) -> pd.DataFrame:
                 "n": len(gdf),
                 "pred_uplift": gdf["score"].mean(),
                 "obs_uplift": (yt.mean() - yc.mean()) if len(yt) and len(yc) else np.nan,
+                "se": (
+                    float(np.sqrt(yt.var(ddof=1) / len(yt) + yc.var(ddof=1) / len(yc)))
+                    if len(yt) > 1 and len(yc) > 1 else np.nan
+                ),
                 "n_treat": len(yt),
                 "n_control": len(yc),
             }
