@@ -119,7 +119,13 @@ def _cov_kwargs(df: pd.DataFrame) -> dict:
 
 
 def estimate_promo_lift(long: pd.DataFrame) -> PromoLiftResult:
-    """Estimate the average promo lift, overall and per brand."""
+    """Estimate the average promo lift, overall and per brand.
+
+    Brand-level regressions cluster SEs by SKU with few clusters (42/45/21/10
+    for B1–B4). Cluster-robust variance is asymptotic in the number of
+    clusters and tends to under-cover below ~30, so the B3 and especially B4
+    intervals are approximate.
+    """
     df = _prepare(long)
 
     ppml = _fit_ppml(df)

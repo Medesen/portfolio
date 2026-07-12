@@ -120,11 +120,13 @@ demandcast backtest --model seasonal_naive
 
 B2's interval is the widest for a reason worth noticing: it is the perma-promo brand (15 SKUs on promotion >90% of days), so it contributes almost no within-SKU variation to identify the effect — the data-quality analysis predicted exactly this before the regression was run.
 
+One inferential caveat on this table: SEs are clustered by SKU, and cluster-robust inference is only asymptotically valid in the number of clusters — B1/B2 bring 42/45 clusters, but B3 has 21 and B4 just 10. Below ~30 clusters these CIs tend to under-cover, so read the B3 and especially B4 intervals as approximate rather than exact.
+
 ## Evaluation Design
 
 - **Folds:** 12 rolling-origin folds, 28 trading days each, non-overlapping, tiling roughly the final year (2018). Training windows expand; the model at fold *k* sees everything up to that fold's origin and nothing after.
 - **Horizon:** 28 trading days — a 4-week retail planning horizon.
-- **Trading-day grid:** the 27 calendar gaps in 5 years are Italian public-holiday store closures. They are left as gaps, not zero-filled (a zero would be a fake observation of demand that was never offered). Weekly seasonality is handled weekday-aligned so the gaps can't shift the cycle out of phase.
+- **Trading-day grid:** the 27 calendar gaps in 5 years are Italian public-holiday store closures. They are left as gaps, not zero-filled (a zero would be a fake observation of demand that was never offered). Weekly seasonality is weekday-aligned for seasonal-naive (keyed on weekday) and LightGBM (`dayofweek` feature), so the gaps can't shift their cycle out of phase. SARIMAX, by contrast, uses a positional seasonal lag (s = 7) on the gapped grid, so each closure slips its weekly cycle by one position — 27 slips across 5 years, roughly one per ten weeks of training data. A small, accepted imperfection, stated rather than silently absorbed.
 - **Coverage enforcement:** the backtest runner fails loudly if a model leaves any (date, SKU) pair unpredicted — no silent dropping of hard series.
 
 ## The Models
