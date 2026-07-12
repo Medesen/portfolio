@@ -1,0 +1,53 @@
+name: CI - RAG Pipeline
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rag_pipeline/**'
+      - '.github/workflows/ci-rag-pipeline.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'rag_pipeline/**'
+      - '.github/workflows/ci-rag-pipeline.yml'
+  workflow_dispatch:
+
+# Slim CI: the unit suite mocks the LLM and reranker, so no Ollama service or
+# Docker build is needed. Only the embedder tests download a real model
+# (all-MiniLM-L6-v2, ~90 MB), which is cached between runs.
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rag_pipeline
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'  # matches the project Dockerfile
+          cache: 'pip'
+
+      - name: Cache sentence-transformers model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-all-MiniLM-L6-v2
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: |
+          pytest tests/ -v
