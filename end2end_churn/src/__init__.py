@@ -6,5 +6,3 @@ the churn prediction model.
 """
 
 __version__ = "0.3.0"
-
-

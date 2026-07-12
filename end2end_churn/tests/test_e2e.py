@@ -6,35 +6,36 @@ Tests training scripts, config loading, and artifact generation.
 Comprehensive Testing
 """
 
-import pytest
-import subprocess
-import os
-from pathlib import Path
 import json
+import os
+import subprocess
+from pathlib import Path
 
+import pytest
 
 # =============================================================================
 # Training Script Tests
 # =============================================================================
+
 
 @pytest.mark.e2e
 @pytest.mark.slow
 def test_train_script_completes_with_quick_config():
     """Test training script runs successfully with quick config."""
     result = subprocess.run(
-        ['python', 'train.py', '--config', 'config/train_config_quick.yaml'],
+        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,  # 5 minutes timeout
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
-    
+
     # Check exit code
     assert result.returncode == 0, f"Training failed with: {result.stderr}"
-    
+
     # Check output contains success messages
-    assert 'TRAINING COMPLETE' in result.stdout
-    assert 'Grid search complete' in result.stdout
+    assert "TRAINING COMPLETE" in result.stdout
+    assert "Grid search complete" in result.stdout
 
 
 @pytest.mark.e2e
@@ -43,25 +44,25 @@ def test_train_script_creates_model_artifacts():
     """Test training script creates all expected artifacts."""
     # Run training
     result = subprocess.run(
-        ['python', 'train.py', '--config', 'config/train_config_quick.yaml'],
+        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
-    
+
     assert result.returncode == 0
-    
+
     # Check artifacts exist
     project_root = Path(__file__).parent.parent
-    
+
     # Model should exist
-    latest_model = project_root / 'models' / 'churn_model_latest.joblib'
+    latest_model = project_root / "models" / "churn_model_latest.joblib"
     assert latest_model.exists(), "Latest model not created"
-    
+
     # At least one versioned model should exist
-    models_dir = project_root / 'models'
-    versioned_models = list(models_dir.glob('churn_model_*.joblib'))
+    models_dir = project_root / "models"
+    versioned_models = list(models_dir.glob("churn_model_*.joblib"))
     assert len(versioned_models) > 0, "No versioned models created"
 
 
@@ -70,53 +71,53 @@ def test_train_script_creates_metadata():
     """Test training script creates metadata file."""
     # Run quick training
     result = subprocess.run(
-        ['python', 'train.py', '--config', 'config/train_config_quick.yaml'],
+        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
-    
+
     assert result.returncode == 0
-    
+
     # Check metadata exists
     project_root = Path(__file__).parent.parent
-    metadata_files = list((project_root / 'models').glob('metadata_*.json'))
-    
+    metadata_files = list((project_root / "models").glob("metadata_*.json"))
+
     assert len(metadata_files) > 0, "No metadata files created"
-    
+
     # Check metadata structure
     latest_metadata = sorted(metadata_files, key=lambda p: p.stat().st_mtime)[-1]
-    with open(latest_metadata, 'r') as f:
+    with open(latest_metadata, "r") as f:
         metadata = json.load(f)
-    
+
     # Check required fields (match actual metadata structure)
-    assert 'run_id' in metadata
-    assert 'timestamp' in metadata
-    assert 'hyperparameters' in metadata  # Changed from 'best_params'
-    assert 'validation_metrics' in metadata  # Changed from 'metrics'
-    assert 'reference_statistics' in metadata
+    assert "run_id" in metadata
+    assert "timestamp" in metadata
+    assert "hyperparameters" in metadata  # Changed from 'best_params'
+    assert "validation_metrics" in metadata  # Changed from 'metrics'
+    assert "reference_statistics" in metadata
 
 
 @pytest.mark.e2e
 def test_train_script_creates_diagnostics():
     """Test training script creates diagnostic visualizations."""
     result = subprocess.run(
-        ['python', 'train.py', '--config', 'config/train_config_quick.yaml'],
+        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
-    
+
     assert result.returncode == 0
-    
+
     # Check diagnostic files exist
     project_root = Path(__file__).parent.parent
-    diagnostics_dir = project_root / 'diagnostics'
-    
+    diagnostics_dir = project_root / "diagnostics"
+
     # Should have confusion matrix, ROC curve, PR curve, feature importance plots
-    png_files = list(diagnostics_dir.glob('*.png'))
+    png_files = list(diagnostics_dir.glob("*.png"))
     assert len(png_files) >= 4, f"Expected at least 4 diagnostic plots, found {len(png_files)}"
 
 
@@ -124,32 +125,33 @@ def test_train_script_creates_diagnostics():
 # Configuration Tests
 # =============================================================================
 
+
 @pytest.mark.e2e
 def test_config_saved_is_loadable():
     """Test saved config can be reloaded and used."""
     # Run training (creates config file)
     result = subprocess.run(
-        ['python', 'train.py', '--config', 'config/train_config_quick.yaml'],
+        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
-    
+
     assert result.returncode == 0
-    
+
     # Find saved config
     project_root = Path(__file__).parent.parent
-    config_files = list((project_root / 'configs').glob('run_config_*.yaml'))
-    
+    config_files = list((project_root / "configs").glob("run_config_*.yaml"))
+
     assert len(config_files) > 0, "No config files saved"
-    
+
     # Try to load the config
     from src.config import TrainingConfig
-    
+
     latest_config_file = sorted(config_files, key=lambda p: p.stat().st_mtime)[-1]
     config = TrainingConfig.from_yaml(str(latest_config_file))
-    
+
     # Should load without error
     assert config is not None
     assert config.model.cv_folds > 0
@@ -159,13 +161,13 @@ def test_config_saved_is_loadable():
 def test_train_with_default_config():
     """Test training works with default config (no --config arg)."""
     result = subprocess.run(
-        ['python', 'train.py'],
+        ["python", "train.py"],
         capture_output=True,
         text=True,
         timeout=600,  # Longer timeout for default config (more hyperparameters)
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
-    
+
     # Should complete successfully (or timeout, which we handle)
     # We mostly just check it doesn't crash immediately
     assert result.returncode in [0, -9, 124], f"Training failed unexpectedly: {result.stderr[:500]}"
@@ -175,27 +177,28 @@ def test_train_with_default_config():
 # MLflow Integration Tests
 # =============================================================================
 
+
 @pytest.mark.e2e
 def test_train_script_logs_to_mlflow():
     """Test training script creates MLflow run."""
     # Clear test mlruns if it exists
     project_root = Path(__file__).parent.parent
-    test_mlruns = project_root / 'mlruns'
-    
+    test_mlruns = project_root / "mlruns"
+
     # Run training
     result = subprocess.run(
-        ['python', 'train.py', '--config', 'config/train_config_quick.yaml'],
+        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,
-        cwd=str(project_root)
+        cwd=str(project_root),
     )
-    
+
     assert result.returncode == 0
-    
+
     # Check MLflow directory exists
     assert test_mlruns.exists(), "MLflow tracking directory not created"
-    
+
     # Check experiment directory exists
     experiment_dirs = [d for d in test_mlruns.iterdir() if d.is_dir() and d.name.isdigit()]
     assert len(experiment_dirs) > 0, "No MLflow experiments created"
@@ -205,31 +208,32 @@ def test_train_script_logs_to_mlflow():
 # Error Handling Tests
 # =============================================================================
 
+
 @pytest.mark.e2e
 def test_train_script_handles_invalid_config():
     """Test training script fails gracefully with invalid config."""
     # Create invalid config file
     project_root = Path(__file__).parent.parent
-    invalid_config = project_root / 'config' / 'invalid_test.yaml'
-    
+    invalid_config = project_root / "config" / "invalid_test.yaml"
+
     try:
-        with open(invalid_config, 'w') as f:
+        with open(invalid_config, "w") as f:
             f.write("data:\n  test_size: 1.5\n")  # Invalid (> 1)
-        
+
         result = subprocess.run(
-            ['python', 'train.py', '--config', str(invalid_config)],
+            ["python", "train.py", "--config", str(invalid_config)],
             capture_output=True,
             text=True,
             timeout=30,
-            cwd=str(project_root)
+            cwd=str(project_root),
         )
-        
+
         # Should fail with non-zero exit code
         assert result.returncode != 0
-        
+
         # Should have validation error in stderr
-        assert 'ValidationError' in result.stderr or 'validation' in result.stderr.lower()
-    
+        assert "ValidationError" in result.stderr or "validation" in result.stderr.lower()
+
     finally:
         # Clean up invalid config
         if invalid_config.exists():
@@ -241,10 +245,10 @@ def test_train_script_handles_missing_data():
     """Test training script fails gracefully when data file missing."""
     # Create config with non-existent data path
     project_root = Path(__file__).parent.parent
-    bad_config = project_root / 'config' / 'bad_data_test.yaml'
-    
+    bad_config = project_root / "config" / "bad_data_test.yaml"
+
     try:
-        with open(bad_config, 'w') as f:
+        with open(bad_config, "w") as f:
             f.write("""
 data:
   data_path: "data/nonexistent_file.arff"
@@ -253,24 +257,23 @@ model:
   max_depth_grid: [5]
   cv_folds: 2
 """)
-        
+
         result = subprocess.run(
-            ['python', 'train.py', '--config', str(bad_config)],
+            ["python", "train.py", "--config", str(bad_config)],
             capture_output=True,
             text=True,
             timeout=30,
-            cwd=str(project_root)
+            cwd=str(project_root),
         )
-        
+
         # Should fail with non-zero exit code
         assert result.returncode != 0
-        
+
         # Should mention file not found
         error_output = result.stderr + result.stdout
-        assert 'FileNotFoundError' in error_output or 'not found' in error_output.lower()
-    
+        assert "FileNotFoundError" in error_output or "not found" in error_output.lower()
+
     finally:
         # Clean up test config
         if bad_config.exists():
             bad_config.unlink()
-

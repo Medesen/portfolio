@@ -4,9 +4,9 @@
 # Run manually: pre-commit run --all-files
 
 repos:
-  # Black - code formatting
+  # Black - code formatting (rev matches the version the repo is formatted with)
   - repo: https://github.com/psf/black
-    rev: 23.12.1
+    rev: 26.5.1
     hooks:
       - id: black
         language_version: python3.12
@@ -14,7 +14,7 @@ repos:
 
   # isort - import sorting
   - repo: https://github.com/PyCQA/isort
-    rev: 5.13.2
+    rev: 8.0.1
     hooks:
       - id: isort
         args: ["--profile", "black", "--line-length", "100"]

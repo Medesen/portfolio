@@ -45,50 +45,57 @@ Drift Detection:
 Usage:
     # Development (with auto-reload)
     uvicorn serve:app --reload --host 0.0.0.0 --port 8000
-    
+
     # Production
     uvicorn serve:app --host 0.0.0.0 --port 8000 --workers 4
-    
+
     # With authentication
     export SERVICE_TOKEN="your-secret-token"
     uvicorn serve:app --host 0.0.0.0 --port 8000
 """
 
-import os
-import time
-import subprocess
-import uuid
-import secrets
-import fcntl
 import asyncio
+import fcntl
+import os
+import secrets
+import subprocess
+import time
+import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
-from contextlib import asynccontextmanager
-from typing import Optional, Dict, List, Any
-from pathlib import Path
-from fastapi import FastAPI, HTTPException, Request, Depends, status, BackgroundTasks
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
-from prometheus_client import make_asgi_app, Counter
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from prometheus_client import Counter, make_asgi_app
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-from src.api.schemas import PredictionRequest, PredictionResponse, HealthResponse
+from src.api.schemas import HealthResponse, PredictionRequest, PredictionResponse
 from src.api.service import get_model_from_cache, predict, reset_model_cache
 from src.api.types import ModelCache
-from src.utils.logger import setup_logger, request_id_context
-from src.utils.prometheus_metrics import (
-    init_service_metrics, set_model_metrics,
-    request_count, request_duration, prediction_error_count,
-    service_start_time, drift_detected_count, features_drifted_gauge, model_age_days
-)
+from src.config import DriftConfig, ServiceConfig
 from src.utils.drift import analyze_drift
-from src.config import ServiceConfig, DriftConfig
+from src.utils.logger import request_id_context, setup_logger
+from src.utils.prometheus_metrics import (
+    drift_detected_count,
+    features_drifted_gauge,
+    init_service_metrics,
+    model_age_days,
+    prediction_error_count,
+    request_count,
+    request_duration,
+    service_start_time,
+    set_model_metrics,
+)
 
 # Load configuration from environment variables
 # Now supports secure secret loading via SERVICE_TOKEN_FILE
@@ -105,9 +112,9 @@ REQUEST_TIMEOUT_ENABLED = os.getenv("REQUEST_TIMEOUT_ENABLED", "true").lower() =
 
 # Prometheus counter for timeout events
 request_timeout_count = Counter(
-    'churn_api_request_timeouts_total',
-    'Total number of requests that exceeded timeout',
-    ['endpoint']
+    "churn_api_request_timeouts_total",
+    "Total number of requests that exceeded timeout",
+    ["endpoint"],
 )
 
 drift_config = DriftConfig(
@@ -115,14 +122,12 @@ drift_config = DriftConfig(
     categorical_threshold=float(os.getenv("DRIFT_THRESHOLD_CATEGORICAL", "0.25")),
     prediction_threshold=float(os.getenv("DRIFT_THRESHOLD_PREDICTION", "0.1")),
     min_sample_size=int(os.getenv("DRIFT_MIN_SAMPLE_SIZE", "100")),
-    max_drift_batch_size=int(os.getenv("MAX_DRIFT_BATCH_SIZE", "1000"))
+    max_drift_batch_size=int(os.getenv("MAX_DRIFT_BATCH_SIZE", "1000")),
 )
 
 # Initialize logger with config
 logger = setup_logger(
-    name="churn_api",
-    log_level=service_config.log_level,
-    log_file="logs/churn_service.log"
+    name="churn_api", log_level=service_config.log_level, log_file="logs/churn_service.log"
 )
 
 # Automatic retraining configuration
@@ -145,9 +150,11 @@ logger.info(f"    - MAX_REQUEST_SIZE_MB: {service_config.max_request_size_mb}")
 logger.info(f"    - Authentication: {'enabled' if service_config.service_token else 'disabled'}")
 logger.info(f"  • Drift config:")
 logger.info(f"    - MAX_DRIFT_BATCH_SIZE: {drift_config.max_drift_batch_size}")
-logger.info(f"    - Thresholds: numeric={drift_config.numeric_threshold}, "
-            f"categorical={drift_config.categorical_threshold}, "
-            f"prediction={drift_config.prediction_threshold}")
+logger.info(
+    f"    - Thresholds: numeric={drift_config.numeric_threshold}, "
+    f"categorical={drift_config.categorical_threshold}, "
+    f"prediction={drift_config.prediction_threshold}"
+)
 logger.info(f"  • Auto-retrain on drift: {'enabled' if AUTO_RETRAIN_ON_DRIFT else 'disabled'}")
 
 
@@ -155,10 +162,12 @@ logger.info(f"  • Auto-retrain on drift: {'enabled' if AUTO_RETRAIN_ON_DRIFT e
 # DRIFT DETECTION SCHEMAS
 # ==============================================================================
 
+
 class DriftAnalysisRequest(BaseModel):
     """Request body for drift analysis."""
+
     customers: List[Dict[str, Any]]
-    
+
     class Config:
         schema_extra = {
             "example": {
@@ -182,7 +191,7 @@ class DriftAnalysisRequest(BaseModel):
                         "DeviceProtection": "No",
                         "TechSupport": "No",
                         "StreamingTV": "Yes",
-                        "StreamingMovies": "No"
+                        "StreamingMovies": "No",
                     }
                 ]
             }
@@ -191,6 +200,7 @@ class DriftAnalysisRequest(BaseModel):
 
 class DriftAnalysisResponse(BaseModel):
     """Response body for drift analysis."""
+
     overall_drift_detected: bool
     n_features_drifted: int
     drifted_features: List[str]
@@ -202,18 +212,19 @@ class DriftAnalysisResponse(BaseModel):
 # RETRAINING HELPERS
 # ==============================================================================
 
+
 def get_last_retrain_time() -> Optional[datetime]:
     """
     Read last retrain timestamp from file (multi-worker safe).
-    
+
     Returns:
         datetime of last retrain, or None if never retrained
     """
     if not LAST_RETRAIN_FILE.exists():
         return None
-    
+
     try:
-        with open(LAST_RETRAIN_FILE, 'r') as f:
+        with open(LAST_RETRAIN_FILE, "r") as f:
             # Acquire shared lock for reading
             fcntl.flock(f.fileno(), fcntl.LOCK_SH)
             try:
@@ -224,22 +235,22 @@ def get_last_retrain_time() -> Optional[datetime]:
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     except Exception as e:
         logger.warning(f"Could not read last retrain time: {e}")
-    
+
     return None
 
 
 def set_last_retrain_time(timestamp: datetime) -> None:
     """
     Write last retrain timestamp to file (multi-worker safe).
-    
+
     Args:
         timestamp: datetime to save
     """
     try:
         # Ensure directory exists
         LAST_RETRAIN_FILE.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(LAST_RETRAIN_FILE, 'w') as f:
+
+        with open(LAST_RETRAIN_FILE, "w") as f:
             # Acquire exclusive lock for writing
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             try:
@@ -253,17 +264,17 @@ def set_last_retrain_time(timestamp: datetime) -> None:
 def should_allow_retraining() -> bool:
     """
     Check if retraining is allowed based on rate limiting (multi-worker safe).
-    
+
     Uses file-based timestamp tracking to work correctly across multiple
     worker processes or API replicas.
-    
+
     Returns:
         True if retraining is allowed, False if rate limited
     """
     last_retrain = get_last_retrain_time()
     if last_retrain is None:
         return True
-    
+
     time_since_last = datetime.now() - last_retrain
     return time_since_last > timedelta(hours=MIN_RETRAIN_INTERVAL_HOURS)
 
@@ -271,7 +282,7 @@ def should_allow_retraining() -> bool:
 async def retrain_model_task():
     """
     Background task to retrain model.
-    
+
     Uses file-based timestamp tracking for multi-worker safety.
     Multiple workers/replicas will correctly coordinate retraining via shared file.
     """
@@ -279,16 +290,16 @@ async def retrain_model_task():
         logger.info("=" * 60)
         logger.info("AUTOMATIC RETRAINING TRIGGERED BY DRIFT DETECTION")
         logger.info("=" * 60)
-        
+
         # Run training script (MLflow tracking always enabled)
         result = subprocess.run(
             ["python", "train.py"],
             capture_output=True,
             text=True,
             timeout=600,  # 10 minute timeout
-            cwd=os.getcwd()
+            cwd=os.getcwd(),
         )
-        
+
         if result.returncode == 0:
             # Update last retrain time (file-based, multi-worker safe)
             set_last_retrain_time(datetime.now())
@@ -298,7 +309,7 @@ async def retrain_model_task():
             logger.info("→ Run 'make restart' to deploy new model")
         else:
             logger.error(f"✗ Model retraining failed: {result.stderr}")
-            
+
     except subprocess.TimeoutExpired:
         logger.error("✗ Model retraining timed out after 10 minutes")
     except Exception as e:
@@ -306,23 +317,23 @@ async def retrain_model_task():
 
 
 def verify_token(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Optional[str]:
     """
     Verify bearer token for authentication.
-    
+
     If service_token is not set, authentication is disabled (returns None).
     If service_token is set, requires valid token or raises 401.
-    
+
     Args:
         credentials: HTTP bearer token from Authorization header
-        
+
     Returns:
         Token string if authenticated, None if auth disabled
-        
+
     Raises:
         HTTPException: 401 if auth required but missing/invalid
-        
+
     Security Notes:
         - Tokens are case-sensitive
         - Use environment variables or secrets manager for SERVICE_TOKEN
@@ -334,30 +345,29 @@ def verify_token(
     if not service_config.service_token:
         logger.debug("Authentication bypassed (service_token not set)")
         return None
-    
+
     # If token configured, require it
     if credentials is None:
         logger.warning("Authentication required but no token provided")
-        prediction_error_count.labels(error_type='unauthorized').inc()
+        prediction_error_count.labels(error_type="unauthorized").inc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required. Provide a valid Bearer token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Verify token matches using constant-time comparison (prevents timing attacks)
     if not secrets.compare_digest(credentials.credentials, service_config.service_token):
         logger.warning(
-            "Invalid authentication token provided "
-            "(token value not logged for security)"
+            "Invalid authentication token provided " "(token value not logged for security)"
         )
-        prediction_error_count.labels(error_type='unauthorized').inc()
+        prediction_error_count.labels(error_type="unauthorized").inc()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     logger.debug("Authentication successful")
     return credentials.credentials
 
@@ -366,18 +376,18 @@ def verify_token(
 def get_model_cache(request: Request) -> ModelCache:
     """
     FastAPI dependency that provides the model cache from app.state.
-    
+
     This enables safe access to the cached model in multi-worker deployments.
     Each endpoint that needs the model should use this dependency.
-    
+
     Returns type-safe ModelCache instead of raw dict.
-    
+
     Args:
         request: FastAPI request object (provides access to app.state)
-    
+
     Returns:
         Type-safe ModelCache with keys: model, version, features, threshold
-    
+
     Usage:
         @app.post("/predict")
         async def predict_endpoint(
@@ -395,7 +405,7 @@ def get_model_cache(request: Request) -> ModelCache:
 async def lifespan(app: FastAPI):
     """
     Manage application lifespan events.
-    
+
     Loads model on startup, initializes metrics, and cleans up on shutdown.
     Model now stored in app.state for multi-worker safety.
     """
@@ -403,20 +413,20 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
     logger.info("CHURN PREDICTION SERVICE STARTING UP")
     logger.info("=" * 60)
-    
+
     # Initialize model cache in app.state (multi-worker safety)
     # Type-safe cache structure using ModelCache TypedDict
     app.state.model_cache: ModelCache = {
-        'model': None,
-        'version': None,
-        'features': None,
-        'threshold': 0.5
+        "model": None,
+        "version": None,
+        "features": None,
+        "threshold": 0.5,
     }
-    
+
     # Initialize service metrics
     init_service_metrics(version="1.0.0")
     logger.info("✓ Prometheus metrics initialized")
-    
+
     try:
         # Load model into app.state cache
         model, version, expected_features, threshold = get_model_from_cache(app.state.model_cache)
@@ -424,40 +434,41 @@ async def lifespan(app: FastAPI):
         logger.info(f"Expected features: {len(expected_features)} features")
         logger.info(f"Tuned threshold: {threshold:.4f}")
         logger.debug(f"Feature list: {expected_features}")
-        
+
         # Set model metrics (extract ROC AUC and model age from metadata if available)
         try:
             import json
             from pathlib import Path
+
             metadata_files = sorted(Path("models").glob("metadata_*.json"), reverse=True)
             if metadata_files:
-                with open(metadata_files[0], 'r') as f:
+                with open(metadata_files[0], "r") as f:
                     metadata = json.load(f)
-                    roc_auc = metadata.get('validation_metrics', {}).get('roc_auc', 0.0)
-                    set_model_metrics(version, metadata.get('timestamp', ''), roc_auc)
+                    roc_auc = metadata.get("validation_metrics", {}).get("roc_auc", 0.0)
+                    set_model_metrics(version, metadata.get("timestamp", ""), roc_auc)
                     logger.debug(f"Model metrics set: ROC AUC={roc_auc:.4f}")
-                    
+
                     # Set model age metric
-                    if 'timestamp' in metadata:
-                        model_timestamp = datetime.fromisoformat(metadata['timestamp'])
+                    if "timestamp" in metadata:
+                        model_timestamp = datetime.fromisoformat(metadata["timestamp"])
                         age_days = (datetime.now() - model_timestamp).days
                         model_age_days.set(age_days)
                         logger.debug(f"Model age: {age_days} days")
         except Exception as e:
             logger.warning(f"Could not set model metrics: {e}")
-        
+
         logger.info("✓ Model loaded successfully")
     except Exception as e:
         logger.critical(f"✗ Failed to load model: {e}", exc_info=True)
         # Don't fail startup - health check will report unhealthy
-    
+
     logger.info("=" * 60)
     logger.info("SERVICE READY TO ACCEPT REQUESTS")
     logger.info("Metrics available at /metrics")
     logger.info("=" * 60)
-    
+
     yield
-    
+
     # Shutdown: Cleanup
     logger.info("Shutting down service...")
     reset_model_cache(app.state.model_cache)
@@ -471,7 +482,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
 
 # Initialize rate limiter
@@ -502,43 +513,44 @@ app.mount("/metrics", metrics_app)
 # MIDDLEWARE (Request tracing)
 # ==============================================================================
 
+
 # Middleware 1: Request ID generation and tracing
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
     """
     Generate unique request ID for tracing.
-    
+
     This middleware:
     1. Generates a UUID for each request (or uses X-Request-ID header if provided)
     2. Stores it in request.state for access by endpoints
     3. Sets it in logging context for automatic log tagging
     4. Adds X-Request-ID header to response
-    
+
     Benefits:
     - Easy to grep logs for a specific request
     - Can trace a request through distributed systems
     - Helps debug production issues
-    
+
     Example log output:
         2025-10-29 08:00:15 - INFO - [abc-123-def-456] - Prediction request received
         2025-10-29 08:00:15 - INFO - [abc-123-def-456] - Model inference complete
     """
     # Check if client provided request ID, otherwise generate one
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
-    
+
     # Store in request state for access by endpoints
     request.state.request_id = request_id
-    
+
     # Set in logging context (thread-safe for async via ContextVar)
     token = request_id_context.set(request_id)
-    
+
     try:
         # Process the request
         response = await call_next(request)
-        
+
         # Add request ID to response headers
         response.headers["X-Request-ID"] = request_id
-        
+
         return response
     finally:
         # Reset context after request completes
@@ -550,42 +562,42 @@ async def request_id_middleware(request: Request, call_next):
 async def request_validation_middleware(request: Request, call_next):
     """
     Validate request size before processing.
-    
+
     Checks:
     - Content-Length header against max_request_size_mb
     - Prevents memory exhaustion from huge payloads
-    
+
     Returns:
         413 Payload Too Large if request exceeds size limit
     """
     # Skip for non-POST requests
     if request.method != "POST":
         return await call_next(request)
-    
+
     # Check content length
     content_length = request.headers.get("content-length")
     if content_length:
         try:
             content_length_bytes = int(content_length)
             content_length_mb = content_length_bytes / (1024 * 1024)
-            
+
             if content_length_mb > service_config.max_request_size_mb:
                 logger.warning(
                     f"Request too large: {content_length_mb:.2f}MB "
                     f"(max: {service_config.max_request_size_mb}MB)"
                 )
-                prediction_error_count.labels(error_type='payload_too_large').inc()
+                prediction_error_count.labels(error_type="payload_too_large").inc()
                 return JSONResponse(
                     status_code=413,  # Payload Too Large
                     content={
                         "error": "Payload Too Large",
                         "detail": f"Request size {content_length_mb:.2f}MB exceeds maximum {service_config.max_request_size_mb}MB",
-                        "max_size_mb": service_config.max_request_size_mb
-                    }
+                        "max_size_mb": service_config.max_request_size_mb,
+                    },
                 )
         except ValueError:
             logger.warning(f"Invalid Content-Length header: {content_length}")
-    
+
     return await call_next(request)
 
 
@@ -594,49 +606,45 @@ async def request_validation_middleware(request: Request, call_next):
 async def timeout_middleware(request: Request, call_next):
     """
     Protect against long-running requests that could block workers.
-    
+
     This middleware:
     1. Sets a timeout for request processing
     2. Cancels requests that exceed the timeout
     3. Logs timeout events for monitoring
     4. Tracks timeouts in Prometheus metrics
-    
+
     Benefits:
     - Prevents worker starvation from slow requests
     - Protects against DoS via expensive operations
     - Provides visibility into timeout patterns
-    
+
     Configuration:
     - REQUEST_TIMEOUT_ENABLED: Enable/disable timeout protection (default: true)
     - REQUEST_TIMEOUT_SECONDS: Timeout duration in seconds (default: 30)
-    
+
     Note: Health check endpoints (/health, /healthz, /readyz) are exempt from timeout.
     """
     # Skip timeout for health checks and metrics (they should always be fast)
     exempt_paths = {"/health", "/healthz", "/readyz", "/metrics", "/"}
     if request.url.path in exempt_paths or not REQUEST_TIMEOUT_ENABLED:
         return await call_next(request)
-    
+
     # Apply timeout
     try:
         # Use asyncio.wait_for to enforce timeout
-        response = await asyncio.wait_for(
-            call_next(request),
-            timeout=REQUEST_TIMEOUT_SECONDS
-        )
+        response = await asyncio.wait_for(call_next(request), timeout=REQUEST_TIMEOUT_SECONDS)
         return response
-        
+
     except asyncio.TimeoutError:
         # Request exceeded timeout
         endpoint = request.url.path
         logger.error(
-            f"Request timeout after {REQUEST_TIMEOUT_SECONDS}s: "
-            f"{request.method} {endpoint}"
+            f"Request timeout after {REQUEST_TIMEOUT_SECONDS}s: " f"{request.method} {endpoint}"
         )
-        
+
         # Track timeout in metrics
         request_timeout_count.labels(endpoint=endpoint).inc()
-        
+
         # Return 504 Gateway Timeout
         return JSONResponse(
             status_code=504,
@@ -644,8 +652,8 @@ async def timeout_middleware(request: Request, call_next):
                 "error": "Gateway Timeout",
                 "detail": f"Request processing exceeded {REQUEST_TIMEOUT_SECONDS} seconds timeout",
                 "timeout_seconds": REQUEST_TIMEOUT_SECONDS,
-                "suggestion": "Try reducing request size or complexity"
-            }
+                "suggestion": "Try reducing request size or complexity",
+            },
         )
 
 
@@ -654,24 +662,24 @@ async def timeout_middleware(request: Request, call_next):
 async def metrics_middleware(request: Request, call_next):
     """
     Automatically track request duration for all endpoints.
-    
+
     This middleware:
     1. Records start time
     2. Processes the request
     3. Calculates duration
     4. Updates Prometheus histogram
     5. Logs slow requests (>1s)
-    
+
     Note: Skips /metrics endpoint to avoid recursion.
     """
     # Skip /metrics endpoint to avoid infinite recursion
     if request.url.path == "/metrics":
         return await call_next(request)
-    
+
     # Start timer
     start_time = time.time()
     endpoint = request.url.path
-    
+
     # Process request
     status_code = 500  # Default to error if something goes wrong
     try:
@@ -685,23 +693,21 @@ async def metrics_middleware(request: Request, call_next):
         # Record duration
         duration = time.time() - start_time
         request_duration.labels(endpoint=endpoint).observe(duration)
-        
+
         # Count request
         status = "success" if 200 <= status_code < 400 else "error"
         request_count.labels(endpoint=endpoint, status=status).inc()
-        
+
         # Log slow requests
         if duration > 1.0:
-            logger.warning(
-                f"Slow request: {endpoint} took {duration:.2f}s (status={status_code})"
-            )
+            logger.warning(f"Slow request: {endpoint} took {duration:.2f}s (status={status_code})")
 
 
 @app.get("/", tags=["Info"])
 async def root():
     """
     Root endpoint with API information.
-    
+
     Returns:
         API metadata and available endpoints
     """
@@ -714,8 +720,8 @@ async def root():
             "health": "GET /health - Health check",
             "predict": "POST /predict - Make prediction",
             "docs": "GET /docs - Swagger UI documentation",
-            "redoc": "GET /redoc - ReDoc documentation"
-        }
+            "redoc": "GET /redoc - ReDoc documentation",
+        },
     }
 
 
@@ -723,18 +729,18 @@ async def root():
 async def health(model_cache: ModelCache = Depends(get_model_cache)):
     """
     Comprehensive health check endpoint for orchestrators.
-    
+
     Returns detailed status including:
     - Overall health status (healthy/degraded/unhealthy)
     - Readiness for serving traffic
     - Uptime
     - Model information (version, training metrics)
     - Individual component checks
-    
+
     HTTP Status Codes:
         200 OK: Service healthy and ready
         503 Service Unavailable: Model not loaded, cannot serve traffic
-    
+
     This endpoint is suitable for:
     - Docker/Kubernetes health checks
     - Load balancer health probes
@@ -745,23 +751,24 @@ async def health(model_cache: ModelCache = Depends(get_model_cache)):
         # Get model and metadata from cache
         model, version, expected_features, threshold = get_model_from_cache(model_cache)
         model_loaded = model is not None
-        
+
         # Calculate uptime using public timestamp (not Prometheus private API)
         current_time = time.time()
         uptime_seconds = current_time - SERVICE_START_TIMESTAMP
-        
+
         # Load metadata for additional model info
         metadata = None
         try:
             import json
             from pathlib import Path
+
             metadata_files = sorted(Path("models").glob("metadata_*.json"), reverse=True)
             if metadata_files:
-                with open(metadata_files[0], 'r') as f:
+                with open(metadata_files[0], "r") as f:
                     metadata = json.load(f)
         except Exception as e:
             logger.warning(f"Could not load metadata: {e}")
-        
+
         # Determine overall status
         if not model_loaded:
             health_status = "unhealthy"
@@ -772,7 +779,7 @@ async def health(model_cache: ModelCache = Depends(get_model_cache)):
         else:
             health_status = "healthy"
             ready = True
-        
+
         # Build response
         health_info = {
             "status": health_status,
@@ -782,21 +789,25 @@ async def health(model_cache: ModelCache = Depends(get_model_cache)):
             "checks": {
                 "model_loaded": model_loaded,
                 "metadata_available": metadata is not None,
-                "expected_features_available": expected_features is not None
-            }
+                "expected_features_available": expected_features is not None,
+            },
         }
-        
+
         # Add model info if available
         if model_loaded and version:
             health_info["model"] = {"version": version}
             if metadata:
-                health_info["model"].update({
-                    "run_id": metadata.get('run_id', 'unknown'),
-                    "trained_at": metadata.get('timestamp', 'unknown'),
-                    "validation_roc_auc": metadata.get('validation_metrics', {}).get('roc_auc', 0.0),
-                    "n_features": len(expected_features) if expected_features else 0
-                })
-        
+                health_info["model"].update(
+                    {
+                        "run_id": metadata.get("run_id", "unknown"),
+                        "trained_at": metadata.get("timestamp", "unknown"),
+                        "validation_roc_auc": metadata.get("validation_metrics", {}).get(
+                            "roc_auc", 0.0
+                        ),
+                        "n_features": len(expected_features) if expected_features else 0,
+                    }
+                )
+
         # Return appropriate HTTP status code
         if health_status == "unhealthy":
             logger.warning("Health check: service unhealthy (model not loaded)")
@@ -807,7 +818,7 @@ async def health(model_cache: ModelCache = Depends(get_model_cache)):
         else:
             logger.debug("Health check: service healthy")
             return JSONResponse(content=health_info, status_code=200)
-            
+
     except Exception as e:
         logger.error(f"Health check failed with exception: {e}", exc_info=True)
         return JSONResponse(
@@ -818,11 +829,11 @@ async def health(model_cache: ModelCache = Depends(get_model_cache)):
                 "checks": {
                     "model_loaded": False,
                     "metadata_available": False,
-                    "expected_features_available": False
+                    "expected_features_available": False,
                 },
-                "error": "Health check failed"
+                "error": "Health check failed",
             },
-            status_code=503
+            status_code=503,
         )
 
 
@@ -830,13 +841,13 @@ async def health(model_cache: ModelCache = Depends(get_model_cache)):
 async def liveness():
     """
     Liveness probe: Is the process alive?
-    
+
     Returns 200 if the service process is running, regardless of model state.
     This endpoint should NEVER fail unless the process is dead/frozen.
-    
+
     Usage:
         Kubernetes liveness probe - if this fails, restart the container
-        
+
     Example:
         livenessProbe:
           httpGet:
@@ -853,15 +864,15 @@ async def liveness():
 async def readiness(model_cache: ModelCache = Depends(get_model_cache)):
     """
     Readiness probe: Is the service ready to serve traffic?
-    
+
     Returns:
         200 if model is loaded and service can handle requests
         503 if model is not loaded (don't send traffic yet)
-    
+
     Usage:
         Kubernetes readiness probe - if this fails, remove from load balancer
         but don't restart
-        
+
     Example:
         readinessProbe:
           httpGet:
@@ -878,15 +889,15 @@ async def readiness(model_cache: ModelCache = Depends(get_model_cache)):
                 content={
                     "status": "not_ready",
                     "reason": "model_not_loaded",
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
                 },
-                status_code=503
+                status_code=503,
             )
         logger.debug(f"Readiness check passed: model {version} loaded")
         return {
             "status": "ready",
             "model_version": version,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
         logger.error(f"Readiness check failed: {e}", exc_info=True)
@@ -894,9 +905,9 @@ async def readiness(model_cache: ModelCache = Depends(get_model_cache)):
             content={
                 "status": "not_ready",
                 "reason": "check_failed",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             },
-            status_code=503
+            status_code=503,
         )
 
 
@@ -906,107 +917,101 @@ async def predict_churn(
     prediction_request: PredictionRequest,
     request: Request,
     model_cache: ModelCache = Depends(get_model_cache),
-    token: Optional[str] = Depends(verify_token)
+    token: Optional[str] = Depends(verify_token),
 ):
     """
     Predict churn probability for a customer.
-    
+
     CPU-bound model inference is offloaded to a thread pool
     to prevent blocking the async event loop and maintain server responsiveness.
-    
+
     Request ID is included in response for tracing logs.
-    
+
     Args:
         prediction_request: Customer features
         request: FastAPI Request object (for accessing request_id, required by slowapi)
         model_cache: Model cache from app.state (injected by dependency)
         token: Optional bearer token (required if service_token is configured)
-        
+
     Returns:
         Prediction with probability, binary classification, risk level, and request_id
-        
+
     Raises:
         HTTPException with appropriate status codes:
             - 401: Unauthorized (invalid/missing token when auth enabled)
             - 422: Unprocessable Entity (data validation failed)
             - 500: Internal Server Error (unexpected error)
             - 503: Service Unavailable (model not loaded)
-    
+
     Security:
         If SERVICE_TOKEN environment variable is set, requires Authorization header:
         Authorization: Bearer <token>
     """
     # Get request ID from middleware
     request_id = request.state.request_id
-    
+
     logger.info("Prediction request received")
     logger.debug(f"Authentication: {'enabled' if service_config.service_token else 'disabled'}")
-    
+
     # Check 1: Model loaded? (503 Service Unavailable)
     try:
         model, version, _, _ = get_model_from_cache(model_cache)
         if model is None:
             logger.error("Prediction attempted but model not loaded")
-            prediction_error_count.labels(error_type='model_not_loaded').inc()
+            prediction_error_count.labels(error_type="model_not_loaded").inc()
             raise HTTPException(
                 status_code=503,
-                detail="Service unavailable: Model not loaded yet. Try again in a moment."
+                detail="Service unavailable: Model not loaded yet. Try again in a moment.",
             )
     except HTTPException:
         raise  # Re-raise HTTP exceptions
     except Exception as e:
         logger.error(f"Error checking model: {e}", exc_info=True)
-        prediction_error_count.labels(error_type='model_check_failed').inc()
+        prediction_error_count.labels(error_type="model_check_failed").inc()
         raise HTTPException(
-            status_code=503,
-            detail="Service unavailable: Unable to verify model status"
+            status_code=503, detail="Service unavailable: Unable to verify model status"
         )
-    
+
     # Predict - Run in thread pool to avoid blocking event loop
     # Pass request_id to prediction function for response
     try:
         logger.debug("Processing prediction")
         # Offload CPU-bound prediction to thread pool
         response = await run_in_threadpool(predict, prediction_request, model_cache, request_id)
-        
+
         # Log success
         logger.info(
             f"Prediction successful: churn={response.churn_prediction}, "
             f"probability={response.churn_probability:.4f}, "
             f"risk={response.risk_level}"
         )
-        
+
         # Log warnings if any (schema mismatches, data quality issues)
         if response.warnings:
             logger.warning(f"Prediction warnings: {response.warnings}")
-        
+
         return response
-        
+
     except ValueError as e:
         # Data validation error (422 Unprocessable Entity)
         logger.error(f"Data validation error: {e}", exc_info=True)
-        prediction_error_count.labels(error_type='validation_error').inc()
-        raise HTTPException(
-            status_code=422,
-            detail=f"Data validation failed: {str(e)}"
-        )
-    
+        prediction_error_count.labels(error_type="validation_error").inc()
+        raise HTTPException(status_code=422, detail=f"Data validation failed: {str(e)}")
+
     except Exception as e:
         # Unexpected error (500 Internal Server Error)
-        logger.error(
-            f"Unexpected error during prediction: {type(e).__name__}: {e}",
-            exc_info=True
-        )
-        prediction_error_count.labels(error_type='prediction_failed').inc()
+        logger.error(f"Unexpected error during prediction: {type(e).__name__}: {e}", exc_info=True)
+        prediction_error_count.labels(error_type="prediction_failed").inc()
         raise HTTPException(
             status_code=500,
-            detail="Prediction failed due to an internal error. Please try again later."
+            detail="Prediction failed due to an internal error. Please try again later.",
         )
 
 
 # ==============================================================================
 # DRIFT DETECTION ENDPOINTS
 # ==============================================================================
+
 
 @app.post("/drift", response_model=DriftAnalysisResponse, tags=["Drift Detection"])
 @limiter.limit(RATE_LIMIT_DRIFT if RATE_LIMIT_ENABLED else "999999/minute")
@@ -1015,192 +1020,182 @@ async def analyze_drift_endpoint(
     request: Request,
     background_tasks: BackgroundTasks,
     model_cache: ModelCache = Depends(get_model_cache),
-    _token: Optional[str] = Depends(verify_token)
+    _token: Optional[str] = Depends(verify_token),
 ):
     """
     Analyze drift in input data and predictions.
-    
+
     CPU-bound drift analysis and model predictions are offloaded
     to a thread pool to prevent blocking the async event loop.
-    
+
     Compares current data to training baseline to detect distribution shifts.
     Monitors:
     - Numeric feature drift (relative change in mean/std)
     - Categorical feature drift (Population Stability Index)
     - Prediction drift (change in positive prediction rate)
-    
+
     Args:
         drift_request: Batch of customer data to analyze
         request: FastAPI Request object (required by slowapi)
         background_tasks: FastAPI background tasks for optional retraining
-        
+
     Returns:
         Drift analysis report with detailed metrics
-        
+
     Raises:
         400: Batch size exceeds limit or empty batch
         503: Model or reference statistics not available
         500: Drift analysis failed
     """
     logger.info(f"Drift analysis requested for {len(drift_request.customers)} customers")
-    
+
     # Validate batch size
     if len(drift_request.customers) == 0:
         raise HTTPException(
-            status_code=400,
-            detail="Drift analysis requires at least one customer record"
+            status_code=400, detail="Drift analysis requires at least one customer record"
         )
-    
+
     if len(drift_request.customers) > drift_config.max_drift_batch_size:
         raise HTTPException(
             status_code=400,
             detail=f"Drift analysis batch size ({len(drift_request.customers)}) exceeds maximum "
-                   f"({drift_config.max_drift_batch_size}). Please split into smaller batches or increase "
-                   f"MAX_DRIFT_BATCH_SIZE."
+            f"({drift_config.max_drift_batch_size}). Please split into smaller batches or increase "
+            f"MAX_DRIFT_BATCH_SIZE.",
         )
-    
+
     # Get model - Use model_cache from dependency
     model, version, _, _ = get_model_from_cache(model_cache)
-    
+
     if model is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Drift analysis unavailable: model not loaded"
-        )
-    
+        raise HTTPException(status_code=503, detail="Drift analysis unavailable: model not loaded")
+
     # Load metadata separately
     import json
     from pathlib import Path
-    
+
     metadata_files = sorted(Path("models").glob("metadata_*.json"), reverse=True)
     if not metadata_files:
         raise HTTPException(
-            status_code=503,
-            detail="Drift analysis unavailable: no metadata files found"
+            status_code=503, detail="Drift analysis unavailable: no metadata files found"
         )
-    
+
     try:
-        with open(metadata_files[0], 'r') as f:
+        with open(metadata_files[0], "r") as f:
             metadata = json.load(f)
     except Exception as e:
         logger.error(f"Failed to load metadata: {e}", exc_info=True)
         raise HTTPException(
-            status_code=503,
-            detail="Drift analysis unavailable: could not load metadata"
+            status_code=503, detail="Drift analysis unavailable: could not load metadata"
         )
-    
-    if 'reference_statistics' not in metadata:
+
+    if "reference_statistics" not in metadata:
         logger.error("Reference statistics not found in metadata - model needs retraining")
         raise HTTPException(
             status_code=503,
             detail="Drift analysis unavailable: reference statistics not found. "
-                   "Please retrain the model to generate baseline statistics."
+            "Please retrain the model to generate baseline statistics.",
         )
-    
+
     try:
         # Convert to DataFrame
         df = pd.DataFrame(drift_request.customers)
-        
+
         # Make predictions (binary predictions for drift analysis)
         # Offload CPU-bound prediction to thread pool
         predictions = await run_in_threadpool(model.predict, df)
-        
+
         # Analyze drift
         # Offload CPU-bound drift analysis to thread pool
         drift_report = await run_in_threadpool(
             analyze_drift,
-            metadata['reference_statistics'],
+            metadata["reference_statistics"],
             df,
             predictions,
             drift_config.numeric_threshold,
             drift_config.categorical_threshold,
-            drift_config.prediction_threshold
+            drift_config.prediction_threshold,
         )
-        
+
         # Update Prometheus metrics
-        if drift_report['overall_drift_detected']:
+        if drift_report["overall_drift_detected"]:
             # Count drift by type
-            for feature, result in drift_report['numeric_features'].items():
-                if result['drift_detected']:
-                    drift_detected_count.labels(drift_type='numeric').inc()
-            
-            for feature, result in drift_report['categorical_features'].items():
-                if result['drift_detected']:
-                    drift_detected_count.labels(drift_type='categorical').inc()
-            
-            if drift_report['prediction_drift']['drift_detected']:
-                drift_detected_count.labels(drift_type='prediction').inc()
-            
-            features_drifted_gauge.set(drift_report['summary']['n_features_drifted'])
-            
+            for feature, result in drift_report["numeric_features"].items():
+                if result["drift_detected"]:
+                    drift_detected_count.labels(drift_type="numeric").inc()
+
+            for feature, result in drift_report["categorical_features"].items():
+                if result["drift_detected"]:
+                    drift_detected_count.labels(drift_type="categorical").inc()
+
+            if drift_report["prediction_drift"]["drift_detected"]:
+                drift_detected_count.labels(drift_type="prediction").inc()
+
+            features_drifted_gauge.set(drift_report["summary"]["n_features_drifted"])
+
             # Log warning
             logger.warning(
                 f"⚠ DRIFT DETECTED! {drift_report['summary']['n_features_drifted']} "
                 f"features drifted: {drift_report['summary']['drifted_features']}"
             )
-            
+
             # Optionally trigger automatic retraining
             if AUTO_RETRAIN_ON_DRIFT and should_allow_retraining():
                 logger.info("AUTO_RETRAIN_ON_DRIFT enabled - triggering retraining")
                 background_tasks.add_task(retrain_model_task)
         else:
             logger.info("✓ No significant drift detected")
-        
+
         # Return response
         return DriftAnalysisResponse(
-            overall_drift_detected=drift_report['overall_drift_detected'],
-            n_features_drifted=drift_report['summary']['n_features_drifted'],
-            drifted_features=drift_report['summary']['drifted_features'],
-            prediction_drift_detected=drift_report['prediction_drift']['drift_detected'],
-            detailed_report=drift_report
+            overall_drift_detected=drift_report["overall_drift_detected"],
+            n_features_drifted=drift_report["summary"]["n_features_drifted"],
+            drifted_features=drift_report["summary"]["drifted_features"],
+            prediction_drift_detected=drift_report["prediction_drift"]["drift_detected"],
+            detailed_report=drift_report,
         )
-    
+
     except Exception as e:
         logger.error(f"Drift analysis failed: {e}", exc_info=True)
-        prediction_error_count.labels(error_type='drift_analysis_error').inc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Drift analysis failed: {str(e)}"
-        )
+        prediction_error_count.labels(error_type="drift_analysis_error").inc()
+        raise HTTPException(status_code=500, detail=f"Drift analysis failed: {str(e)}")
 
 
 @app.get("/drift/info", tags=["Drift Detection"])
 async def drift_info(
     model_cache: ModelCache = Depends(get_model_cache),
-    _token: Optional[str] = Depends(verify_token)
+    _token: Optional[str] = Depends(verify_token),
 ):
     """
     Get information about drift detection configuration and baseline.
-    
+
     Returns reference statistics and thresholds used for drift detection.
     Useful for understanding the baseline and debugging drift alerts.
-    
+
     Returns:
         Drift configuration and baseline statistics
-        
+
     Raises:
         503: Reference statistics not available
     """
     logger.info("=== DRIFT INFO ENDPOINT CALLED ===")
-    
+
     # Get model version - Use model_cache from dependency
     _, version, _, _ = get_model_from_cache(model_cache)
     logger.info(f"Got model version: {version}")
-    
+
     # Load metadata separately
     import json
     from pathlib import Path
-    
+
     metadata_files = sorted(Path("models").glob("metadata_*.json"), reverse=True)
     logger.info(f"Found {len(metadata_files)} metadata files: {[str(f) for f in metadata_files]}")
     if not metadata_files:
         raise HTTPException(
-            status_code=503,
-            detail="Drift info unavailable: no metadata files found"
+            status_code=503, detail="Drift info unavailable: no metadata files found"
         )
-    
+
     try:
-        with open(metadata_files[0], 'r') as f:
+        with open(metadata_files[0], "r") as f:
             metadata = json.load(f)
         logger.info(f"Drift info: Loaded metadata from {metadata_files[0]}")
         logger.info(f"Drift info: Metadata keys: {list(metadata.keys())}")
@@ -1208,68 +1203,68 @@ async def drift_info(
     except Exception as e:
         logger.error(f"Failed to load metadata: {e}", exc_info=True)
         raise HTTPException(
-            status_code=503,
-            detail="Drift info unavailable: could not load metadata"
+            status_code=503, detail="Drift info unavailable: could not load metadata"
         )
-    
-    if 'reference_statistics' not in metadata:
-        logger.error(f"reference_statistics not in metadata. Available keys: {list(metadata.keys())}")
+
+    if "reference_statistics" not in metadata:
+        logger.error(
+            f"reference_statistics not in metadata. Available keys: {list(metadata.keys())}"
+        )
         raise HTTPException(
             status_code=503,
             detail="Drift info unavailable: reference statistics not found. "
-                   "Please retrain the model to generate baseline statistics."
+            "Please retrain the model to generate baseline statistics.",
         )
-    
-    ref_stats = metadata['reference_statistics']
-    
+
+    ref_stats = metadata["reference_statistics"]
+
     # Calculate model age
-    model_timestamp = datetime.fromisoformat(metadata['timestamp'])
+    model_timestamp = datetime.fromisoformat(metadata["timestamp"])
     age_days = (datetime.now() - model_timestamp).days
-    
+
     return {
-        'baseline': {
-            'n_samples': ref_stats['target']['n_samples'],
-            'positive_rate': ref_stats['target']['positive_rate'],
-            'n_numeric_features': len(ref_stats['numeric']),
-            'n_categorical_features': len(ref_stats['categorical']),
-            'numeric_features': list(ref_stats['numeric'].keys()),
-            'categorical_features': list(ref_stats['categorical'].keys())
+        "baseline": {
+            "n_samples": ref_stats["target"]["n_samples"],
+            "positive_rate": ref_stats["target"]["positive_rate"],
+            "n_numeric_features": len(ref_stats["numeric"]),
+            "n_categorical_features": len(ref_stats["categorical"]),
+            "numeric_features": list(ref_stats["numeric"].keys()),
+            "categorical_features": list(ref_stats["categorical"].keys()),
         },
-        'thresholds': {
-            'numeric': drift_config.numeric_threshold,
-            'categorical': drift_config.categorical_threshold,
-            'prediction': drift_config.prediction_threshold
+        "thresholds": {
+            "numeric": drift_config.numeric_threshold,
+            "categorical": drift_config.categorical_threshold,
+            "prediction": drift_config.prediction_threshold,
         },
-        'model_info': {
-            'run_id': metadata.get('run_id', 'unknown'),
-            'trained_at': metadata['timestamp'],
-            'age_days': age_days
+        "model_info": {
+            "run_id": metadata.get("run_id", "unknown"),
+            "trained_at": metadata["timestamp"],
+            "age_days": age_days,
         },
-        'configuration': {
-            'max_drift_batch_size': drift_config.max_drift_batch_size,
-            'auto_retrain_on_drift': AUTO_RETRAIN_ON_DRIFT,
-            'min_retrain_interval_hours': MIN_RETRAIN_INTERVAL_HOURS
-        }
+        "configuration": {
+            "max_drift_batch_size": drift_config.max_drift_batch_size,
+            "auto_retrain_on_drift": AUTO_RETRAIN_ON_DRIFT,
+            "min_retrain_interval_hours": MIN_RETRAIN_INTERVAL_HOURS,
+        },
     }
 
 
 @app.post("/retrain", tags=["Model Management"])
 async def trigger_retraining(
-    background_tasks: BackgroundTasks,
-    _token: Optional[str] = Depends(verify_token)
+    background_tasks: BackgroundTasks, _token: Optional[str] = Depends(verify_token)
 ):
     """
     Trigger model retraining in the background.
-    
+
     Safeguards:
     - Rate limited to once per MIN_RETRAIN_INTERVAL_HOURS (default 24h)
     - Runs in background (doesn't block API)
     - New model saved but NOT auto-deployed
     - Requires manual review and deployment
-    
+
     Returns:
         Retraining status and next steps
-        
+
     Raises:
         429: Retraining triggered too recently (rate limit)
     """
@@ -1280,14 +1275,14 @@ async def trigger_retraining(
         raise HTTPException(
             status_code=429,
             detail=f"Retraining triggered too recently. Minimum {MIN_RETRAIN_INTERVAL_HOURS}h "
-                   f"between retrains. Try again in {hours_remaining:.1f} hours."
+            f"between retrains. Try again in {hours_remaining:.1f} hours.",
         )
-    
+
     # Trigger background retraining
     background_tasks.add_task(retrain_model_task)
-    
+
     logger.warning("⚠ Model retraining triggered via API")
-    
+
     return {
         "status": "retraining_triggered",
         "message": "Model retraining started in background. Check logs for progress.",
@@ -1295,9 +1290,9 @@ async def trigger_retraining(
         "next_steps": [
             "1. Monitor logs: docker compose logs -f api",
             "2. Review metrics: cat diagnostics/evaluation_report_*.txt",
-            "3. Deploy if satisfied: make restart"
+            "3. Deploy if satisfied: make restart",
         ],
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
     }
 
 
@@ -1307,27 +1302,28 @@ async def trigger_retraining(
 # These handlers ensure we NEVER leak stack traces or internal details to users
 # All errors are logged with full details, but users get sanitized messages
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """
     Handle Pydantic validation errors with user-friendly messages.
-    
+
     Includes request_id in error response for tracing.
-    
+
     Triggered when:
     - Missing required fields
     - Wrong data types (string instead of int)
     - Invalid values (negative numbers where positive expected)
     - Extra fields not in schema (if configured)
-    
+
     Returns 422 Unprocessable Entity with helpful error details.
     """
     # Get request ID from middleware
-    request_id = getattr(request.state, 'request_id', 'no-request-id')
-    
+    request_id = getattr(request.state, "request_id", "no-request-id")
+
     logger.warning(f"Request validation error on {request.url.path}")
     logger.debug(f"Validation errors: {exc.errors()}")
-    
+
     # Extract user-friendly error messages
     errors = []
     for error in exc.errors():
@@ -1335,14 +1331,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         field_path = " -> ".join(str(x) for x in error["loc"])
         message = error["msg"]
         error_type = error["type"]
-        errors.append({
-            "field": field_path,
-            "message": message,
-            "type": error_type
-        })
-    
-    prediction_error_count.labels(error_type='validation_error').inc()
-    
+        errors.append({"field": field_path, "message": message, "type": error_type})
+
+    prediction_error_count.labels(error_type="validation_error").inc()
+
     response = JSONResponse(
         status_code=422,  # Unprocessable Entity
         content={
@@ -1350,8 +1342,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "detail": "Request does not match expected schema",
             "errors": errors,
             "hint": "Check API documentation at /docs for correct schema",
-            "request_id": request_id  # Include for tracing
-        }
+            "request_id": request_id,  # Include for tracing
+        },
     )
     # Add X-Request-ID header
     response.headers["X-Request-ID"] = request_id
@@ -1362,26 +1354,25 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def global_exception_handler(request: Request, exc: Exception):
     """
     Catch-all for unexpected exceptions.
-    
+
     Uses request_id from middleware for tracing.
-    
+
     Security: Logs full details but returns generic message to user.
     NEVER leak stack traces, internal paths, or sensitive data.
-    
+
     This handler should only trigger for truly unexpected errors.
     Most errors should be caught by specific handlers or try/except blocks.
     """
     # Get request ID from middleware
-    request_id = getattr(request.state, 'request_id', 'no-request-id')
-    
+    request_id = getattr(request.state, "request_id", "no-request-id")
+
     # Log full details (including stack trace)
     logger.critical(
-        f"UNHANDLED EXCEPTION on {request.url.path}: {type(exc).__name__}: {exc}",
-        exc_info=True
+        f"UNHANDLED EXCEPTION on {request.url.path}: {type(exc).__name__}: {exc}", exc_info=True
     )
-    
-    prediction_error_count.labels(error_type='unhandled_exception').inc()
-    
+
+    prediction_error_count.labels(error_type="unhandled_exception").inc()
+
     # Return generic error (don't leak internal details)
     response = JSONResponse(
         status_code=500,
@@ -1389,8 +1380,8 @@ async def global_exception_handler(request: Request, exc: Exception):
             "error": "Internal Server Error",
             "detail": "An unexpected error occurred. Please try again later.",
             "request_id": request_id,
-            "hint": "If this persists, contact support with the request_id"
-        }
+            "hint": "If this persists, contact support with the request_id",
+        },
     )
     # Add X-Request-ID header
     response.headers["X-Request-ID"] = request_id
@@ -1399,11 +1390,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 if __name__ == "__main__":
     import uvicorn
-    
-    logger.info("="*70)
+
+    logger.info("=" * 70)
     logger.info("CHURN PREDICTION API")
     logger.info("Drift Detection & Automatic Retraining")
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info("")
     logger.info("Starting server...")
     logger.info("  • Swagger UI:  http://localhost:8000/docs")
@@ -1416,12 +1407,5 @@ if __name__ == "__main__":
     logger.info("  • Drift Info:  http://localhost:8000/drift/info")
     logger.info("  • Retrain:     http://localhost:8000/retrain")
     logger.info("")
-    
-    uvicorn.run(
-        "serve:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
 
+    uvicorn.run("serve:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
