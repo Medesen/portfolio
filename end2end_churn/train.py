@@ -347,7 +347,7 @@ def evaluate_and_analyze(best_model: Pipeline, X_train: pd.DataFrame, X_val: pd.
     plot_confusion_matrix(
         y_val, y_val_pred,
         cm_path,
-        title='Confusion Matrix (Validation Set)'
+        title='Confusion Matrix (Validation Set, threshold = 0.5)'
     )
     logger.info("✓ Confusion matrix saved")
     
@@ -381,7 +381,7 @@ def evaluate_and_analyze(best_model: Pipeline, X_train: pd.DataFrame, X_val: pd.
     save_diagnostics_report(
         metrics,
         diag_path,
-        set_name='Validation'
+        set_name='Validation (default 0.5 threshold)'
     )
     logger.info("✓ Evaluation report saved")
     
@@ -800,34 +800,44 @@ def log_to_mlflow(best_model: Pipeline, X_val: pd.DataFrame, y_val_proba: np.nda
     return mlflow_run_id
 
 
-def print_training_summary(metrics: Dict, test_metrics: Dict, threshold_info: Dict, 
-                           feature_importance_df: pd.DataFrame, config: TrainingConfig, 
-                           run_id: str, mlflow_run_id: Optional[str]) -> None:
+def print_training_summary(metrics: Dict, test_metrics: Dict, threshold_info: Dict,
+                           feature_importance_df: pd.DataFrame, config: TrainingConfig,
+                           run_id: str, mlflow_run_id: Optional[str],
+                           metrics_val_tuned: Optional[Dict] = None) -> None:
     """
     Print comprehensive training summary to console.
-    
+
     Args:
-        metrics: Validation metrics dictionary
-        test_metrics: Test metrics dictionary
+        metrics: Validation metrics dictionary (default 0.5 threshold)
+        test_metrics: Test metrics dictionary (tuned threshold)
         threshold_info: Threshold tuning results
         feature_importance_df: Feature importance DataFrame
         config: Training configuration
         run_id: Unique run identifier
         mlflow_run_id: MLflow run ID (if available)
+        metrics_val_tuned: Validation metrics at the tuned threshold
     """
+    tuned = threshold_info['chosen_threshold']
     logger.info("="*70)
     logger.info("TRAINING COMPLETE")
     logger.info("="*70)
     logger.info(f"Run ID: {run_id}")
     logger.info("")
     logger.info("Best Model Performance:")
-    logger.info("  Validation Set:")
+    logger.info("  Validation Set (default 0.5 threshold):")
     logger.info(f"    ROC AUC:   {metrics['roc_auc']:.4f}")
     logger.info(f"    Precision: {metrics['precision']:.4f}")
     logger.info(f"    Recall:    {metrics['recall']:.4f}")
     logger.info(f"    F1 Score:  {metrics['f1']:.4f}")
     logger.info("")
-    logger.info("  Test Set (Held-Out):")
+    if metrics_val_tuned:
+        logger.info(f"  Validation Set (tuned threshold {tuned:.4f}):")
+        logger.info(f"    ROC AUC:   {metrics_val_tuned['roc_auc']:.4f}")
+        logger.info(f"    Precision: {metrics_val_tuned['precision']:.4f}")
+        logger.info(f"    Recall:    {metrics_val_tuned['recall']:.4f}")
+        logger.info(f"    F1 Score:  {metrics_val_tuned['f1']:.4f}")
+        logger.info("")
+    logger.info(f"  Test Set (Held-Out, tuned threshold {tuned:.4f}):")
     logger.info(f"    ROC AUC:   {test_metrics['roc_auc']:.4f}")
     logger.info(f"    Precision: {test_metrics['precision']:.4f}")
     logger.info(f"    Recall:    {test_metrics['recall']:.4f}")
@@ -918,9 +928,24 @@ def main(config_path: Optional[str] = None, use_env: bool = False, model_type: O
         
         # 7. Tune classification thresholds
         threshold_info = tune_thresholds(y_val, y_val_proba, run_id)
-        
-        # 8. Evaluate on held-out test set
         tuned_threshold = threshold_info['chosen_threshold']
+
+        # 7b. Re-evaluate the validation set at the tuned threshold. The step-6
+        # metrics use the default 0.5 cut, so the two sets of numbers must be
+        # labeled apart wherever they are reported.
+        from src.evaluation.metrics import compute_metrics
+        y_val_pred_tuned = (y_val_proba >= tuned_threshold).astype(int)
+        metrics_val_tuned = compute_metrics(y_val, y_val_pred_tuned, y_val_proba)
+        logger.info(f"\nValidation metrics at tuned threshold ({tuned_threshold:.4f}):")
+        logger.info(f"  Precision: {metrics_val_tuned['precision']:.4f}")
+        logger.info(f"  Recall:    {metrics_val_tuned['recall']:.4f}")
+        logger.info(f"  F1 Score:  {metrics_val_tuned['f1']:.4f}")
+        for metric_name, metric_value in metrics_val_tuned.items():
+            if isinstance(metric_value, (int, float)):
+                mlflow.log_metric(f"val_tuned_{metric_name}", metric_value)
+        logger.info("✓ Tuned-threshold validation metrics logged to MLflow")
+
+        # 8. Evaluate on held-out test set
         test_metrics = evaluate_test_set(best_model, X_test, y_test, tuned_threshold)
         
         # 9. Compute reference statistics for drift detection
@@ -945,7 +970,8 @@ def main(config_path: Optional[str] = None, use_env: bool = False, model_type: O
         
         # 11. Print training summary
         print_training_summary(
-            metrics, test_metrics, threshold_info, feature_importance_df, config, run_id, mlflow_run_id
+            metrics, test_metrics, threshold_info, feature_importance_df, config, run_id, mlflow_run_id,
+            metrics_val_tuned=metrics_val_tuned
         )
     
     finally:
