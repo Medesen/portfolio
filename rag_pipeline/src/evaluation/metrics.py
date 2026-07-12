@@ -49,23 +49,24 @@ class RetrievalMetrics:
         recall = relevant_retrieved / len(relevant)
         return recall
     
-    def mean_reciprocal_rank(
+    def reciprocal_rank(
         self,
         retrieved_doc_ids: List[str],
         relevant_doc_ids: List[str]
     ) -> float:
         """
-        Calculate Mean Reciprocal Rank (MRR).
-        
-        For a single query, MRR = 1 / rank_of_first_relevant_doc
-        (rank starts at 1)
-        
+        Calculate the reciprocal rank for a single query:
+        1 / rank_of_first_relevant_doc (rank starts at 1).
+
+        Averaging this value across queries (``average_metrics``) yields
+        Mean Reciprocal Rank — the "mrr" key in the metrics dictionary.
+
         Args:
             retrieved_doc_ids: List of retrieved document IDs (in rank order)
             relevant_doc_ids: List of relevant document IDs
-            
+
         Returns:
-            MRR score (0.0 to 1.0)
+            Reciprocal rank (0.0 to 1.0)
         """
         if not relevant_doc_ids:
             return 0.0
@@ -174,7 +175,7 @@ class RetrievalMetrics:
             Dictionary with all metrics
         """
         metrics = {
-            "mrr": self.mean_reciprocal_rank(retrieved_doc_ids, relevant_doc_ids)
+            "mrr": self.reciprocal_rank(retrieved_doc_ids, relevant_doc_ids)
         }
         
         for k in k_values:

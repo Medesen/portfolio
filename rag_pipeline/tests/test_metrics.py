@@ -48,28 +48,28 @@ def test_recall_at_k_no_relevant():
     assert recall == 0.0
 
 
-def test_mrr_first_position():
-    """Test MRR when relevant doc is at first position."""
+def test_rr_first_position():
+    """Test reciprocal rank when relevant doc is at first position."""
     metrics = RetrievalMetrics()
     relevant_docs = ["doc1"]
     retrieved_docs = ["doc1", "doc2", "doc3"]
-    
-    mrr = metrics.mean_reciprocal_rank(retrieved_docs, relevant_docs)
-    
-    # Relevant doc at position 1: MRR = 1/1 = 1.0
-    assert mrr == 1.0
+
+    rr = metrics.reciprocal_rank(retrieved_docs, relevant_docs)
+
+    # Relevant doc at position 1: RR = 1/1 = 1.0
+    assert rr == 1.0
 
 
-def test_mrr_second_position():
-    """Test MRR when relevant doc is at second position."""
+def test_rr_second_position():
+    """Test reciprocal rank when relevant doc is at second position."""
     metrics = RetrievalMetrics()
     relevant_docs = ["doc2"]
     retrieved_docs = ["doc1", "doc2", "doc3"]
-    
-    mrr = metrics.mean_reciprocal_rank(retrieved_docs, relevant_docs)
-    
-    # Relevant doc at position 2: MRR = 1/2 = 0.5
-    assert mrr == 0.5
+
+    rr = metrics.reciprocal_rank(retrieved_docs, relevant_docs)
+
+    # Relevant doc at position 2: RR = 1/2 = 0.5
+    assert rr == 0.5
 
 
 def test_ndcg_perfect_ranking():
