@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from .embedder import Embedder
-from .vector_store import VectorStore
+from .vector_store import VectorStore, distance_to_similarity
 from .bm25_index import BM25Index
 from .hybrid_searcher import HybridSearcher
 from .query_rewriter import QueryRewriter
@@ -105,7 +105,8 @@ class QueryProcessor:
         query_text: str,
         strategy: Optional[str] = None,
         top_k: Optional[int] = None,
-        show_full_content: bool = False
+        show_full_content: bool = False,
+        skip_rewrite: bool = False
     ) -> Dict[str, Any]:
         """
         Process a query and retrieve relevant chunks.
@@ -121,9 +122,11 @@ class QueryProcessor:
         """
         start_time = time.time()
         
-        # Rewrite query with LLM if available
+        # Rewrite query with LLM if available. skip_rewrite is set by callers
+        # (e.g. hybrid fallback) that already rewrote the query, to avoid
+        # rewriting an already-rewritten query a second time.
         rewrite_metadata = None
-        if self.query_rewriter is not None:
+        if self.query_rewriter is not None and not skip_rewrite:
             rewrite_result = self.query_rewriter.rewrite(query_text)
             query_text = rewrite_result["rewritten_query"]
             rewrite_metadata = {
@@ -133,7 +136,7 @@ class QueryProcessor:
                 "rewrite_failed": rewrite_result["rewrite_failed"],
                 "rewrite_skipped": rewrite_result["rewrite_skipped"],
             }
-        
+
         # Normalize query
         query_text = self._normalize_query(query_text)
         self.logger.info(f"Processing query: '{query_text}'")
@@ -230,6 +233,9 @@ class QueryProcessor:
         query_text = self._normalize_query(query_text)
         self.logger.info(f"Processing hybrid query: '{query_text}'")
         
+        # Remember whether the caller asked for a specific top_k before defaulting,
+        # so an explicit --top-k is honored as the post-rerank cut (see below).
+        explicit_top_k = top_k
         # Determine parameters: reranking.final_top_k takes precedence when reranking is enabled
         if top_k is None:
             top_k = self.reranking_final_top_k if self.reranking_enabled else self.default_top_k
@@ -241,7 +247,14 @@ class QueryProcessor:
                 "Hybrid searcher not available (BM25 index not loaded). "
                 "Falling back to semantic search."
             )
-            return self.process_query(query_text, strategy=strategy, top_k=top_k)
+            # query_text is already rewritten+normalized here; skip a second rewrite
+            # and carry the rewrite metadata through to the fallback result.
+            result = self.process_query(
+                query_text, strategy=strategy, top_k=explicit_top_k, skip_rewrite=True
+            )
+            if rewrite_metadata is not None:
+                result["metadata"]["query_rewriting"] = rewrite_metadata
+            return result
         
         # Load BM25 index for the strategy if not already loaded or different strategy
         if self.bm25_index._loaded_strategy != strategy:
@@ -250,7 +263,14 @@ class QueryProcessor:
                     f"BM25 index not found for strategy '{strategy}'. "
                     "Falling back to semantic search."
                 )
-                return self.process_query(query_text, strategy=strategy, top_k=top_k)
+                # Already rewritten+normalized; skip the second rewrite and carry
+                # the rewrite metadata through.
+                result = self.process_query(
+                    query_text, strategy=strategy, top_k=explicit_top_k, skip_rewrite=True
+                )
+                if rewrite_metadata is not None:
+                    result["metadata"]["query_rewriting"] = rewrite_metadata
+                return result
         
         # Perform search based on mode
         if search_mode == "keyword":
@@ -267,13 +287,18 @@ class QueryProcessor:
         else:  # hybrid
             # When reranking is enabled, use reranking parameters
             if self.reranking_enabled and self.reranker is not None:
+                # Honor an explicit top_k as the number of results kept after
+                # reranking; fall back to the configured final_top_k otherwise.
+                rerank_top_k = (
+                    explicit_top_k if explicit_top_k is not None else self.reranking_final_top_k
+                )
                 result = self.hybrid_searcher.search(
                     query=query_text,
                     strategy=strategy,
                     top_k=top_k,
                     overfetch_k=self.reranking_overfetch_k,
                     alpha=alpha,
-                    rerank_top_k=self.reranking_final_top_k
+                    rerank_top_k=rerank_top_k
                 )
             else:
                 result = self.hybrid_searcher.search(
@@ -419,10 +444,9 @@ class QueryProcessor:
         for i, (chunk_id, content, metadata, distance) in enumerate(
             zip(ids, documents, metadatas, distances)
         ):
-            # Convert L2 distance to cosine similarity for normalized vectors
-            # For normalized vectors: L2_distance² = 2 * (1 - cosine_similarity)
-            # Therefore: cosine_similarity = 1 - (L2_distance² / 2)
-            similarity_score = max(0.0, 1.0 - (distance ** 2 / 2.0))
+            # ChromaDB's default l2 space returns the SQUARED distance, so for
+            # normalized vectors cosine_similarity = 1 - distance / 2.
+            similarity_score = distance_to_similarity(distance)
             
             result = {
                 "rank": i + 1,

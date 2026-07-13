@@ -9,6 +9,20 @@ from chromadb.config import Settings
 from ..utils.logger import get_logger
 
 
+def distance_to_similarity(distance: float) -> float:
+    """Convert a ChromaDB distance to a cosine similarity in [0, 1].
+
+    Collections use ChromaDB's default ``l2`` space, whose distance is the
+    *squared* Euclidean norm (no square root). For the normalized embeddings we
+    store, ``||a - b||^2 = 2 * (1 - cos)``, so ``cos = 1 - distance / 2``.
+
+    The previous inline code computed ``1 - distance ** 2 / 2``, which squared an
+    already-squared distance — monotonic (so rankings were unaffected) but the
+    reported similarity scores and any ``min_similarity`` filtering were wrong.
+    """
+    return max(0.0, 1.0 - distance / 2.0)
+
+
 class VectorStore:
     """
     Wrapper for ChromaDB vector database.

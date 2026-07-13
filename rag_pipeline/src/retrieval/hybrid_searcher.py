@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import List, Dict, Any, Optional, Set, TYPE_CHECKING
 import time
 
-from .vector_store import VectorStore
+from .vector_store import VectorStore, distance_to_similarity
 from .bm25_index import BM25Index
 from .embedder import Embedder
 from ..utils.logger import get_logger
@@ -302,10 +302,9 @@ class HybridSearcher:
         for rank, (chunk_id, content, metadata, distance) in enumerate(
             zip(ids, documents, metadatas, distances), start=1
         ):
-            # Convert L2 distance to cosine similarity for normalized vectors
-            # For normalized vectors: L2_distance² = 2 * (1 - cosine_similarity)
-            # Therefore: cosine_similarity = 1 - (L2_distance² / 2)
-            similarity = max(0.0, 1.0 - (distance ** 2 / 2.0))
+            # ChromaDB's default l2 space returns the SQUARED distance, so for
+            # normalized vectors cosine_similarity = 1 - distance / 2.
+            similarity = distance_to_similarity(distance)
             
             results.append({
                 'chunk_id': chunk_id,
