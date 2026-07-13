@@ -1,4 +1,4 @@
-.PHONY: help setup build balance ate cuped uplift reproduce test shell clean
+.PHONY: help setup build balance ate cuped uplift reproduce check-readme test shell clean
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -28,6 +28,9 @@ uplift: outputs ## Uplift models (S/T/X-learners), Qini evaluation, targeting si
 
 reproduce: outputs ## Reproduce every number and figure in the README (~5 min)
 	docker compose run --rm upliftlab all
+
+check-readme: ## Verify README headline numbers against outputs/ (run after make reproduce)
+	@python3 scripts/check_readme.py
 
 test: outputs ## Run the test suite
 	docker compose run --rm --entrypoint pytest upliftlab tests/ -v

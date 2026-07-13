@@ -134,6 +134,7 @@ make ate        # treatment effects with CIs, MDE, and multiplicity control
 make cuped      # CUPED / regression-adjustment variance reduction
 make uplift     # uplift models, Qini curves, targeting simulation (~2 min)
 make reproduce  # every number and the figure, end to end (~5 min)
+make check-readme  # verify README headline numbers against the fresh outputs
 ```
 
 ### Local Alternative (No Docker)

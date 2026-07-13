@@ -14,7 +14,7 @@ The dataset is 5 years of daily sales for 118 pasta SKUs from an Italian retaile
 |---|---|---|---|
 | naive (last value) | 1.074 | 1.082 | 8.86 |
 | seasonal-naive (m=7) | 1.002 | 1.027 | 8.75 |
-| **global LightGBM (Tweedie)** | **0.652** | **0.644** | **5.23** |
+| **global LightGBM (Tweedie)** | **0.652** | **0.644** | **5.22** |
 
 The global model improves MASE by 35% over seasonal-naive, *uniformly across volume terciles* (low 0.64 / mid 0.66 / high 0.66) — it is not hiding poor slow-mover performance behind fast movers. Its P10–P90 quantile forecasts achieve 0.778 empirical coverage against a 0.80 target.
 
@@ -77,8 +77,11 @@ make promo-lift
 # Plot a 28-day forecast with its uncertainty band
 make plot
 
-# Reproduce every number in this README in one go (~30-40 min)
+# Reproduce every number in this README and DATA_NOTES in one go (~50-60 min)
 make reproduce
+
+# Then verify the README's headline numbers against the fresh outputs
+make check-readme
 ```
 
 ### Local Alternative (No Docker)

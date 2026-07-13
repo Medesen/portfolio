@@ -33,7 +33,7 @@ No SKU is dead, none enters late or exits early — all 118 are kept.
 
   | Objective | MASE | WAPE | RMSE | MASE, low-volume tercile |
   |---|---|---|---|---|
-  | **Tweedie (power 1.2)** | **0.652** | **0.644** | 5.23 | **0.64** |
+  | **Tweedie (power 1.2)** | **0.652** | **0.644** | 5.22 | **0.64** |
   | Poisson | 0.658 | 0.646 | 5.19 | 0.65 |
   | plain L2 | 0.725 | 0.677 | **5.13** | 0.81 |
 
