@@ -48,6 +48,25 @@ def test_xlearner_recovers_heterogeneity_and_beats_random():
     assert abs(pred.mean() - cate_true.mean()) < 0.1
 
 
+def test_xlearner_stage2_uses_configured_params():
+    """The X-learner's second-stage effect regressors must use the learner's
+    configured params, not a hard-coded default_lgbm_params() copy.
+
+    Regression test: stage 2 previously ignored params=..., so a tuned/custom
+    XLearner silently trained its effect models on the defaults.
+    """
+    d, X, mask = _split()
+    t, y = d["t"].to_numpy(), d["y"].to_numpy()
+    custom = dict(FAST, num_leaves=9, n_estimators=77)
+
+    model = LEARNERS["x-learner"](kind="binary", params=custom).fit(X[mask], t[mask], y[mask])
+
+    for effect_model in (model.tau1_, model.tau0_):
+        params = effect_model.get_params()
+        assert params["num_leaves"] == 9
+        assert params["n_estimators"] == 77
+
+
 def test_uplift_by_group_monotone_ish():
     d, X, mask = _split()
     t, y = d["t"].to_numpy(), d["y"].to_numpy()

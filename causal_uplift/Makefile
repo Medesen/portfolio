@@ -1,4 +1,4 @@
-.PHONY: help setup build balance ate cuped uplift reproduce check-readme test shell clean
+.PHONY: help setup build balance ate cuped uplift reproduce refresh-assets check-readme test shell clean
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -28,6 +28,11 @@ uplift: outputs ## Uplift models (S/T/X-learners), Qini evaluation, targeting si
 
 reproduce: outputs ## Reproduce every number and figure in the README (~5 min)
 	docker compose run --rm upliftlab all
+
+refresh-assets: ## Update the committed Qini figure (assets/) from the regenerated outputs/ copy
+	@test -f outputs/qini_curve.png || { echo "outputs/qini_curve.png not found - run 'make reproduce' first"; exit 1; }
+	cp outputs/qini_curve.png assets/qini_curve.png
+	@echo "assets/qini_curve.png updated from outputs/qini_curve.png"
 
 check-readme: ## Verify README headline numbers against outputs/ (run after make reproduce)
 	@python3 scripts/check_readme.py

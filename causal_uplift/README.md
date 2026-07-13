@@ -78,6 +78,10 @@ to lowest predicted uplift. All three learners beat random targeting (the dashed
 diagonal); the gain is modest because the heterogeneity, though real, is not
 large.*
 
+> `make reproduce` regenerates this figure at `outputs/qini_curve.png` (gitignored);
+> the image shown above is the committed `assets/qini_curve.png`. Run
+> `make refresh-assets` to update the committed copy from a fresh run.
+
 **Targeting the top-k% by predicted uplift — incremental visits per 1,000 mailed (held-out):**
 
 | Target depth | By uplift | By response model | Random | Share of "mail-everyone" captured |

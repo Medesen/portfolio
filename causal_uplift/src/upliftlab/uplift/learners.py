@@ -120,9 +120,11 @@ class XLearner:
         # Stage 2: impute individual effects and model them (always regression).
         d1 = y[t == 1] - _predict(self.m0_, X[t == 1])   # treated: actual - imputed control
         d0 = _predict(self.m1_, X[t == 0]) - y[t == 0]   # control: imputed treated - actual
-        reg = default_lgbm_params()
-        self.tau1_ = LGBMRegressor(**reg).fit(X[t == 1], d1)
-        self.tau0_ = LGBMRegressor(**reg).fit(X[t == 0], d0)
+        # Effect models are always regressors, but use the learner's configured
+        # params (default_lgbm_params() by default) so a custom XLearner(params=...)
+        # is honored in both stages, not just stage 1.
+        self.tau1_ = LGBMRegressor(**self.params).fit(X[t == 1], d1)
+        self.tau0_ = LGBMRegressor(**self.params).fit(X[t == 0], d0)
         self.propensity_ = float(t.mean())
         return self
 
