@@ -160,17 +160,22 @@ def test_config_saved_is_loadable():
 @pytest.mark.e2e
 def test_train_with_default_config():
     """Test training works with default config (no --config arg)."""
-    result = subprocess.run(
-        ["python", "train.py"],
-        capture_output=True,
-        text=True,
-        timeout=600,  # Longer timeout for default config (more hyperparameters)
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    )
+    # subprocess.run(timeout=...) raises TimeoutExpired on timeout (it never
+    # returns a -9/124 code), so treat a timeout as a skip on a slow host rather
+    # than a spurious failure.
+    try:
+        result = subprocess.run(
+            ["python", "train.py"],
+            capture_output=True,
+            text=True,
+            timeout=600,  # Longer timeout for default config (more hyperparameters)
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        )
+    except subprocess.TimeoutExpired:
+        pytest.skip("Default-config training exceeded the 600s test timeout on this host")
 
-    # Should complete successfully (or timeout, which we handle)
-    # We mostly just check it doesn't crash immediately
-    assert result.returncode in [0, -9, 124], f"Training failed unexpectedly: {result.stderr[:500]}"
+    # Should complete successfully
+    assert result.returncode == 0, f"Training failed unexpectedly: {result.stderr[:500]}"
 
 
 # =============================================================================

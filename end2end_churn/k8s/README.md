@@ -2,6 +2,20 @@
 
 This directory contains Kubernetes manifests for deploying the Churn Prediction API to a Kubernetes cluster.
 
+> **These are example manifests, not a turnkey deployment.** Before they will
+> run against a real cluster you must, at minimum:
+> - **Build and push the image** to a registry and set it in `deployment.yaml`
+>   (it ships as `churn-service:latest`, a placeholder).
+> - **Populate the model volume** — a trained model + `.sha256` sidecar must be
+>   present where the container expects them (the service fails closed without a
+>   valid checksum).
+> - **Mount training data** if you intend to use the `/retrain` endpoint (it runs
+>   `train.py`, which needs the dataset).
+> - **Replace the placeholder secret** in `secret.yaml` (it contains no real token).
+>
+> They are provided to show the intended production shape (replicas, HPA,
+> probes, config/secret separation), not as a one-command deploy.
+
 ## Overview
 
 The Kubernetes deployment includes:

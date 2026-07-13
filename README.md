@@ -40,7 +40,7 @@ A production-ready ML service I built to predict customer churn with complete en
 - Three algorithms with automated hyperparameter tuning
 - MLflow experiment tracking and model registry
 - Drift detection with automatic retraining triggers
-- 175+ tests with 89% coverage, full CI/CD pipeline
+- 180+ tests with 90% coverage, full CI/CD pipeline
 - Kubernetes deployment manifests with auto-scaling
 - ~5 minute setup time, fully reproducible
 
@@ -84,7 +84,7 @@ A forecasting system I built to compare classical and ML approaches the way time
 - Quantile forecasts with pinball loss and interval-coverage evaluation (0.778 vs 0.80 target)
 - PPML promo-lift estimation with SKU fixed effects and stated identification assumptions
 - Leakage tests that corrupt the future and assert forecasts don't move
-- 20 tests, ~5 minute setup, fully reproducible (`make reproduce` regenerates every README number)
+- 21 tests, ~5 minute setup, fully reproducible (`make reproduce` regenerates every README number)
 
 **[View Project →](demand_forecasting/)**
 
@@ -172,7 +172,7 @@ portfolio/
 │   │   ├── training/          # Training & tuning
 │   │   ├── evaluation/        # Metrics & visualizations
 │   │   └── utils/             # Logging, I/O, metrics, drift
-│   ├── tests/                  # 175+ tests (89% coverage)
+│   ├── tests/                  # 180+ tests (90% coverage)
 │   ├── k8s/                   # Kubernetes manifests
 │   ├── grafana/               # Grafana dashboards
 │   ├── config/                # Training configurations
@@ -202,7 +202,7 @@ portfolio/
 │   │   ├── models/            # Baselines, SARIMAX, global LightGBM + quantiles
 │   │   ├── analysis/          # PPML promo-lift, forecast plots
 │   │   └── main.py            # CLI: backtest / promo-lift / plot-forecast
-│   ├── tests/                  # 20 tests (leakage, estimator recovery, metrics)
+│   ├── tests/                  # 21 tests (leakage, estimator recovery, metrics)
 │   ├── data/raw/               # Bundled dataset (872 KB, CC BY) + provenance
 │   ├── assets/                 # Example forecast figure
 │   ├── Dockerfile              # Container definition
