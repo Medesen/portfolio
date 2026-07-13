@@ -458,6 +458,18 @@ class TestDriftAnalysis:
                 },
             },
             "target": {"positive_rate": 0.27, "n_samples": 5000},
+            # Prediction baseline: predicted-positive rate at the tuned threshold
+            # (drift compares current predictions against this, not label prevalence)
+            "prediction": {
+                "threshold": 0.4,
+                "positive_rate": 0.27,
+                "proba_mean": 0.27,
+                "proba_histogram": {
+                    "bin_edges": np.linspace(0, 1, 11).tolist(),
+                    "proportions": [0.30, 0.18, 0.13, 0.10, 0.08, 0.07, 0.06, 0.04, 0.02, 0.02],
+                },
+                "n_samples": 5000,
+            },
         }
 
     def test_no_drift_all_features_stable(self, reference_statistics):

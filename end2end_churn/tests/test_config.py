@@ -4,6 +4,8 @@ Unit tests for configuration management (Pydantic configs).
 Tests configuration validation, loading, saving, and defaults.
 """
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -15,6 +17,8 @@ from src.config import (
     ServiceConfig,
     TrainingConfig,
 )
+
+CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 
 # =============================================================================
 # DataConfig Tests
@@ -123,6 +127,50 @@ def test_model_config_to_param_grid():
     assert param_grid["classifier__max_depth"] == [10, None]
     assert param_grid["classifier__min_samples_split"] == [2, 5]
     assert param_grid["classifier__min_samples_leaf"] == [1, 2, 4]
+
+
+@pytest.mark.unit
+def test_quick_config_yields_single_combination():
+    """The shipped quick config must honor its single-value grids (1 combination).
+
+    Regression guard for the bug where train.py ignored the config grids and
+    always used the multi-combination factory grid, so ``train-quick`` still ran
+    a full search.
+    """
+    config = TrainingConfig.from_yaml(str(CONFIG_DIR / "train_config_quick.yaml"))
+    param_grid = config.model.to_param_grid()
+
+    combinations = 1
+    for values in param_grid.values():
+        combinations *= len(values)
+    assert combinations == 1
+
+
+@pytest.mark.unit
+def test_resolve_param_grid_uses_config_for_random_forest():
+    """Random Forest training must use the config grid, not the factory grid."""
+    from train import resolve_param_grid
+
+    config = TrainingConfig.from_yaml(str(CONFIG_DIR / "train_config_quick.yaml"))
+    param_grid, source = resolve_param_grid(config)
+
+    assert source == "config"
+    assert param_grid == config.model.to_param_grid()
+    assert param_grid["classifier__n_estimators"] == [100]  # single value from quick config
+
+
+@pytest.mark.unit
+def test_resolve_param_grid_uses_factory_for_non_random_forest():
+    """XGBoost/LogReg have no config grid fields, so they use the factory grid."""
+    from src.models.model_factory import get_param_grid
+    from train import resolve_param_grid
+
+    config = TrainingConfig()
+    config.model.model_type = "xgboost"
+    param_grid, source = resolve_param_grid(config)
+
+    assert source == "factory"
+    assert param_grid == get_param_grid("xgboost")
 
 
 @pytest.mark.unit

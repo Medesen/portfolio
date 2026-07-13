@@ -116,8 +116,11 @@ class ModelConfig(BaseModel):
         """
         Convert configuration to scikit-learn param_grid format.
 
-        Note: This method is deprecated and only kept for backward compatibility.
-        Use model_factory.get_param_grid() instead for model-specific grids.
+        This is the hyperparameter grid source for random_forest training: the
+        config's grid fields map directly onto Random Forest parameters, so the
+        --quick config and any custom config are honored during grid search.
+        XGBoost and Logistic Regression have no config grid fields and use the
+        model-specific grids from model_factory.get_param_grid() instead.
 
         Returns:
             Dictionary mapping parameter names to lists of values to try

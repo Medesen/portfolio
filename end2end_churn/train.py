@@ -19,6 +19,7 @@ metadata, config and diagnostics — with every run tracked in MLflow.
 
 import argparse
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -187,6 +188,29 @@ def load_and_prepare_data(
     return X_train, X_val, X_test, y_train, y_val, y_test, X, y
 
 
+def resolve_param_grid(config: TrainingConfig) -> tuple[dict, str]:
+    """
+    Select the hyperparameter grid for the configured model type.
+
+    Random Forest grids come from the training config (the config schema exposes
+    RF grid fields, so ``--quick`` and custom configs are honored). XGBoost and
+    Logistic Regression have no config grid fields, so their model-specific
+    factory grids are used.
+
+    Args:
+        config: Training configuration with the resolved model type.
+
+    Returns:
+        Tuple of (param_grid, grid_source) where grid_source is "config" or
+        "factory".
+    """
+    from src.models.model_factory import get_param_grid
+
+    if config.model.model_type == "random_forest":
+        return config.model.to_param_grid(), "config"
+    return get_param_grid(config.model.model_type), "factory"
+
+
 def train_model(
     X_train: pd.DataFrame,
     y_train: pd.Series,
@@ -209,7 +233,7 @@ def train_model(
     Returns:
         Tuple: (best_model, best_params, search_time, best_score)
     """
-    from src.models.model_factory import get_model, get_model_display_name, get_param_grid
+    from src.models.model_factory import get_model, get_model_display_name
 
     logger.info("Building preprocessing pipeline")
     logger.info(f"{len(numeric_features)} numeric features")
@@ -222,13 +246,18 @@ def train_model(
     mlflow.log_param("n_categorical_features", len(categorical_features))
     mlflow.log_param("model_type", config.model.model_type)
 
-    # Get model and param grid from factory
+    # Instantiate the model and resolve its hyperparameter grid (config-driven
+    # for random_forest, factory grid for xgboost/logistic_regression)
     model = get_model(config.model.model_type, random_state=config.data.random_state)
-    param_grid = get_param_grid(config.model.model_type)
+    param_grid, grid_source = resolve_param_grid(config)
+    n_combinations = int(np.prod([len(v) for v in param_grid.values()]))
 
     model_display_name = get_model_display_name(config.model.model_type)
     logger.info(f"Training {model_display_name} model")
+    logger.info(f"Hyperparameter grid source: {grid_source} ({n_combinations} combinations)")
     logger.info(f"Hyperparameter grid: {param_grid}")
+    mlflow.log_param("grid_source", grid_source)
+    mlflow.log_param("grid_combinations", n_combinations)
 
     # Hyperparameter tuning with grid search
     logger.info(
@@ -522,7 +551,12 @@ def tune_thresholds(y_val: pd.Series, y_val_proba: np.ndarray, run_id: str) -> d
 
 
 def compute_reference_statistics(
-    X: pd.DataFrame, y: pd.Series, numeric_features: list[str], categorical_features: list[str]
+    X: pd.DataFrame,
+    y: pd.Series,
+    numeric_features: list[str],
+    categorical_features: list[str],
+    model: Optional[Pipeline] = None,
+    threshold: Optional[float] = None,
 ) -> dict[str, Any]:
     """
     Compute reference statistics for drift detection.
@@ -536,6 +570,12 @@ def compute_reference_statistics(
         y: Training target
         numeric_features: List of numeric feature names
         categorical_features: List of categorical feature names
+        model: Trained pipeline. When provided with ``threshold``, a prediction
+            baseline is stored (predicted-positive rate at the tuned threshold
+            plus a probability histogram) so the /drift endpoint can compare
+            like with like instead of label prevalence vs default-threshold
+            predictions.
+        threshold: Tuned classification threshold used for the prediction baseline.
 
     Returns:
         Dictionary with reference statistics
@@ -573,8 +613,28 @@ def compute_reference_statistics(
                 "missing_rate": float(X[col].isna().mean()),
             }
 
-    # Target distribution
+    # Target distribution (label prevalence)
     stats["target"] = {"positive_rate": float(y.mean()), "n_samples": len(y)}
+
+    # Prediction baseline: the model's predicted-positive rate on the training
+    # data AT THE TUNED THRESHOLD (not label prevalence, and not the default 0.5
+    # cut), plus a fixed-bin probability histogram for distribution-level drift.
+    if model is not None and threshold is not None:
+        proba = model.predict_proba(X)[:, 1]
+        bin_edges = np.linspace(0.0, 1.0, 11)
+        counts, _ = np.histogram(proba, bins=bin_edges)
+        total = int(counts.sum())
+        proportions = (counts / total).tolist() if total > 0 else [0.0] * len(counts)
+        stats["prediction"] = {
+            "threshold": float(threshold),
+            "positive_rate": float((proba >= threshold).mean()),
+            "proba_mean": float(proba.mean()),
+            "proba_histogram": {
+                "bin_edges": bin_edges.tolist(),
+                "proportions": proportions,
+            },
+            "n_samples": int(len(proba)),
+        }
 
     return stats
 
@@ -709,6 +769,12 @@ def save_training_artifacts(
     logger.info(
         f"Metadata saved (includes validation, test metrics, threshold strategies, and checksum)"
     )
+
+    # Pair the "latest" model with its own metadata file so loaders never glob a
+    # stray or lexically-newer metadata_*.json for churn_model_latest.joblib.
+    latest_metadata_path = models_dir / "metadata_latest.json"
+    shutil.copyfile(metadata_path, latest_metadata_path)
+    logger.info(f"Latest metadata saved: {latest_metadata_path}")
 
     return versioned_model_path, latest_model_path, metadata_path, run_config_path
 
@@ -950,7 +1016,12 @@ def main(
         # 9. Compute reference statistics for drift detection
         logger.info("\nComputing reference statistics for drift detection")
         reference_stats = compute_reference_statistics(
-            X_train, y_train, numeric_features, categorical_features
+            X_train,
+            y_train,
+            numeric_features,
+            categorical_features,
+            model=best_model,
+            threshold=tuned_threshold,
         )
         logger.info(
             f"Reference statistics computed ({len(reference_stats['numeric'])} numeric, "

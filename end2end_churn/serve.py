@@ -80,7 +80,12 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from src.api.schemas import HealthResponse, PredictionRequest, PredictionResponse
-from src.api.service import get_model_from_cache, predict, reset_model_cache
+from src.api.service import (
+    find_latest_metadata_file,
+    get_model_from_cache,
+    predict,
+    reset_model_cache,
+)
 from src.api.types import ModelCache
 from src.config import DriftConfig, ServiceConfig
 from src.utils.drift import analyze_drift
@@ -239,60 +244,82 @@ def get_last_retrain_time() -> Optional[datetime]:
     return None
 
 
-def set_last_retrain_time(timestamp: datetime) -> None:
+def check_and_reserve_retraining() -> bool:
     """
-    Write last retrain timestamp to file (multi-worker safe).
+    Atomically check the retrain rate limit and reserve the retraining slot.
 
-    Args:
-        timestamp: datetime to save
+    Under a single exclusive lock on the timestamp file, read the last-retrain
+    time and, if the minimum interval has elapsed (or no prior run exists),
+    write the current time as the reservation BEFORE returning True. This closes
+    the check-then-act race in the previous design (separate should_allow check
+    and post-training timestamp write), where two concurrent triggers could both
+    pass the check and launch duplicate 10-minute trainings.
+
+    The reservation is written up front (not after training completes) and is
+    intentionally NOT rolled back on failure: a failed run still consumes the
+    interval, which prevents a crash-looping trainer from retraining
+    continuously. Operators can force an earlier retry by deleting
+    ``models/.last_retrain``.
+
+    Returns:
+        True if this caller reserved the slot and should proceed to retrain;
+        False if rate-limited by an existing reservation (or on I/O error, in
+        which case we fail closed and do not retrain).
     """
     try:
-        # Ensure directory exists
         LAST_RETRAIN_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(LAST_RETRAIN_FILE, "w") as f:
-            # Acquire exclusive lock for writing
+        # Open read+write without truncating (create if missing) so the read and
+        # the reservation write happen under the same lock.
+        with open(LAST_RETRAIN_FILE, "a+") as f:
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             try:
-                f.write(timestamp.isoformat())
+                f.seek(0)
+                timestamp_str = f.read().strip()
+                last_retrain = None
+                if timestamp_str:
+                    try:
+                        last_retrain = datetime.fromisoformat(timestamp_str)
+                    except ValueError:
+                        logger.warning("Invalid last-retrain timestamp; treating as unset")
+
+                now = datetime.now()
+                if last_retrain is not None and (now - last_retrain) <= timedelta(
+                    hours=MIN_RETRAIN_INTERVAL_HOURS
+                ):
+                    return False  # still within the interval -> rate limited
+
+                # Reserve the slot: overwrite the file with the current time.
+                f.seek(0)
+                f.truncate()
+                f.write(now.isoformat())
+                f.flush()
+                return True
             finally:
                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     except Exception as e:
-        logger.error(f"Could not write last retrain time: {e}")
-
-
-def should_allow_retraining() -> bool:
-    """
-    Check if retraining is allowed based on rate limiting (multi-worker safe).
-
-    Uses file-based timestamp tracking to work correctly across multiple
-    worker processes or API replicas.
-
-    Returns:
-        True if retraining is allowed, False if rate limited
-    """
-    last_retrain = get_last_retrain_time()
-    if last_retrain is None:
-        return True
-
-    time_since_last = datetime.now() - last_retrain
-    return time_since_last > timedelta(hours=MIN_RETRAIN_INTERVAL_HOURS)
+        logger.error(f"Could not check/reserve retraining: {e}")
+        return False
 
 
 async def retrain_model_task():
     """
-    Background task to retrain model.
+    Background task to retrain the model.
 
-    Uses file-based timestamp tracking for multi-worker safety.
-    Multiple workers/replicas will correctly coordinate retraining via shared file.
+    The rate-limit slot must already be reserved via check_and_reserve_retraining()
+    before this task is scheduled. Training runs in a worker thread via
+    asyncio.to_thread so the event loop stays responsive during the (up to
+    10-minute) run. The reservation is intentionally not rolled back on failure,
+    so a failed run still consumes the interval (crash-loop protection).
     """
     try:
         logger.info("=" * 60)
-        logger.info("AUTOMATIC RETRAINING TRIGGERED BY DRIFT DETECTION")
+        logger.info("MODEL RETRAINING STARTED")
         logger.info("=" * 60)
 
-        # Run training script (MLflow tracking always enabled)
-        result = subprocess.run(
+        # Run training script in a worker thread so the blocking subprocess does
+        # not stall the async event loop (MLflow tracking always enabled).
+        result = await asyncio.to_thread(
+            subprocess.run,
             ["python", "train.py"],
             capture_output=True,
             text=True,
@@ -301,14 +328,12 @@ async def retrain_model_task():
         )
 
         if result.returncode == 0:
-            # Update last retrain time (file-based, multi-worker safe)
-            set_last_retrain_time(datetime.now())
             logger.info("Model retraining completed successfully")
             logger.info("New model saved but NOT deployed")
             logger.info("→ Review metrics in diagnostics/ directory")
             logger.info("→ Run 'make restart' to deploy new model")
         else:
-            logger.error(f"Model retraining failed: {result.stderr}")
+            logger.error(f"Model retraining failed (exit {result.returncode}): {result.stderr}")
 
     except subprocess.TimeoutExpired:
         logger.error("Model retraining timed out after 10 minutes")
@@ -440,9 +465,9 @@ async def lifespan(app: FastAPI):
             import json
             from pathlib import Path
 
-            metadata_files = sorted(Path("models").glob("metadata_*.json"), reverse=True)
-            if metadata_files:
-                with open(metadata_files[0], "r") as f:
+            metadata_path = find_latest_metadata_file()
+            if metadata_path:
+                with open(metadata_path, "r") as f:
                     metadata = json.load(f)
                     roc_auc = metadata.get("validation_metrics", {}).get("roc_auc", 0.0)
                     set_model_metrics(version, metadata.get("timestamp", ""), roc_auc)
@@ -558,47 +583,79 @@ async def request_id_middleware(request: Request, call_next):
 
 
 # Middleware 2: Request validation (size limits)
-@app.middleware("http")
-async def request_validation_middleware(request: Request, call_next):
+class LimitRequestSizeMiddleware:
     """
-    Validate request size before processing.
+    Pure-ASGI middleware enforcing the maximum request body size.
 
-    Checks:
-    - Content-Length header against max_request_size_mb
-    - Prevents memory exhaustion from huge payloads
+    The previous BaseHTTPMiddleware only inspected the Content-Length header, so
+    a chunked request (no Content-Length) or a lying header bypassed the limit
+    entirely. This middleware enforces the real size in two layers:
 
-    Returns:
-        413 Payload Too Large if request exceeds size limit
+    1. If Content-Length is present and already over the limit, reject with 413
+       immediately (cheap, no body read).
+    2. Otherwise count actual body bytes as they stream in and reject once the
+       limit is exceeded, buffering at most ``max_bytes`` — so the documented
+       "prevents memory exhaustion" guarantee holds even without Content-Length.
+
+    Registered outermost so it bounds memory before any body-buffering middleware.
     """
-    # Skip for non-POST requests
-    if request.method != "POST":
-        return await call_next(request)
 
-    # Check content length
-    content_length = request.headers.get("content-length")
-    if content_length:
-        try:
-            content_length_bytes = int(content_length)
-            content_length_mb = content_length_bytes / (1024 * 1024)
+    def __init__(self, app, max_bytes: int):
+        self.app = app
+        self.max_bytes = max_bytes
 
-            if content_length_mb > service_config.max_request_size_mb:
-                logger.warning(
-                    f"Request too large: {content_length_mb:.2f}MB "
-                    f"(max: {service_config.max_request_size_mb}MB)"
-                )
-                prediction_error_count.labels(error_type="payload_too_large").inc()
-                return JSONResponse(
-                    status_code=413,  # Payload Too Large
-                    content={
-                        "error": "Payload Too Large",
-                        "detail": f"Request size {content_length_mb:.2f}MB exceeds maximum {service_config.max_request_size_mb}MB",
-                        "max_size_mb": service_config.max_request_size_mb,
-                    },
-                )
-        except ValueError:
-            logger.warning(f"Invalid Content-Length header: {content_length}")
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-    return await call_next(request)
+        # Layer 1: cheap Content-Length rejection (when the header is honest)
+        headers = dict(scope.get("headers") or [])
+        content_length = headers.get(b"content-length")
+        if content_length is not None:
+            try:
+                if int(content_length) > self.max_bytes:
+                    await self._reject(scope, receive, send)
+                    return
+            except ValueError:
+                pass  # malformed header -> fall through to byte counting
+
+        # Layer 2: bound and count actual streamed body bytes
+        total = 0
+        buffered: list[dict] = []
+        more_body = True
+        while more_body:
+            message = await receive()
+            if message["type"] != "http.request":
+                buffered.append(message)  # e.g. http.disconnect
+                break
+            total += len(message.get("body", b""))
+            if total > self.max_bytes:
+                await self._reject(scope, receive, send)
+                return
+            buffered.append(message)
+            more_body = message.get("more_body", False)
+
+        async def replay() -> dict:
+            if buffered:
+                return buffered.pop(0)
+            return await receive()
+
+        await self.app(scope, replay, send)
+
+    async def _reject(self, scope, receive, send) -> None:
+        prediction_error_count.labels(error_type="payload_too_large").inc()
+        max_mb = self.max_bytes / (1024 * 1024)
+        logger.warning(f"Request rejected: body exceeds maximum {max_mb:.0f}MB")
+        response = JSONResponse(
+            status_code=413,
+            content={
+                "error": "Payload Too Large",
+                "detail": f"Request body exceeds maximum {max_mb:.0f}MB",
+                "max_size_mb": max_mb,
+            },
+        )
+        await response(scope, receive, send)
 
 
 # Middleware 3: Request timeout protection (Step 10)
@@ -703,6 +760,15 @@ async def metrics_middleware(request: Request, call_next):
             logger.warning(f"Slow request: {endpoint} took {duration:.2f}s (status={status_code})")
 
 
+# Registered last so it is the OUTERMOST middleware: it bounds request body size
+# before any body-buffering middleware runs (enforces the size limit for chunked
+# bodies with no Content-Length, which the header check alone cannot).
+app.add_middleware(
+    LimitRequestSizeMiddleware,
+    max_bytes=service_config.max_request_size_mb * 1024 * 1024,
+)
+
+
 @app.get("/", tags=["Info"])
 async def root():
     """
@@ -762,9 +828,9 @@ async def health(model_cache: ModelCache = Depends(get_model_cache)):
             import json
             from pathlib import Path
 
-            metadata_files = sorted(Path("models").glob("metadata_*.json"), reverse=True)
-            if metadata_files:
-                with open(metadata_files[0], "r") as f:
+            metadata_path = find_latest_metadata_file()
+            if metadata_path:
+                with open(metadata_path, "r") as f:
                     metadata = json.load(f)
         except Exception as e:
             logger.warning(f"Could not load metadata: {e}")
@@ -1063,8 +1129,8 @@ async def analyze_drift_endpoint(
             f"MAX_DRIFT_BATCH_SIZE.",
         )
 
-    # Get model - Use model_cache from dependency
-    model, version, _, _ = get_model_from_cache(model_cache)
+    # Get model and its deployed decision threshold from the cache
+    model, version, _, threshold = get_model_from_cache(model_cache)
 
     if model is None:
         raise HTTPException(status_code=503, detail="Drift analysis unavailable: model not loaded")
@@ -1073,14 +1139,14 @@ async def analyze_drift_endpoint(
     import json
     from pathlib import Path
 
-    metadata_files = sorted(Path("models").glob("metadata_*.json"), reverse=True)
-    if not metadata_files:
+    metadata_path = find_latest_metadata_file()
+    if metadata_path is None:
         raise HTTPException(
             status_code=503, detail="Drift analysis unavailable: no metadata files found"
         )
 
     try:
-        with open(metadata_files[0], "r") as f:
+        with open(metadata_path, "r") as f:
             metadata = json.load(f)
     except Exception as e:
         logger.error(f"Failed to load metadata: {e}", exc_info=True)
@@ -1100,9 +1166,12 @@ async def analyze_drift_endpoint(
         # Convert to DataFrame
         df = pd.DataFrame(drift_request.customers)
 
-        # Make predictions (binary predictions for drift analysis)
-        # Offload CPU-bound prediction to thread pool
-        predictions = await run_in_threadpool(model.predict, df)
+        # Score the batch once at the DEPLOYED decision threshold (the same one
+        # used by /predict), not the default 0.5 cut. Prediction drift compares
+        # this predicted-positive rate against the training baseline stored at
+        # that threshold. Offload CPU-bound scoring to the thread pool.
+        probabilities = await run_in_threadpool(lambda: model.predict_proba(df)[:, 1])
+        predictions = (probabilities >= threshold).astype(int)
 
         # Analyze drift
         # Offload CPU-bound drift analysis to thread pool
@@ -1114,6 +1183,7 @@ async def analyze_drift_endpoint(
             drift_config.numeric_threshold,
             drift_config.categorical_threshold,
             drift_config.prediction_threshold,
+            probabilities,
         )
 
         # Update Prometheus metrics
@@ -1138,8 +1208,8 @@ async def analyze_drift_endpoint(
                 f"features drifted: {drift_report['summary']['drifted_features']}"
             )
 
-            # Optionally trigger automatic retraining
-            if AUTO_RETRAIN_ON_DRIFT and should_allow_retraining():
+            # Optionally trigger automatic retraining (atomically reserve first)
+            if AUTO_RETRAIN_ON_DRIFT and check_and_reserve_retraining():
                 logger.info("AUTO_RETRAIN_ON_DRIFT enabled - triggering retraining")
                 background_tasks.add_task(retrain_model_task)
         else:
@@ -1187,17 +1257,16 @@ async def drift_info(
     import json
     from pathlib import Path
 
-    metadata_files = sorted(Path("models").glob("metadata_*.json"), reverse=True)
-    logger.info(f"Found {len(metadata_files)} metadata files: {[str(f) for f in metadata_files]}")
-    if not metadata_files:
+    metadata_path = find_latest_metadata_file()
+    if metadata_path is None:
         raise HTTPException(
             status_code=503, detail="Drift info unavailable: no metadata files found"
         )
 
     try:
-        with open(metadata_files[0], "r") as f:
+        with open(metadata_path, "r") as f:
             metadata = json.load(f)
-        logger.info(f"Drift info: Loaded metadata from {metadata_files[0]}")
+        logger.info(f"Drift info: Loaded metadata from {metadata_path}")
         logger.info(f"Drift info: Metadata keys: {list(metadata.keys())}")
         logger.info(f"Drift info: Has reference_statistics: {'reference_statistics' in metadata}")
     except Exception as e:
@@ -1222,6 +1291,8 @@ async def drift_info(
     model_timestamp = datetime.fromisoformat(metadata["timestamp"])
     age_days = (datetime.now() - model_timestamp).days
 
+    prediction_baseline = ref_stats.get("prediction")
+
     return {
         "baseline": {
             "n_samples": ref_stats["target"]["n_samples"],
@@ -1230,6 +1301,17 @@ async def drift_info(
             "n_categorical_features": len(ref_stats["categorical"]),
             "numeric_features": list(ref_stats["numeric"].keys()),
             "categorical_features": list(ref_stats["categorical"].keys()),
+            # Prediction baseline (present for models trained with the drift fix):
+            # predicted-positive rate at the tuned decision threshold.
+            "prediction": (
+                {
+                    "threshold": prediction_baseline["threshold"],
+                    "positive_rate": prediction_baseline["positive_rate"],
+                    "proba_mean": prediction_baseline.get("proba_mean"),
+                }
+                if prediction_baseline is not None
+                else None
+            ),
         },
         "thresholds": {
             "numeric": drift_config.numeric_threshold,
@@ -1268,7 +1350,9 @@ async def trigger_retraining(
     Raises:
         429: Retraining triggered too recently (rate limit)
     """
-    if not should_allow_retraining():
+    # Atomically check the rate limit and reserve the slot before scheduling, so
+    # concurrent /retrain calls cannot both pass the check and launch duplicate runs.
+    if not check_and_reserve_retraining():
         last_retrain = get_last_retrain_time()
         time_since_last = datetime.now() - last_retrain if last_retrain else timedelta(0)
         hours_remaining = MIN_RETRAIN_INTERVAL_HOURS - (time_since_last.total_seconds() / 3600)
@@ -1278,7 +1362,7 @@ async def trigger_retraining(
             f"between retrains. Try again in {hours_remaining:.1f} hours.",
         )
 
-    # Trigger background retraining
+    # Trigger background retraining (slot already reserved above)
     background_tasks.add_task(retrain_model_task)
 
     logger.warning("Model retraining triggered via API")

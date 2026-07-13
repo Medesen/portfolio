@@ -271,3 +271,57 @@ def test_registry_stages_are_valid():
     invalid_stages = ["Development", "Testing", "prod", "staging"]
     for stage in invalid_stages:
         assert stage not in valid_stages
+
+
+# =============================================================================
+# Latest model/metadata pairing (find_latest_metadata_file)
+# =============================================================================
+
+
+@pytest.mark.unit
+def test_find_latest_metadata_prefers_paired_file(tmp_path, monkeypatch):
+    """The latest model pairs with metadata_latest.json even when a lexically
+    newer stray metadata file exists (which a reverse-sorted glob would pick)."""
+    from src.api.service import find_latest_metadata_file
+
+    monkeypatch.chdir(tmp_path)
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "metadata_latest.json").write_text(json.dumps({"run_id": "correct"}))
+    # "z..." sorts after "latest" lexically -> would win a reverse-sorted glob
+    (models / "metadata_zzzz9999.json").write_text(json.dumps({"run_id": "stray"}))
+
+    result = find_latest_metadata_file()
+
+    assert result is not None
+    assert result.name == "metadata_latest.json"
+    with open(result) as f:
+        assert json.load(f)["run_id"] == "correct"
+
+
+@pytest.mark.unit
+def test_find_latest_metadata_falls_back_to_newest(tmp_path, monkeypatch):
+    """Without metadata_latest.json, fall back to the newest metadata_*.json."""
+    from src.api.service import find_latest_metadata_file
+
+    monkeypatch.chdir(tmp_path)
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "metadata_20250101_000000.json").write_text(json.dumps({"run_id": "old"}))
+    (models / "metadata_20250601_000000.json").write_text(json.dumps({"run_id": "new"}))
+
+    result = find_latest_metadata_file()
+
+    assert result is not None
+    assert result.name == "metadata_20250601_000000.json"
+
+
+@pytest.mark.unit
+def test_find_latest_metadata_none_when_empty(tmp_path, monkeypatch):
+    """No metadata files present -> None."""
+    from src.api.service import find_latest_metadata_file
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "models").mkdir()
+
+    assert find_latest_metadata_file() is None

@@ -596,7 +596,7 @@ GitHub Actions workflow runs on every PR/push:
 7. **Load Testing** - SLO validation
 8. **Test Summary** - Aggregate results
 
-View results: [GitHub Actions](../../actions/workflows/ci-end2end-churn.yml)
+View results: [GitHub Actions](https://github.com/Medesen/portfolio/actions/workflows/ci-end2end-churn.yml)
 
 ---
 
@@ -854,10 +854,12 @@ CPU-bound operations (inference, drift) offloaded to thread pool using `run_in_t
 ### Model Integrity
 
 SHA256 checksums validate model files:
-- Computed during training
-- Verified during loading
-- Detects corruption and tampering
-- 16 comprehensive tests (85% I/O coverage)
+- Computed during training (a `.sha256` sidecar is written next to each model)
+- Verified during loading — the service **fails closed**: a checksum mismatch, or
+  a missing/unreadable sidecar, refuses to deserialize the model. Set
+  `ALLOW_UNVERIFIED_MODELS=true` only as an explicit, logged dev override.
+- Detects corruption and tampering before the joblib file is loaded
+- Comprehensive I/O and fail-closed load tests
 
 ---
 
@@ -972,7 +974,7 @@ docker ps
 
 See detailed information in:
 - [Makefile](Makefile) - Run `make help` for all commands
-- [GitHub Actions](.github/workflows/ci-end2end-churn.yml) - CI/CD pipeline details
+- [GitHub Actions](../.github/workflows/ci-end2end-churn.yml) - CI/CD pipeline details
 
 ---
 

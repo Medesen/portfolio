@@ -137,6 +137,36 @@ def load_model_from_registry(
         raise
 
 
+def find_latest_metadata_file() -> Optional[Path]:
+    """
+    Return the metadata file paired with the latest model.
+
+    Prefers ``models/metadata_latest.json`` (written next to
+    ``churn_model_latest.joblib`` at save time), which guarantees the metadata
+    matches the loaded latest model. Falls back to the newest ``metadata_*.json``
+    with a warning for models trained before paired-latest metadata existed —
+    that fallback relies on lexical ordering and can mis-pair a stray metadata
+    file, so retraining to generate ``metadata_latest.json`` is preferred.
+
+    Returns:
+        Path to the metadata file, or None if no metadata is present.
+    """
+    models_dir = Path("models")
+    latest = models_dir / "metadata_latest.json"
+    if latest.exists():
+        return latest
+
+    candidates = sorted(models_dir.glob("metadata_*.json"), reverse=True)
+    if candidates:
+        logger.warning(
+            "metadata_latest.json not found; falling back to newest metadata file (%s). "
+            "Retrain to generate paired latest metadata.",
+            candidates[0].name,
+        )
+        return candidates[0]
+    return None
+
+
 def load_model(model_path: str = None) -> tuple[Pipeline, str, list, float]:
     """
     Load the trained model pipeline and extract version, schema, and threshold from metadata.
@@ -177,18 +207,37 @@ def load_model(model_path: str = None) -> tuple[Pipeline, str, list, float]:
         logger.error(f"Model not found at {model_path}")
         raise FileNotFoundError(f"Model not found at {model_path}")
 
-    # Verify model checksum before loading
+    # Verify model checksum before loading. A checksum MISMATCH always fails hard
+    # (possible tampering/corruption). A missing or unreadable checksum sidecar
+    # now also fails closed — refusing to deserialize an unverified joblib file —
+    # unless ALLOW_UNVERIFIED_MODELS=true is set as an explicit, logged dev override.
     from ..utils.io import verify_model_checksum
 
+    allow_unverified = os.getenv("ALLOW_UNVERIFIED_MODELS", "false").lower() == "true"
     try:
-        verify_model_checksum(model_path)
+        verified = verify_model_checksum(model_path)
     except ValueError as e:
         # Checksum mismatch - critical security issue
         logger.critical(f"Model integrity check failed: {e}")
         raise
     except Exception as e:
-        # Checksum verification failed but not a mismatch (e.g., file missing)
-        logger.warning(f"Checksum verification skipped: {e}")
+        # Verification could not be completed (e.g., unreadable sidecar)
+        verified = False
+        logger.error(f"Checksum verification could not be completed: {e}")
+
+    if not verified:
+        if allow_unverified:
+            logger.warning(
+                "Loading model WITHOUT checksum verification because "
+                "ALLOW_UNVERIFIED_MODELS=true. Do not use this in production."
+            )
+        else:
+            raise RuntimeError(
+                f"Refusing to load model without a valid checksum: {model_path}. "
+                "The .sha256 sidecar is missing or unreadable. Re-save/retrain the "
+                "model to regenerate it, or set ALLOW_UNVERIFIED_MODELS=true to "
+                "override (insecure)."
+            )
 
     # Load model
     try:
@@ -203,13 +252,9 @@ def load_model(model_path: str = None) -> tuple[Pipeline, str, list, float]:
     expected_features = []
     threshold = 0.5  # Default threshold
 
-    # If loading latest model, find the most recent metadata file
+    # If loading latest model, use the metadata paired with the latest model
     if "latest" in str(model_path):
-        metadata_files = sorted(Path("models").glob("metadata_*.json"), reverse=True)
-        if metadata_files:
-            metadata_path = metadata_files[0]
-        else:
-            metadata_path = None
+        metadata_path = find_latest_metadata_file()
     else:
         # Extract version from model filename
         model_name = model_path_obj.stem  # e.g., "churn_model_20251024_183147"

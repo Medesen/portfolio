@@ -402,3 +402,46 @@ class TestChecksumEdgeCases:
             # Should return False (not raise)
             result = verify_model_checksum(model_path)
             assert result is False
+
+
+@pytest.mark.integration
+class TestLoadModelFailClosed:
+    """load_model must refuse unverified models unless explicitly overridden."""
+
+    @staticmethod
+    def _save_unverified_model(tmpdir):
+        """Save a model then delete its checksum sidecar; return the model path."""
+        pipeline = Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("classifier", RandomForestClassifier(n_estimators=2, random_state=42)),
+            ]
+        )
+        model_path = os.path.join(tmpdir, "churn_model_test.joblib")
+        save_model(pipeline, model_path)
+        os.remove(f"{model_path}.sha256")  # simulate missing sidecar
+        return model_path
+
+    def test_refuses_model_without_checksum(self, monkeypatch):
+        """Missing checksum sidecar -> refuse to load (fail closed)."""
+        from src.api.service import load_model
+
+        monkeypatch.setenv("MODEL_SOURCE", "local")
+        monkeypatch.delenv("ALLOW_UNVERIFIED_MODELS", raising=False)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = self._save_unverified_model(tmpdir)
+            with pytest.raises(RuntimeError, match="checksum"):
+                load_model(model_path)
+
+    def test_allows_unverified_model_with_override(self, monkeypatch):
+        """ALLOW_UNVERIFIED_MODELS=true is an explicit escape hatch."""
+        from src.api.service import load_model
+
+        monkeypatch.setenv("MODEL_SOURCE", "local")
+        monkeypatch.setenv("ALLOW_UNVERIFIED_MODELS", "true")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = self._save_unverified_model(tmpdir)
+            model, version, features, threshold = load_model(model_path)
+            assert model is not None

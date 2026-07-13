@@ -8,7 +8,7 @@ This module implements:
 - Comprehensive drift analysis
 """
 
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -224,6 +224,52 @@ def detect_prediction_drift(
     }
 
 
+def detect_probability_distribution_drift(
+    reference_histogram: dict[str, Any],
+    current_probabilities: np.ndarray,
+    psi_threshold: float = 0.25,
+) -> dict[str, Any]:
+    """
+    Detect drift in the predicted-probability distribution using PSI.
+
+    This catches shifts that a positive-rate comparison misses: the model can
+    keep the same predicted-positive rate at the decision threshold while its
+    score distribution moves (e.g. scores bunching toward the threshold).
+
+    Args:
+        reference_histogram: Training histogram with 'bin_edges' and 'proportions'
+        current_probabilities: Current predicted probabilities of the positive class
+        psi_threshold: PSI value at/above which drift is flagged (0.25 = significant)
+
+    Returns:
+        Dictionary with drift status, PSI value, and per-bin proportions
+    """
+    bin_edges = np.asarray(reference_histogram["bin_edges"], dtype=float)
+    ref_props = np.asarray(reference_histogram["proportions"], dtype=float)
+
+    current = np.asarray(current_probabilities, dtype=float)
+    counts, _ = np.histogram(current, bins=bin_edges)
+    total = counts.sum()
+    current_props = counts / total if total > 0 else np.zeros_like(counts, dtype=float)
+
+    # PSI with small-value flooring to avoid log(0) on empty bins
+    eps = 1e-4
+    ref_p = np.clip(ref_props, eps, None)
+    cur_p = np.clip(current_props, eps, None)
+    psi = float(np.sum((cur_p - ref_p) * np.log(cur_p / ref_p)))
+
+    return {
+        "drift_detected": psi >= psi_threshold,
+        "psi": psi,
+        "metrics": {
+            "psi": psi,
+            "threshold": psi_threshold,
+            "reference_proportions": ref_props.tolist(),
+            "current_proportions": current_props.tolist(),
+        },
+    }
+
+
 def analyze_drift(
     reference_stats: dict[str, Any],
     current_data: pd.DataFrame,
@@ -231,17 +277,28 @@ def analyze_drift(
     numeric_threshold: float = 0.2,
     categorical_threshold: float = 0.25,
     prediction_threshold: float = 0.1,
+    current_probabilities: Optional[np.ndarray] = None,
 ) -> dict[str, Any]:
     """
     Comprehensive drift analysis across all features and predictions.
 
+    Prediction drift compares the model's predicted-positive rate at the
+    deployed decision threshold against the training baseline stored at that
+    same threshold (reference_stats["prediction"]). Passing
+    ``current_probabilities`` additionally enables a distribution-level PSI
+    check against the training probability histogram. Metadata trained before
+    this baseline existed (no "prediction" key) reports prediction drift as
+    unavailable rather than comparing incompatible quantities.
+
     Args:
         reference_stats: Reference statistics from training
         current_data: Current data to analyze
-        predictions: Current predictions
+        predictions: Current predictions thresholded at the deployed threshold
         numeric_threshold: Threshold for numeric drift
         categorical_threshold: Threshold for categorical drift (PSI)
         prediction_threshold: Threshold for prediction drift
+        current_probabilities: Current predicted probabilities (enables the
+            distribution-level PSI check when a reference histogram is present)
 
     Returns:
         Dictionary with comprehensive drift report
@@ -278,10 +335,39 @@ def analyze_drift(
                 report["summary"]["n_features_drifted"] += 1
                 report["summary"]["drifted_features"].append(feature)
 
-    # Check prediction drift
-    report["prediction_drift"] = detect_prediction_drift(
-        reference_stats["target"]["positive_rate"], predictions, prediction_threshold
-    )
+    # Check prediction drift against the prediction baseline (positive rate at
+    # the tuned threshold + probability histogram). Old metadata without this
+    # baseline reports "unavailable" rather than comparing label prevalence to
+    # the current prediction rate (which are not the same quantity).
+    prediction_ref = reference_stats.get("prediction")
+    if prediction_ref is not None and prediction_ref.get("positive_rate") is not None:
+        pred_result = detect_prediction_drift(
+            prediction_ref["positive_rate"], predictions, prediction_threshold
+        )
+
+        # Distribution-level PSI check when probabilities and a reference
+        # histogram are both available
+        ref_histogram = prediction_ref.get("proba_histogram")
+        if ref_histogram is not None and current_probabilities is not None:
+            dist_result = detect_probability_distribution_drift(
+                ref_histogram, current_probabilities
+            )
+            pred_result["metrics"]["proba_psi"] = dist_result["psi"]
+            pred_result["metrics"]["proba_psi_drift_detected"] = dist_result["drift_detected"]
+            if dist_result["drift_detected"] and not pred_result["drift_detected"]:
+                pred_result["drift_detected"] = True
+                pred_result["reason"] = "prediction_distribution_shift"
+    else:
+        pred_result = {
+            "drift_detected": False,
+            "reason": "unavailable_no_prediction_baseline",
+            "metrics": {
+                "note": "Reference prediction statistics not found in model metadata; "
+                "retrain the model to enable prediction-drift detection.",
+            },
+        }
+
+    report["prediction_drift"] = pred_result
 
     if report["prediction_drift"]["drift_detected"]:
         report["overall_drift_detected"] = True

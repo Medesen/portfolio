@@ -16,7 +16,19 @@ from src.utils.drift import (
     detect_categorical_drift,
     detect_numeric_drift,
     detect_prediction_drift,
+    detect_probability_distribution_drift,
 )
+
+
+class _StubModel:
+    """Minimal model exposing predict_proba for reference-statistics tests."""
+
+    def __init__(self, positive_proba: np.ndarray):
+        self._proba = np.asarray(positive_proba, dtype=float)
+
+    def predict_proba(self, X) -> np.ndarray:
+        return np.column_stack([1.0 - self._proba, self._proba])
+
 
 # =============================================================================
 # PSI (Population Stability Index) Tests
@@ -270,6 +282,112 @@ def test_detect_prediction_drift_all_ones():
     # Should detect drift (going from 27% to 100% is significant)
     assert result["drift_detected"] is True
     assert result["metrics"]["current_positive_rate"] == 1.0
+
+
+# =============================================================================
+# Prediction Baseline Tests (drift baseline = prediction rate at tuned threshold)
+# =============================================================================
+
+
+@pytest.mark.unit
+def test_compute_reference_statistics_includes_prediction_baseline():
+    """compute_reference_statistics stores the model's predicted-positive rate
+    at the tuned threshold (plus a probability histogram), not label prevalence.
+
+    Regression test for the drift baseline comparing label prevalence to the
+    mean of default-threshold predictions.
+    """
+    from train import compute_reference_statistics
+
+    rng = np.random.default_rng(0)
+    n = 500
+    X = pd.DataFrame({"tenure": rng.normal(30.0, 10.0, n)})
+    y = pd.Series(rng.integers(0, 2, n))
+    proba = rng.uniform(0.0, 1.0, n)
+    model = _StubModel(proba)
+
+    stats = compute_reference_statistics(X, y, ["tenure"], [], model=model, threshold=0.4)
+
+    assert "prediction" in stats
+    assert stats["prediction"]["threshold"] == 0.4
+    # Baseline is the positive rate AT THE THRESHOLD, not label prevalence
+    assert stats["prediction"]["positive_rate"] == pytest.approx(float((proba >= 0.4).mean()))
+    proportions = stats["prediction"]["proba_histogram"]["proportions"]
+    assert len(proportions) == 10
+    assert sum(proportions) == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_analyze_drift_prediction_unavailable_without_baseline():
+    """Old metadata (no prediction baseline) reports prediction drift as
+    unavailable instead of comparing incompatible quantities."""
+    reference_stats = {
+        "numeric": {},
+        "categorical": {},
+        "target": {"positive_rate": 0.27, "n_samples": 5000},
+    }
+    current_data = pd.DataFrame({"tenure": [1.0, 2.0, 3.0]})
+    predictions = np.array([0, 1, 0])
+
+    report = analyze_drift(reference_stats, current_data, predictions)
+
+    assert report["prediction_drift"]["drift_detected"] is False
+    assert "unavailable" in report["prediction_drift"]["reason"]
+
+
+@pytest.mark.unit
+def test_prediction_distribution_drift_at_constant_rate():
+    """A score-distribution shift is caught by the PSI check even when the
+    predicted-positive rate at the threshold is unchanged."""
+    reference_stats = {
+        "numeric": {},
+        "categorical": {},
+        "prediction": {
+            "threshold": 0.5,
+            "positive_rate": 0.5,  # matches current rate below -> no rate drift
+            "proba_histogram": {
+                "bin_edges": np.linspace(0, 1, 11).tolist(),
+                "proportions": [0.1] * 10,  # spread out across the range
+            },
+        },
+    }
+
+    # Scores bunched tightly around 0.5: ~50% positive rate (no rate drift) but a
+    # very different distribution from the spread-out reference.
+    rng = np.random.default_rng(1)
+    current_probs = np.clip(rng.normal(0.5, 0.03, 2000), 0.0, 1.0)
+    predictions = (current_probs >= 0.5).astype(int)
+
+    report = analyze_drift(
+        reference_stats,
+        pd.DataFrame(index=range(2000)),
+        predictions,
+        current_probabilities=current_probs,
+    )
+
+    metrics = report["prediction_drift"]["metrics"]
+    assert metrics["absolute_change"] < 0.1  # rate itself is stable
+    assert metrics["proba_psi"] > 0.25  # distribution moved
+    assert report["prediction_drift"]["drift_detected"] is True
+
+
+@pytest.mark.unit
+def test_detect_probability_distribution_drift_stable():
+    """No distribution drift when current probabilities match the reference histogram."""
+    bin_edges = np.linspace(0, 1, 11)
+    rng = np.random.default_rng(7)
+    ref_probs = rng.uniform(0, 1, 5000)
+    counts, _ = np.histogram(ref_probs, bins=bin_edges)
+    reference_histogram = {
+        "bin_edges": bin_edges.tolist(),
+        "proportions": (counts / counts.sum()).tolist(),
+    }
+
+    current_probs = rng.uniform(0, 1, 2000)  # same distribution
+    result = detect_probability_distribution_drift(reference_histogram, current_probs)
+
+    assert result["drift_detected"] is False
+    assert result["psi"] < 0.25
 
 
 # =============================================================================
