@@ -412,6 +412,12 @@ This is what separates a basic portfolio project from a more thorough one.
 - Metric calculations (Recall@k, MRR with known data)
 - Prompt building
 
+**Outcome (update):** the compromise outgrew the original decision — the project
+now has a 101-test unit suite (LLM calls mocked) that runs in a path-filtered
+GitHub Actions workflow on every push, installing from the pinned
+`requirements.lock`. The "manual testing only" choice above is superseded; the
+evaluation framework remains the primary end-to-end validation.
+
 This demonstrates testing ability without being exhaustive.
 
 ---
@@ -583,10 +589,11 @@ This adds ~1-2 seconds of startup overhead per query. For production deployments
    - TTL-based invalidation
 
 4. **Testing & CI/CD**
-   - Comprehensive unit tests (pytest)
    - Integration tests
-   - GitHub Actions for automated testing
+   - Performance/load tests
    - Deployment pipelines
+   - (Unit tests and GitHub Actions CI are already in place — 101 tests run on
+     every push from the pinned lock file)
 
 5. **Error Recovery**
    - Retry logic with exponential backoff

@@ -176,7 +176,7 @@ The project includes 101 unit tests demonstrating testing patterns for core comp
 
 **Test Results:** All 101 tests passing
 
-**Production considerations:** This test suite demonstrates patterns but is not exhaustive. For production, I would add comprehensive edge case testing, integration tests, performance tests, mocked external dependencies, and CI/CD integration.
+**Production considerations:** This test suite demonstrates patterns but is not exhaustive. For production, I would add comprehensive edge case testing, integration tests, and performance tests. (The unit suite already runs in CI on every push via a path-filtered GitHub Actions workflow, installing from the pinned `requirements.lock`.)
 
 ### Running Tests
 
@@ -610,7 +610,7 @@ See the [Testing](#testing) section above. The project includes 101 unit tests d
 
 Several things documented in [DESIGN.md](DESIGN.md) (see "What Would Change for Production" section):
 - Replace ChromaDB with Pinecone/Weaviate for scale
-- Add comprehensive unit tests and CI/CD
+- Expand integration and performance test coverage (unit tests already run in CI on every push)
 - Use managed LLM API (e.g., OpenAI) for better quality
 - Implement monitoring and alerting (Prometheus, Grafana)
 - Add caching layer (Redis) for query responses

@@ -144,11 +144,19 @@ def find_latest_metadata_file() -> Optional[Path]:
     Return the metadata file paired with the latest model.
 
     Prefers ``models/metadata_latest.json`` (written next to
-    ``churn_model_latest.joblib`` at save time), which guarantees the metadata
+    ``churn_model_latest.joblib`` at save time), so the metadata normally
     matches the loaded latest model. Falls back to the newest ``metadata_*.json``
     with a warning for models trained before paired-latest metadata existed —
     that fallback relies on lexical ordering and can mis-pair a stray metadata
     file, so retraining to generate ``metadata_latest.json`` is preferred.
+
+    Known limitation (accepted): training publishes the model and metadata
+    files sequentially, and load_model() reads them sequentially, so a service
+    starting exactly inside a publication window could pair a new model with
+    old metadata for that process's lifetime. Once loaded, the pair is cached
+    together and stays coherent. Hardening this would mean immutable versioned
+    artifacts plus an atomically replaced manifest pointer — more machinery
+    than this single-writer setup warrants.
 
     Returns:
         Path to the metadata file, or None if no metadata is present.
