@@ -10,6 +10,7 @@ import pandas as pd
 from demandcast.data import load_long
 from demandcast.evaluation import make_folds, run_backtest, score
 from demandcast.models import MODELS, LgbmForecaster, Sarimax, select_skus
+from demandcast.models.lgbm import HORIZON as LGBM_HORIZON
 
 
 def main() -> None:
@@ -89,6 +90,18 @@ def main() -> None:
         return
 
     if args.command == "backtest":
+        # Fail fast on a leaky horizon before loading data: lgbm sales-history
+        # features are shifted by a fixed HORIZON, so a longer forecast horizon
+        # would read future sales.
+        if args.model == LgbmForecaster.name and args.horizon > LGBM_HORIZON:
+            parser.error(
+                f"--horizon {args.horizon} exceeds the lgbm feature shift "
+                f"({LGBM_HORIZON}). Sales-history features are shifted by a fixed "
+                f"{LGBM_HORIZON} trading days, so a longer horizon would read future "
+                f"sales (leakage). Use --horizon <= {LGBM_HORIZON} for --model lgbm; "
+                f"baselines and sarimax are unrestricted."
+            )
+
         long = load_long()
 
         subset = args.subset or ("sarimax" if args.model == Sarimax.name else "all")

@@ -72,3 +72,25 @@ def test_no_leakage_from_test_window(toy_long):
     preds_corrupted = run_backtest(corrupted, SeasonalNaive(), folds)
 
     assert np.allclose(preds_clean["y_pred"], preds_corrupted["y_pred"])
+
+
+def test_duplicate_predictions_raise(toy_long):
+    """Duplicate (date, sku) predictions must fail the merge, not silently
+    fan out rows and overweight those pairs in the metrics."""
+    folds = make_folds(toy_long["date"], n_folds=1, horizon=7, stride=7)
+
+    class DuplicatingModel:
+        name = "dup"
+
+        def fit_predict(self, train, fold):
+            skus = train["sku"].unique()
+            rows = [
+                {"date": d, "sku": sku, "y_pred": 1.0}
+                for d in fold.test_dates
+                for sku in skus
+            ]
+            pred = pd.DataFrame(rows)
+            return pd.concat([pred, pred], ignore_index=True)  # each pair twice
+
+    with pytest.raises(pd.errors.MergeError):
+        run_backtest(toy_long, DuplicatingModel(), folds)

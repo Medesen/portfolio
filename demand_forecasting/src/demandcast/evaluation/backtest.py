@@ -91,7 +91,12 @@ def run_backtest(
 
         pred = model.fit_predict(train, fold)
 
-        merged = test[["date", "sku", "qty"]].merge(pred, on=["date", "sku"], how="left")
+        # validate="one_to_one": both sides are unique on (date, sku), so a model
+        # returning duplicate predictions raises here instead of silently
+        # fanning out rows and overweighting those pairs in the metrics.
+        merged = test[["date", "sku", "qty"]].merge(
+            pred, on=["date", "sku"], how="left", validate="one_to_one"
+        )
         if merged["y_pred"].isna().any():
             missing = merged[merged["y_pred"].isna()][["date", "sku"]].head(5)
             raise RuntimeError(

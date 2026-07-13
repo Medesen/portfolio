@@ -79,3 +79,14 @@ yearly pattern is mild with an August dip (Ferragosto) and December peak.
 **Decision:** seasonal-naive baseline uses period m = 7 (trading-day weeks);
 weekly seasonality is the pattern every model must beat, yearly effects enter
 via calendar features rather than long seasonal orders.
+
+**MASE scale vs. the seasonal-naive row.** The MASE denominator is the standard
+positional lag-7 in-sample naive on the trading-day grid, whereas the
+`seasonal_naive` baseline row is *weekday-aligned* (same weekday, robust to
+dropped holiday dates). The two coincide except in weeks where a dropped holiday
+shifts the positional cycle out of phase, so "MASE < 1" means "beats a
+positional lag-7 naive" and only *approximately* equals "beats the weekday-aligned
+seasonal-naive baseline". We keep the standard MASE definition (changing the
+scale would move every published MASE for a roughly ten-days-a-year effect) and
+report the seasonal-naive baseline explicitly as its own row for the exact
+comparison.

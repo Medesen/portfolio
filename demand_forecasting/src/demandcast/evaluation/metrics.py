@@ -41,6 +41,14 @@ def mase(
 ) -> float:
     """MASE with a seasonal (lag-``m``) in-sample naive scaling factor.
 
+    The scale is the *standard* MASE denominator: the mean absolute positional
+    lag-``m`` (weekly, m=7) difference of the in-sample series on the trading-day
+    grid. This is subtly different from the weekday-aligned ``seasonal_naive``
+    baseline row — the two coincide except in weeks where a dropped holiday
+    shifts the positional cycle out of phase. So "MASE < 1" means "beats a
+    positional lag-7 naive", which only *approximately* equals "beats the
+    weekday-aligned seasonal-naive baseline" (see DATA_NOTES.md).
+
     Returns NaN when the training series is (seasonally) constant, rather than
     dividing by ~0 and reporting a meaningless huge number.
     """
