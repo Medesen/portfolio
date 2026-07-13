@@ -1,42 +1,37 @@
-# Core dependencies for RAG Pipeline
-# Python 3.9+
+# Core runtime dependencies for the RAG Pipeline
+# Python 3.11 (matches Dockerfile and CI)
+#
+# CPU-only PyTorch: the pipeline is a CPU-local application (embeddings +
+# cross-encoder run on CPU), so pull torch from the CPU wheel index instead of
+# dragging in the multi-GB CUDA dependency chain.
+--extra-index-url https://download.pytorch.org/whl/cpu
 
 # HTML parsing and processing
 beautifulsoup4>=4.12.0
-lxml>=5.0.0
+lxml>=5.0.0  # parser backend used by BeautifulSoup
 
 # Configuration management
 PyYAML>=6.0
 
-# Vector database and embeddings (Iteration 2)
+# Vector database and embeddings
 chromadb>=0.4.0
 sentence-transformers>=2.2.0
-torch>=2.0.0  # Required by sentence-transformers
+torch>=2.0.0  # Required by sentence-transformers (CPU build via index above)
 
 # Retrieval and search
 rank-bm25>=0.2.2
 nltk>=3.8  # For stemming and stopword removal in BM25
 
-# LLM integration (Iteration 4)
+# LLM integration
 requests>=2.31.0  # For Ollama API calls
 
-# Evaluation and metrics (Iteration 5)
+# Evaluation metrics
 numpy>=1.24.0
-scipy>=1.11.0  # For statistical tests
-matplotlib>=3.7.0  # For visualizations
-seaborn>=0.12.0  # For advanced plots
-jupyter>=1.0.0  # For analysis notebook
-pandas>=2.0.0  # For data analysis
 
-# UI (optional)
-# streamlit>=1.28.0
-
-# Testing (required for unit tests)
+# Testing (required for unit tests in CI)
 pytest>=7.4.0
 pytest-cov>=4.1.0
 
-# Development and linting (optional, in requirements-dev.txt)
-# black>=23.0.0
-# flake8>=6.0.0
-# mypy>=1.5.0
-
+# Analysis/visualization extras (matplotlib, seaborn, pandas, scipy, jupyter)
+# are NOT runtime dependencies — nothing in src/ imports them. They live in
+# requirements-dev.txt for local analysis work.

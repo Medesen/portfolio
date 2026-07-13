@@ -42,11 +42,13 @@ jupyterlab>=4.0.0            # Enhanced notebook interface
 nbconvert>=7.7.0             # Notebook conversion
 nbformat>=5.9.0              # Notebook format support
 
-# Optional: If you want to run evaluation analysis locally
-# (Already in requirements.txt, but listed here for clarity)
-# matplotlib>=3.7.0
-# seaborn>=0.12.0
-# pandas>=2.0.0
+# Analysis & visualization (moved out of runtime requirements.txt — nothing in
+# src/ imports these; they are for ad-hoc local analysis of evaluation outputs)
+scipy>=1.11.0                # Statistical tests
+matplotlib>=3.7.0            # Visualizations
+seaborn>=0.12.0              # Advanced plots
+pandas>=2.0.0                # Data analysis
+jupyter>=1.0.0               # Analysis notebooks
 
 # ============================================================================
 # Usage Instructions
