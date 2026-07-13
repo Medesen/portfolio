@@ -136,7 +136,7 @@ I evaluated three chunking strategies using standard IR metrics (Recall@k, MRR, 
 
 I built the system with modular components: the architecture separates preprocessing, chunking, retrieval, and generation into distinct modules with clear interfaces (e.g., abstract `BaseChunker` class). All functions include type hints, and the codebase uses dependency injection for testability.
 
-The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. Everything runs locally without external API dependencies, making it fully reproducible. The setup script automates the entire process from container builds to model downloads and initial indexing.
+The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. Everything runs locally without external API dependencies. Python dependencies are pinned via `requirements.lock` and the service images are version-pinned, so the environment is reproducible — note that the LLM's generated answer *text* is still non-deterministic across runs (the retrieval metrics are deterministic). The setup script automates the entire process from container builds to model downloads and initial indexing.
 
 ### Key Technical Decisions
 
@@ -148,7 +148,7 @@ The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. E
 
 **Cross-encoder reranking:** After initial retrieval, results are reranked using a cross-encoder model (ms-marco-MiniLM-L-6-v2). The system over-fetches ~50 candidates, then the cross-encoder jointly scores each query-document pair for more accurate relevance estimates. This improves precision at the cost of added latency (~100-200ms). The model is lazy-loaded on first use to avoid startup overhead.
 
-**Local LLM trade-off:** I chose Ollama with Llama 3.2 over cloud APIs. This means slower inference (~2-3s vs ~0.5s) and lower quality answers, but it eliminates API costs and makes the project completely reproducible for anyone who clones it.
+**Local LLM trade-off:** I chose Ollama with Llama 3.2 over cloud APIs. This means slower inference (~2-3s vs ~0.5s) and lower quality answers, but it eliminates API costs and makes the environment reproducible for anyone who clones it (dependencies and images are pinned; the LLM's generated text itself is not deterministic).
 
 **Evaluation pivot:** I initially implemented LLM-as-judge for answer quality assessment, but Llama 3.2 3B consistently scored answers 3.5-4.0 regardless of actual quality. Rather than report unreliable metrics, I focused on retrieval metrics (Recall@k, MRR, NDCG) which are objective and reproducible. This is documented in the CHANGELOG.
 

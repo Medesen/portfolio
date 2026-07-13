@@ -43,10 +43,10 @@ jobs:
           path: ~/.cache/huggingface
           key: hf-all-MiniLM-L6-v2
 
-      - name: Install dependencies
+      - name: Install dependencies (from lock file)
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.lock
 
       - name: Run unit tests
         run: |

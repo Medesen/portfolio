@@ -18,8 +18,10 @@ ENV NB_USER=${NB_USER} NB_UID=${NB_UID} NB_GID=${NB_GID}
 
 # ----- App setup -----
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install from the pinned lock for reproducible builds (requirements.txt holds
+# the human-readable intent and is copied in with the rest of the source below).
+COPY requirements.lock .
+RUN pip install --no-cache-dir -r requirements.lock
 COPY . .
 
 # Ensure project dirs exist and are owned by the non-root user
