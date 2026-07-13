@@ -42,3 +42,14 @@ def test_test_size_bounds_enforced():
 def test_model_is_required():
     with pytest.raises(ValidationError):
         TrainConfig.model_validate({})
+
+
+def test_unknown_field_rejected_on_model():
+    # A misspelled hyperparameter (alpah) must fail, not be silently ignored.
+    with pytest.raises(ValidationError):
+        RidgeConfig.model_validate({"kind": "ridge", "alpha": 1.0, "alpah": 10.0})
+
+
+def test_unknown_field_rejected_on_train_config():
+    with pytest.raises(ValidationError):
+        TrainConfig.model_validate({"model": {"kind": "gbm"}, "seeed": 7})

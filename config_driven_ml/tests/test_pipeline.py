@@ -25,3 +25,22 @@ def test_train_then_evaluate_roundtrip(tmp_path):
     # metrics must match what training reported.
     eval_metrics = run_evaluation(EvaluateConfig(run_dir=str(run_dir)))
     assert eval_metrics == train_metrics
+
+
+def test_run_metadata_fingerprint_written(tmp_path):
+    """Training writes an environment fingerprint (scikit-learn version, dataset
+    shape) so a later re-eval can detect drift."""
+    train_cfg = TrainConfig(
+        experiment_name="test",
+        seed=7,
+        model=GBMConfig(max_iter=20),
+        output_dir=str(tmp_path / "run"),
+    )
+    run_training(train_cfg)
+
+    meta_path = tmp_path / "run" / "run_metadata.json"
+    assert meta_path.exists()
+    meta = json.loads(meta_path.read_text())
+    assert meta["sklearn_version"]  # non-empty
+    assert meta["n_samples"] == 442  # diabetes dataset
+    assert meta["n_features"] == 10

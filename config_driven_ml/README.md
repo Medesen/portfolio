@@ -18,7 +18,7 @@ A small, config-driven ML training pipeline built to demonstrate a pattern I con
 - Invalid values rejected with readable errors before any training starts
 - Named experiment configs that inherit from the base and change only what differs
 - Multirun sweeps: `mlctl train -m model=ridge,gbm seed=0,1,2`
-- A config snapshot saved with every run, so any run can be re-evaluated from its output directory alone
+- A config snapshot saved with every run, so any run can be re-evaluated from its output directory within the same environment (dependencies pinned via `requirements.lock`; a `run_metadata.json` fingerprint flags scikit-learn / dataset drift)
 
 ---
 
@@ -135,7 +135,7 @@ A Pydantic discriminated union and a Hydra config group are the same idea approa
 
 **Explicit factory over Hydra's `_target_` instantiation:** Hydra can instantiate classes directly from config via `_target_` fields. I deliberately used a plain factory function (`build_model`) instead. At this scale, `_target_` adds indirection and import-time magic without buying anything; at the scale of dozens of swappable components it earns its keep. Knowing where that line sits is part of the demonstration.
 
-**Config snapshots for reproducibility:** Every training run writes its fully resolved config next to the model artifact. The `evaluate` command rebuilds the exact train/test split from the snapshot alone — the roundtrip test asserts that re-evaluation reproduces the training metrics bit-for-bit.
+**Config snapshots for reproducibility:** Every training run writes its fully resolved config next to the model artifact. The `evaluate` command rebuilds the exact train/test split from the snapshot — within the same environment, the roundtrip test asserts re-evaluation reproduces the training metrics bit-for-bit. A `run_metadata.json` fingerprint (scikit-learn version, dataset shape) is written alongside so re-evaluation warns if the environment has since drifted.
 
 **Deterministic output paths:** Output directories are built by interpolation (`outputs/${experiment_name}/${model.kind}/seed_${seed}`) rather than timestamps, so sweep runs land in predictable places and re-running a config overwrites its own results instead of accumulating clutter.
 
