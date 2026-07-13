@@ -359,13 +359,13 @@ def cmd_query(args, config) -> None:
                     retrieved_results=results["results"]
                 )
                 
-                # Display generated answer
+                # Display generated answer (or the error the generator returned)
                 formatted_answer = answer_generator.format_console_output(
                     generation_result,
                     show_metadata=True
                 )
                 print("\n" + formatted_answer)
-                
+
                 # Save generation result if output file requested
                 if args.output:
                     output_path = Path(args.output)
@@ -382,7 +382,18 @@ def cmd_query(args, config) -> None:
                     
                     logger.info(f"Results saved to: {output_path}")
                     print(f"\n💾 Results saved to: {output_path}")
-                
+
+                # The generator catches errors internally and returns an
+                # error-shaped answer; surface that as a non-zero exit (after
+                # saving, if requested) instead of reporting success.
+                if generation_result.get("generation_failed"):
+                    logger.error(
+                        f"Answer generation failed: "
+                        f"{generation_result.get('error', 'unknown error')}"
+                    )
+                    print("\n❌ Answer generation failed (see logs)")
+                    sys.exit(1)
+
             except ConnectionError as e:
                 logger.error(f"Cannot connect to Ollama: {e}")
                 print("\n❌ Error: Cannot connect to Ollama service")

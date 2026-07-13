@@ -175,6 +175,7 @@ class AnswerGenerator:
                 "num_chunks_retrieved": len(retrieved_results),
                 "num_chunks_used_in_prompt": 0,
                 "error": str(e),
+                "generation_failed": True,
                 "metadata": {
                     "timing": {
                         "total_time": round(time.time() - start_time, 3)

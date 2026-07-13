@@ -74,8 +74,15 @@ class OllamaClient:
                         f"Model '{self.model}' not found. Available models: {model_names}"
                     )
                     self.logger.warning(f"Run: ollama pull {self.model}")
-                
+
                 return True
+            else:
+                # A reachable-but-unhealthy Ollama (non-200) previously fell through
+                # and returned None; fail loudly instead.
+                raise ConnectionError(
+                    f"Ollama at {self.base_url} returned HTTP {response.status_code} "
+                    f"from /api/tags (expected 200)."
+                )
         except RequestException as e:
             error_msg = (
                 f"Cannot connect to Ollama at {self.base_url}. "

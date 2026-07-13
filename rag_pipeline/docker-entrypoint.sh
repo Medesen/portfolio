@@ -25,5 +25,15 @@ for d in "${DIRS[@]}"; do
   chmod -R ug+rwX "$d" || true
 done
 
-# Drop privileges and run the app (pass through your subcommands, e.g. "preprocess")
-exec gosu "$APP_UID:$APP_GID" python /app/main.py "$@"
+# Drop privileges and run. If the first argument is an executable command
+# (e.g. `make benchmark` runs `python scripts/benchmark_overfetch.py`), run it
+# directly; otherwise treat the arguments as main.py subcommands (preprocess,
+# index, query, ...).
+case "${1:-}" in
+  python|python3|bash|sh|pytest)
+    exec gosu "$APP_UID:$APP_GID" "$@"
+    ;;
+  *)
+    exec gosu "$APP_UID:$APP_GID" python /app/main.py "$@"
+    ;;
+esac
