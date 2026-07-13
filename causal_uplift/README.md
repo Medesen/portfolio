@@ -183,7 +183,7 @@ upliftlab all
 
 ## Testing
 
-17 tests, all runnable in Docker:
+18 tests, all runnable in Docker:
 
 ```bash
 make test
@@ -217,7 +217,7 @@ causal_uplift/
 │   ├── experiment/               # Balance (SMD), ATE inference, CUPED / adjustment
 │   ├── uplift/                   # S/T/X-learners; Qini, deciles, targeting, plot
 │   └── main.py                   # CLI: balance / ate / cuped / uplift / all
-├── tests/                        # 17 tests incl. estimator-recovery on known truth
+├── tests/                        # 18 tests incl. estimator-recovery on known truth
 ├── assets/                       # Qini figure
 ├── Dockerfile / docker-compose.yml / Makefile / setup.sh / setup.ps1
 └── outputs/                      # Result tables (gitignored)

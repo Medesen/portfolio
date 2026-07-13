@@ -12,7 +12,7 @@ A production-ready ML service that predicts customer churn for a telecom dataset
 **Best Performance:** ROC AUC 0.840 (held-out test set)  
 **Supported Models:** Random Forest, XGBoost, Logistic Regression  
 **Tech Stack:** FastAPI, MLflow, Prometheus/Grafana, Docker, Kubernetes  
-**Test Coverage:** 180+ tests, 90% coverage (full suite, measured in CI-equivalent Docker run)
+**Test Coverage:** 200+ tests, 91% coverage (full suite, measured in CI-equivalent Docker run)
 
 **Model Performance (held-out test set, F1-tuned threshold ≈ 0.38):**
 - ROC AUC: 0.840
@@ -140,7 +140,7 @@ I built a complete ML service with training, serving, and monitoring. The traini
 
 The API layer uses FastAPI with Pydantic for request validation, includes rate limiting per endpoint, and implements proper error handling with request tracing. I added drift detection that monitors numeric features (mean/std changes), categorical features (Population Stability Index), and prediction distributions. When drift crosses thresholds, the system can trigger automatic retraining.
 
-The monitoring stack uses Prometheus for metrics collection (latency histograms, request counts, drift events) and Grafana for visualization. I built three dashboards: API overview, latency/SLO tracking, and ML-specific metrics. The test suite has 180+ tests covering unit, integration, and end-to-end workflows, achieving 90% coverage across the full suite; CI enforces a coverage floor on the unit-test job.
+The monitoring stack uses Prometheus for metrics collection (latency histograms, request counts, drift events) and Grafana for visualization. I built three dashboards: API overview, latency/SLO tracking, and ML-specific metrics. The test suite has 200+ tests covering unit, integration, and end-to-end workflows, achieving 91% coverage across the full suite; CI enforces a coverage floor on the unit-test job.
 
 Deployment is fully containerized—everything runs in Docker with no local Python setup required. The CI/CD pipeline on GitHub Actions runs linting, tests, security scanning, and load testing on every push. Kubernetes manifests include auto-scaling, health probes, resource limits, and ingress configuration.
 
@@ -169,9 +169,9 @@ Deployment is fully containerized—everything runs in Docker with no local Pyth
 
 ### Test Suite Overview
 
-The project includes 180+ tests (90% full-suite coverage) demonstrating patterns for all major components: preprocessing, training pipeline, model factory, API endpoints, drift detection, threshold tuning, and monitoring integration.
+The project includes 200+ tests (91% full-suite coverage) demonstrating patterns for all major components: preprocessing, training pipeline, model factory, API endpoints, drift detection, threshold tuning, and monitoring integration.
 
-**Test Results:** 180+ tests passing | 90% full-suite code coverage
+**Test Results:** 200+ tests passing | 91% full-suite code coverage
 
 **Production considerations:** This test suite is comprehensive for a portfolio project but not exhaustive. For production, I would add property-based testing, chaos engineering tests, performance regression tests, and more extensive edge case coverage.
 

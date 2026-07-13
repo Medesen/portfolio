@@ -145,7 +145,7 @@ Hyperparameters are sensible fixed values, deliberately not tuned: honest tuning
 
 ## Testing
 
-25 tests, all runnable in Docker:
+26 tests, all runnable in Docker:
 
 ```bash
 make test
@@ -173,7 +173,7 @@ demand_forecasting/
 │   ├── models/                  # Baselines, SARIMAX, global LightGBM + quantiles
 │   ├── analysis/                # PPML promo-lift estimation; forecast plots
 │   └── main.py                  # CLI: backtest / promo-lift / plot-forecast
-├── tests/                       # 25 tests incl. leakage + estimator-recovery
+├── tests/                       # 26 tests incl. leakage + estimator-recovery
 ├── assets/                      # Example forecast figure
 ├── Dockerfile / docker-compose.yml / Makefile / setup.sh / setup.ps1
 └── outputs/                     # Backtest predictions & scores (gitignored)

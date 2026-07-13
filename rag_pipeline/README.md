@@ -172,9 +172,9 @@ The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. E
 
 ### Unit Tests
 
-The project includes 93 unit tests demonstrating testing patterns for core components: configuration loading, chunking strategies, evaluation metrics, embedder functionality, hybrid search (BM25, RRF fusion, alpha weighting), query rewriting (LLM integration, caching, fallback behavior), and cross-encoder reranking (score reordering, fallback behavior, timing metadata). The systematic evaluation framework (35 test questions with IR metrics) serves as the primary validation mechanism for end-to-end behavior.
+The project includes 101 unit tests demonstrating testing patterns for core components: configuration loading, chunking strategies, evaluation metrics, embedder functionality, hybrid search (BM25, RRF fusion, alpha weighting), query rewriting (LLM integration, caching, fallback behavior), and cross-encoder reranking (score reordering, fallback behavior, timing metadata). The systematic evaluation framework (35 test questions with IR metrics) serves as the primary validation mechanism for end-to-end behavior.
 
-**Test Results:** All 93 tests passing
+**Test Results:** All 101 tests passing
 
 **Production considerations:** This test suite demonstrates patterns but is not exhaustive. For production, I would add comprehensive edge case testing, integration tests, performance tests, mocked external dependencies, and CI/CD integration.
 
@@ -604,7 +604,7 @@ See detailed troubleshooting in:
 
 ### What about unit tests?
 
-See the [Testing](#testing) section above. The project includes 93 unit tests demonstrating patterns for core components, with the systematic evaluation framework (35 test questions with IR metrics) serving as the primary end-to-end validation.
+See the [Testing](#testing) section above. The project includes 101 unit tests demonstrating patterns for core components, with the systematic evaluation framework (35 test questions with IR metrics) serving as the primary end-to-end validation.
 
 ### What would you change for production?
 

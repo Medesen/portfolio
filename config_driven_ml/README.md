@@ -10,7 +10,7 @@ A small, config-driven ML training pipeline built to demonstrate a pattern I con
 **Models:** Gradient boosting (HistGradientBoostingRegressor) and Ridge, swappable via a config group  
 **Baseline Result:** GBM RMSE 59.1 / R² 0.34 vs Ridge RMSE 63.0 / R² 0.25 (seed 42)  
 **Tech Stack:** Hydra, Pydantic v2, scikit-learn, Docker  
-**Test Coverage:** 12 tests (schema constraints, Hydra composition, train/evaluate roundtrip)  
+**Test Coverage:** 15 tests (schema constraints, Hydra composition, train/evaluate roundtrip)  
 **Setup Time:** ~2 minutes
 
 **What the config layer gives you:**
@@ -155,7 +155,7 @@ A Pydantic discriminated union and a Hydra config group are the same idea approa
 
 ## Testing
 
-The project includes 12 tests covering the three layers of the config stack:
+The project includes 15 tests covering the three layers of the config stack:
 
 - **Schema tests** - Discriminated union selects the right model class; constraint violations (`alpha <= 0`, `test_size >= 1`) are rejected; required fields are enforced
 - **Hydra integration tests** - Composition via the real config files, config-group overrides, named experiment configs, and both CLI failure modes (validation error, missing required value) using Hydra's compose API
@@ -189,7 +189,7 @@ config_driven_ml/
 │   ├── train.py                # Thin CLI entry: @config_command + run_training
 │   ├── evaluate.py             # Thin CLI entry: @config_command + run_evaluation
 │   └── main.py                 # Dict-registry command router
-├── tests/                      # 12 tests across the three layers
+├── tests/                      # 15 tests across the three layers
 ├── Dockerfile                  # Non-root container (host-owned outputs)
 ├── docker-compose.yml
 ├── Makefile                    # Command shortcuts
