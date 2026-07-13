@@ -73,6 +73,23 @@ def test_train_long_widens_pool_without_leaking_dates(toy_long):
     assert set(preds["sku"]) == {"A_1"}           # evaluation stays on the subset
 
 
+def test_lgbm_rejects_horizon_beyond_feature_shift(toy_long):
+    """fit_predict itself must reject a test window longer than HORIZON.
+
+    Regression test: the leakage guard previously lived only in the CLI, so the
+    programmatic path (run_backtest / fit_predict) still accepted longer folds
+    whose later days would read actuals from inside the test window.
+    """
+    folds = make_folds(
+        toy_long["date"], n_folds=1, horizon=HORIZON + 7, stride=HORIZON + 7
+    )
+    model = LgbmForecaster(full_long=toy_long)
+    train = toy_long[toy_long["date"] <= folds[0].train_end]
+
+    with pytest.raises(ValueError, match="leakage"):
+        model.fit_predict(train, folds[0])
+
+
 def test_lgbm_no_leakage_from_test_window(toy_long):
     folds = make_folds(toy_long["date"], n_folds=1, horizon=14, stride=14)
     preds_clean = run_backtest(toy_long, LgbmForecaster(full_long=toy_long), folds)

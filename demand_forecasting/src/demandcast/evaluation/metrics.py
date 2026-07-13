@@ -3,8 +3,9 @@
 Chosen for zero-inflated, low-volume count data (see DATA_NOTES.md):
 
 - **MASE** — headline metric. Scale-free, so it can be averaged across SKUs
-  whose volumes differ by ~60×. Values < 1 mean "better than in-sample
-  seasonal-naive".
+  whose volumes differ by ~60×. Values < 1 mean "better than the in-sample
+  positional lag-7 naive" (≈ seasonal-naive; see the ``mase`` docstring for
+  how the two differ in dropped-holiday weeks).
 - **WAPE** — pooled ``sum|error| / sum|actual|``. Plays the role sMAPE would,
   without sMAPE's divide-by-zero pathology on zero-sales days.
 - **RMSE** — pooled, in units sold; kept for interpretability.

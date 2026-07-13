@@ -121,6 +121,17 @@ class LgbmForecaster:
         self._objective = objective
 
     def fit_predict(self, train: pd.DataFrame, fold: Fold) -> pd.DataFrame:
+        # Enforce the leakage invariant at the model itself, not only in the CLI:
+        # features are shifted by a fixed HORIZON trading days, so a test window
+        # longer than HORIZON would have its later days read actuals from inside
+        # the window (lag_28 lands within the test period).
+        if len(fold.test_dates) > HORIZON:
+            raise ValueError(
+                f"fold {fold.fold}: test window spans {len(fold.test_dates)} trading "
+                f"days but sales-history features are shifted by only {HORIZON}; "
+                f"predictions beyond day {HORIZON} would read actuals from inside "
+                f"the test window (leakage). Use a horizon <= {HORIZON} for lgbm."
+            )
         feats = self._features
         train_rows = feats[
             feats["date"].isin(train["date"].unique())

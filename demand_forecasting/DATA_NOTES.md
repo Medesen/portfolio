@@ -26,7 +26,8 @@ No SKU is dead, none enters late or exits early — all 118 are kept.
 **Decisions:**
 - **sMAPE is out, WAPE is in.** With this many zero-actuals, sMAPE is
   undefined/explosive on exactly the days that matter. Metrics: **MASE**
-  (scale-free, seasonal-naive-normalized, the headline), **RMSE**, **WAPE**.
+  (scale-free, normalized by the positional lag-7 naive — see §5, the headline),
+  **RMSE**, **WAPE**.
 - **LightGBM uses a count-appropriate objective.** The ablation (12 rolling
   folds × 28 trading days, all 118 SKUs, point forecast only; reproduce with
   `make backtest ARGS="--model lgbm --objective poisson"` / `l2`):
