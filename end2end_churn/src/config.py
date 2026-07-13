@@ -8,7 +8,7 @@ system, supporting loading from files (YAML/JSON), environment variables, or def
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -78,10 +78,10 @@ class ModelConfig(BaseModel):
     model_type: str = Field(
         "random_forest", description="Model type (random_forest, xgboost, logistic_regression)"
     )
-    n_estimators_grid: List[int] = Field([100, 200], description="Number of trees to try")
-    max_depth_grid: List[Optional[int]] = Field([10, 20, None], description="Max depth to try")
-    min_samples_split_grid: List[int] = Field([2, 5], description="Min samples to split")
-    min_samples_leaf_grid: List[int] = Field([1, 2], description="Min samples per leaf")
+    n_estimators_grid: list[int] = Field([100, 200], description="Number of trees to try")
+    max_depth_grid: list[Optional[int]] = Field([10, 20, None], description="Max depth to try")
+    min_samples_split_grid: list[int] = Field([2, 5], description="Min samples to split")
+    min_samples_leaf_grid: list[int] = Field([1, 2], description="Min samples per leaf")
     cv_folds: int = Field(5, ge=2, description="Cross-validation folds")
     scoring: str = Field("roc_auc", description="Scoring metric for CV")
     n_jobs: int = Field(-1, description="Parallel jobs (-1 = all cores)")
@@ -112,7 +112,7 @@ class ModelConfig(BaseModel):
                 raise ValueError("max_depth must be positive or None")
         return v
 
-    def to_param_grid(self) -> Dict[str, List]:
+    def to_param_grid(self) -> dict[str, list]:
         """
         Convert configuration to scikit-learn param_grid format.
 
@@ -324,7 +324,7 @@ class TrainingConfig(BaseModel):
         else:
             raise ValueError("Config file must have extension .yaml, .yml, or .json")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert configuration to dictionary.
 

@@ -1,7 +1,6 @@
 """Schema alignment and data validation utilities."""
 
 import warnings
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -9,7 +8,7 @@ import pandera as pa
 from pandera import Check, Column
 
 
-def align_schema(df: pd.DataFrame, expected_columns: List[str]) -> Tuple[pd.DataFrame, Dict]:
+def align_schema(df: pd.DataFrame, expected_columns: list[str]) -> tuple[pd.DataFrame, dict]:
     """
     Align DataFrame to expected schema.
 
@@ -100,7 +99,7 @@ customer_schema = pa.DataFrameSchema(
 )  # strict=False allows extra columns, coerce=True tries type conversion
 
 
-def validate_data(df: pd.DataFrame, enable_validation: bool = True) -> Tuple[bool, List[str]]:
+def validate_data(df: pd.DataFrame, enable_validation: bool = True) -> tuple[bool, list[str]]:
     """
     Validate DataFrame against expected schema using Pandera.
 
@@ -130,7 +129,7 @@ def validate_data(df: pd.DataFrame, enable_validation: bool = True) -> Tuple[boo
         return False, [f"Validation error: {str(e)}"]
 
 
-def generate_alignment_warnings(alignment_info: Dict) -> List[str]:
+def generate_alignment_warnings(alignment_info: dict) -> list[str]:
     """
     Generate user-friendly warning messages from alignment info.
 

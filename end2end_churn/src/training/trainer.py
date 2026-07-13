@@ -1,7 +1,5 @@
 """Model training and evaluation utilities."""
 
-from typing import Dict, List, Tuple
-
 import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
@@ -11,7 +9,7 @@ from ..evaluation.metrics import compute_metrics
 
 def evaluate_model(
     model: Pipeline, X_val: pd.DataFrame, y_val: pd.Series
-) -> Tuple[Dict, np.ndarray, np.ndarray]:
+) -> tuple[dict, np.ndarray, np.ndarray]:
     """
     Evaluate model on validation set.
 
@@ -45,8 +43,8 @@ def evaluate_model(
 
 def extract_feature_importances(
     model: Pipeline,
-    numeric_features: List[str],
-    categorical_features: List[str],
+    numeric_features: list[str],
+    categorical_features: list[str],
     X_train: pd.DataFrame,
 ) -> pd.DataFrame:
     """
@@ -106,7 +104,7 @@ def extract_feature_importances(
         {"feature": all_feature_names, "importance": importances}
     ).sort_values("importance", ascending=False)
 
-    logger.info(f"✓ Extracted {len(feature_importance_df)} features")
+    logger.info(f"Extracted {len(feature_importance_df)} features")
     logger.info("Top 10 most important features:")
     for idx, row in feature_importance_df.head(10).iterrows():
         logger.info(f"  {row['feature']:40s} {row['importance']:.4f}")

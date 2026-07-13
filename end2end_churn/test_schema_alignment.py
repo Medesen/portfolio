@@ -38,7 +38,7 @@ def test_perfect_input():
     print(f"Input columns: {list(df.columns)}")
     print(f"Alignment info: {alignment_info}")
     print(f"Warnings: {warnings if warnings else 'None'}")
-    print(f"✓ Test passed\n")
+    print(f"Test passed\n")
 
 
 def test_reordered_columns():
@@ -69,7 +69,7 @@ def test_reordered_columns():
     print(f"Output columns (corrected): {list(df_aligned.columns)}")
     print(f"Alignment info: {alignment_info}")
     print(f"Warnings: {warnings}")
-    print(f"✓ Test passed - columns reordered correctly\n")
+    print(f"Test passed - columns reordered correctly\n")
 
 
 def test_extra_columns():
@@ -104,7 +104,7 @@ def test_extra_columns():
     print(f"Output columns: {list(df_aligned.columns)}")
     print(f"Alignment info: {alignment_info}")
     print(f"Warnings: {warnings}")
-    print(f"✓ Test passed - extra columns dropped\n")
+    print(f"Test passed - extra columns dropped\n")
 
 
 def test_missing_columns():
@@ -129,7 +129,7 @@ def test_missing_columns():
     print(f"Alignment info: {alignment_info}")
     print(f"Warnings: {warnings}")
     print(f"Partner value after alignment: {df_aligned['Partner'].iloc[0]}")
-    print(f"✓ Test passed - missing column filled with NaN (will be imputed by model)\n")
+    print(f"Test passed - missing column filled with NaN (will be imputed by model)\n")
 
 
 def test_data_quality():
@@ -172,7 +172,7 @@ def test_data_quality():
         print(f"Validation errors found:")
         for error in errors:
             print(f"  - {error}")
-    print(f"✓ Test passed - Pandera caught data quality issues\n")
+    print(f"Test passed - Pandera caught data quality issues\n")
 
 
 if __name__ == "__main__":
@@ -190,7 +190,7 @@ if __name__ == "__main__":
     test_data_quality()
 
     print("=" * 70)
-    print("ALL TESTS PASSED ✓")
+    print("ALL TESTS PASSED ")
     print("=" * 70)
     print("\nKey Takeaways:")
     print("  • Schema alignment handles missing/extra/reordered columns gracefully")

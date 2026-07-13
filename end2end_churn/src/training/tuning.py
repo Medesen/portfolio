@@ -1,7 +1,7 @@
 """Hyperparameter tuning utilities."""
 
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -21,12 +21,12 @@ def perform_grid_search(
     y_train: pd.Series,
     preprocessor: ColumnTransformer,
     model: Optional[Any] = None,
-    param_grid: Optional[Dict] = None,
+    param_grid: Optional[dict] = None,
     cv_folds: int = 5,
     scoring: str = "roc_auc",
     random_state: int = 42,
     n_jobs: int = -1,
-) -> Tuple[GridSearchCV, Dict, float]:
+) -> tuple[GridSearchCV, dict, float]:
     """
     Perform grid search with cross-validation to find best hyperparameters.
 
@@ -84,9 +84,9 @@ def perform_grid_search(
         grid_search.fit(X_train, y_train)
     search_time = time.time() - start_time
 
-    logger.info(f"✓ Grid search complete in {search_time:.1f} seconds")
-    logger.info(f"✓ Best CV score (ROC AUC): {grid_search.best_score_:.4f}")
-    logger.info("✓ Best parameters:")
+    logger.info(f"Grid search complete in {search_time:.1f} seconds")
+    logger.info(f"Best CV score (ROC AUC): {grid_search.best_score_:.4f}")
+    logger.info("Best parameters:")
     for param, value in grid_search.best_params_.items():
         logger.info(f"    {param}: {value}")
 

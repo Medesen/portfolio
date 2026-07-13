@@ -38,7 +38,7 @@ def list_models(client: MlflowClient):
         models = client.search_registered_models()
 
         if not models:
-            print("\n❌ No models registered yet.")
+            print("\nNo models registered yet.")
             print("   Register a model by training with: MLFLOW_REGISTER_MODEL=true make train")
             return
 
@@ -47,7 +47,7 @@ def list_models(client: MlflowClient):
         print("=" * 80)
 
         for model in models:
-            print(f"\n📦 Model: {model.name}")
+            print(f"\nModel: {model.name}")
             print(
                 f"   Created: {datetime.fromtimestamp(model.creation_timestamp/1000).strftime('%Y-%m-%d %H:%M:%S')}"
             )
@@ -84,7 +84,7 @@ def list_models(client: MlflowClient):
         print("\n" + "=" * 80)
 
     except Exception as e:
-        print(f"\n❌ Error listing models: {e}")
+        print(f"\nError listing models: {e}")
         sys.exit(1)
 
 
@@ -94,7 +94,7 @@ def list_versions(client: MlflowClient, model_name: str):
         versions = client.search_model_versions(f"name='{model_name}'")
 
         if not versions:
-            print(f"\n❌ No versions found for model: {model_name}")
+            print(f"\nNo versions found for model: {model_name}")
             return
 
         print("\n" + "=" * 80)
@@ -129,7 +129,7 @@ def list_versions(client: MlflowClient, model_name: str):
         print("\n" + "=" * 80)
 
     except Exception as e:
-        print(f"\n❌ Error listing versions: {e}")
+        print(f"\nError listing versions: {e}")
         sys.exit(1)
 
 
@@ -146,7 +146,7 @@ def promote_model(client: MlflowClient, model_name: str, version: str, stage: st
     valid_stages = ["Staging", "Production", "Archived", "None"]
 
     if stage not in valid_stages:
-        print(f"\n❌ Invalid stage: {stage}")
+        print(f"\nInvalid stage: {stage}")
         print(f"   Valid stages: {', '.join(valid_stages)}")
         sys.exit(1)
 
@@ -155,7 +155,7 @@ def promote_model(client: MlflowClient, model_name: str, version: str, stage: st
         version_info = client.get_model_version(model_name, version)
         current_stage = version_info.current_stage
 
-        print(f"\n🚀 Promoting model...")
+        print(f"\nPromoting model...")
         print(f"   Model: {model_name}")
         print(f"   Version: {version}")
         print(f"   Current Stage: {current_stage}")
@@ -169,18 +169,18 @@ def promote_model(client: MlflowClient, model_name: str, version: str, stage: st
             archive_existing_versions=(stage == "Production"),  # Archive old prod models
         )
 
-        print(f"\n✅ Successfully promoted model version {version} to {stage}")
+        print(f"\nSuccessfully promoted model version {version} to {stage}")
 
         # Show what happened to other versions if promoting to Production
         if stage == "Production":
-            print("\n📋 Note: Existing Production models were archived automatically")
+            print("\nNote: Existing Production models were archived automatically")
 
         # Show current state
-        print(f"\n📊 Current state:")
+        print(f"\nCurrent state:")
         list_versions(client, model_name)
 
     except Exception as e:
-        print(f"\n❌ Error promoting model: {e}")
+        print(f"\nError promoting model: {e}")
         sys.exit(1)
 
 
@@ -194,11 +194,11 @@ def get_model_info(client: MlflowClient, model_name: str, version: str = None, s
         elif stage:
             versions = client.get_latest_versions(model_name, stages=[stage])
             if not versions:
-                print(f"\n❌ No model in stage '{stage}'")
+                print(f"\nNo model in stage '{stage}'")
                 return
             title = f"MODEL INFO: {model_name} ({stage} stage)"
         else:
-            print("\n❌ Must specify either --version or --stage")
+            print("\nMust specify either --version or --stage")
             sys.exit(1)
 
         print("\n" + "=" * 80)
@@ -206,7 +206,7 @@ def get_model_info(client: MlflowClient, model_name: str, version: str = None, s
         print("=" * 80)
 
         for mv in versions:
-            print(f"\n📦 Version: {mv.version}")
+            print(f"\nVersion: {mv.version}")
             print(f"   Stage: {mv.current_stage}")
             print(f"   Run ID: {mv.run_id}")
             print(f"   Source: {mv.source}")
@@ -222,7 +222,7 @@ def get_model_info(client: MlflowClient, model_name: str, version: str = None, s
             # Get run info for additional details
             try:
                 run = client.get_run(mv.run_id)
-                print(f"\n   📊 Metrics from Training Run:")
+                print(f"\n   Metrics from Training Run:")
                 for key, value in sorted(run.data.metrics.items()):
                     if isinstance(value, float):
                         print(f"      {key}: {value:.4f}")
@@ -234,7 +234,7 @@ def get_model_info(client: MlflowClient, model_name: str, version: str = None, s
         print("\n" + "=" * 80)
 
     except Exception as e:
-        print(f"\n❌ Error getting model info: {e}")
+        print(f"\nError getting model info: {e}")
         sys.exit(1)
 
 
@@ -244,7 +244,7 @@ def delete_version(client: MlflowClient, model_name: str, version: str):
         # Get version info first
         version_info = client.get_model_version(model_name, version)
 
-        print(f"\n⚠️  WARNING: About to delete model version")
+        print(f"\n WARNING: About to delete model version")
         print(f"   Model: {model_name}")
         print(f"   Version: {version}")
         print(f"   Stage: {version_info.current_stage}")
@@ -252,15 +252,15 @@ def delete_version(client: MlflowClient, model_name: str, version: str):
         # Confirm deletion
         response = input("\n   Type 'yes' to confirm deletion: ")
         if response.lower() != "yes":
-            print("\n❌ Deletion cancelled")
+            print("\nDeletion cancelled")
             return
 
         # Delete the version
         client.delete_model_version(model_name, version)
-        print(f"\n✅ Successfully deleted version {version}")
+        print(f"\nSuccessfully deleted version {version}")
 
     except Exception as e:
-        print(f"\n❌ Error deleting version: {e}")
+        print(f"\nError deleting version: {e}")
         sys.exit(1)
 
 

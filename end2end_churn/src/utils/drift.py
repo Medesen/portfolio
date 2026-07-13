@@ -8,7 +8,7 @@ This module implements:
 - Comprehensive drift analysis
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -16,8 +16,8 @@ from scipy import stats
 
 
 def calculate_psi(
-    expected: Dict[str, float], actual: Dict[str, float], threshold: float = 0.1
-) -> Tuple[float, str]:
+    expected: dict[str, float], actual: dict[str, float], threshold: float = 0.1
+) -> tuple[float, str]:
     """
     Calculate Population Stability Index (PSI) for categorical features.
 
@@ -59,11 +59,11 @@ def calculate_psi(
 
 
 def detect_numeric_drift(
-    reference_stats: Dict[str, float],
+    reference_stats: dict[str, float],
     current_data: pd.Series,
     threshold: float = 0.2,
     ks_p_value_threshold: float = 0.05,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Detect drift in numeric features using multiple methods:
     1. Relative change in mean/std (fast, interpretable)
@@ -159,8 +159,8 @@ def detect_numeric_drift(
 
 
 def detect_categorical_drift(
-    reference_stats: Dict[str, Any], current_data: pd.Series, threshold: float = 0.25
-) -> Dict[str, Any]:
+    reference_stats: dict[str, Any], current_data: pd.Series, threshold: float = 0.25
+) -> dict[str, Any]:
     """
     Detect drift in categorical features using PSI.
 
@@ -195,7 +195,7 @@ def detect_categorical_drift(
 
 def detect_prediction_drift(
     reference_positive_rate: float, current_predictions: np.ndarray, threshold: float = 0.1
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Detect drift in prediction distribution.
 
@@ -225,13 +225,13 @@ def detect_prediction_drift(
 
 
 def analyze_drift(
-    reference_stats: Dict[str, Any],
+    reference_stats: dict[str, Any],
     current_data: pd.DataFrame,
     predictions: np.ndarray,
     numeric_threshold: float = 0.2,
     categorical_threshold: float = 0.25,
     prediction_threshold: float = 0.1,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Comprehensive drift analysis across all features and predictions.
 

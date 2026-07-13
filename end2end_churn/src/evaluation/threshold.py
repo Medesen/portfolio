@@ -5,13 +5,13 @@ This module provides functions to optimize classification thresholds beyond
 the default 0.5, aligning model decisions with business objectives.
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 from sklearn.metrics import f1_score, precision_recall_curve, precision_score, recall_score
 
 
-def tune_threshold_f1(y_true: np.ndarray, y_proba: np.ndarray) -> Tuple[float, Dict[str, float]]:
+def tune_threshold_f1(y_true: np.ndarray, y_proba: np.ndarray) -> tuple[float, dict[str, float]]:
     """
     Find threshold that maximizes F1 score.
 
@@ -55,7 +55,7 @@ def tune_threshold_f1(y_true: np.ndarray, y_proba: np.ndarray) -> Tuple[float, D
 
 def tune_threshold_precision_constrained_recall(
     y_true: np.ndarray, y_proba: np.ndarray, min_precision: float = 0.75
-) -> Tuple[float, Dict[str, float]]:
+) -> tuple[float, dict[str, float]]:
     """
     Find threshold that maximizes recall while maintaining minimum precision.
 
@@ -114,7 +114,7 @@ def tune_threshold_precision_constrained_recall(
 
 def tune_threshold_top_k(
     y_proba: np.ndarray, k: Optional[int] = None, ratio: Optional[float] = None
-) -> Tuple[float, Dict[str, float]]:
+) -> tuple[float, dict[str, float]]:
     """
     Find threshold that flags exactly top-k or top-k% customers.
 
@@ -177,7 +177,7 @@ def tune_threshold_top_k(
 
 def tune_threshold_cost_sensitive(
     y_true: np.ndarray, y_proba: np.ndarray, cost_fn: float = 1.0, cost_fp: float = 1.0
-) -> Tuple[float, Dict[str, float]]:
+) -> tuple[float, dict[str, float]]:
     """
     Find threshold that minimizes expected cost.
 
@@ -251,7 +251,7 @@ def tune_threshold_cost_sensitive(
 
 def evaluate_threshold(
     y_true: np.ndarray, y_proba: np.ndarray, threshold: float
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Evaluate metrics at a specific threshold.
 

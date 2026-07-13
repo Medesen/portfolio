@@ -1,14 +1,12 @@
 """Model pipeline construction."""
 
-from typing import List, Tuple
-
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
-def build_pipeline() -> Tuple[ColumnTransformer, List[str], List[str]]:
+def build_pipeline() -> tuple[ColumnTransformer, list[str], list[str]]:
     """
     Build preprocessing pipeline (without classifier).
 

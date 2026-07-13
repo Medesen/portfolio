@@ -22,7 +22,6 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -52,7 +51,7 @@ def train_and_evaluate_model(
     y_val: pd.Series,
     config: TrainingConfig,
     use_quick_grid: bool = False,
-) -> Dict:
+) -> dict:
     """
     Train a single model and evaluate on validation set.
 
@@ -110,7 +109,7 @@ def train_and_evaluate_model(
     best_model = grid_search.best_estimator_
     metrics, y_pred, y_proba = evaluate_model(best_model, X_val, y_val)
 
-    logger.info(f"✓ {get_model_display_name(model_type)} training complete")
+    logger.info(f"{get_model_display_name(model_type)} training complete")
     logger.info(f"  Training time: {training_time:.2f}s")
     logger.info(f"  CV ROC AUC: {grid_search.best_score_:.4f}")
     logger.info(f"  Val ROC AUC: {metrics['roc_auc']:.4f}")
@@ -134,7 +133,7 @@ def train_and_evaluate_model(
     }
 
 
-def create_comparison_visualization(results: List[Dict], output_path: str):
+def create_comparison_visualization(results: list[dict], output_path: str):
     """
     Create bar chart comparing models across multiple metrics.
 
@@ -199,10 +198,10 @@ def create_comparison_visualization(results: List[Dict], output_path: str):
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
 
-    logger.info(f"✓ Comparison visualization saved: {output_path}")
+    logger.info(f"Comparison visualization saved: {output_path}")
 
 
-def generate_comparison_report(results: List[Dict], output_path: str, run_id: str):
+def generate_comparison_report(results: list[dict], output_path: str, run_id: str):
     """
     Generate detailed text report comparing all models.
 
@@ -298,7 +297,7 @@ def generate_comparison_report(results: List[Dict], output_path: str, run_id: st
         f.write("END OF REPORT\n")
         f.write("=" * 80 + "\n")
 
-    logger.info(f"✓ Comparison report saved: {output_path}")
+    logger.info(f"Comparison report saved: {output_path}")
 
 
 def main():
@@ -397,7 +396,7 @@ def main():
         best_model = max(results, key=lambda x: x["val_roc_auc"])
         logger.info("\n" + "=" * 80)
         logger.info(
-            f"🏆 WINNER: {best_model['model_name']} (ROC AUC: {best_model['val_roc_auc']:.4f})"
+            f"WINNER: {best_model['model_name']} (ROC AUC: {best_model['val_roc_auc']:.4f})"
         )
         logger.info("=" * 80)
     else:

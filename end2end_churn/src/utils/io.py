@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 import joblib
 from sklearn.pipeline import Pipeline
@@ -60,8 +60,8 @@ def save_model(pipeline: Pipeline, output_path: str) -> str:
     joblib.dump(pipeline, output_path)
 
     model_size_mb = Path(output_path).stat().st_size / (1024 * 1024)
-    logger.info(f"✓ Model saved: {output_path}")
-    logger.info(f"✓ Size: {model_size_mb:.2f} MB")
+    logger.info(f"Model saved: {output_path}")
+    logger.info(f"Size: {model_size_mb:.2f} MB")
 
     # Compute and save checksum for security
     checksum = compute_file_checksum(output_path, algorithm="sha256")
@@ -78,8 +78,8 @@ def save_model(pipeline: Pipeline, output_path: str) -> str:
     with open(checksum_path, "w") as f:
         json.dump(checksum_data, f, indent=2)
 
-    logger.info(f"✓ Model checksum: {checksum[:16]}... (SHA256)")
-    logger.debug(f"✓ Checksum file: {checksum_path}")
+    logger.info(f"Model checksum: {checksum[:16]}... (SHA256)")
+    logger.debug(f"Checksum file: {checksum_path}")
 
     return checksum
 
@@ -131,23 +131,23 @@ def verify_model_checksum(model_path: str) -> bool:
             f"File:     {model_path}"
         )
 
-    logger.info(f"✓ Model checksum verified: {actual_checksum[:16]}...")
+    logger.info(f"Model checksum verified: {actual_checksum[:16]}...")
     return True
 
 
 def save_metadata(
     run_id: str,
     best_model: Pipeline,
-    best_params: Dict,
-    metrics: Dict,
-    test_metrics: Dict,
+    best_params: dict,
+    metrics: dict,
+    test_metrics: dict,
     search_time: float,
     output_path: str,
     config,
-    numeric_features: Optional[List[str]] = None,
-    categorical_features: Optional[List[str]] = None,
-    reference_statistics: Optional[Dict] = None,
-    threshold: Optional[Dict] = None,
+    numeric_features: Optional[list[str]] = None,
+    categorical_features: Optional[list[str]] = None,
+    reference_statistics: Optional[dict] = None,
+    threshold: Optional[dict] = None,
     model_checksum: Optional[str] = None,
 ) -> None:
     """
@@ -225,10 +225,10 @@ def save_metadata(
     with open(output_path, "w") as f:
         json.dump(metadata, f, indent=2)
 
-    logger.info(f"✓ Metadata: {output_path}")
+    logger.info(f"Metadata: {output_path}")
 
 
-def save_diagnostics_report(metrics: Dict, output_path: str, set_name: str = "Validation") -> None:
+def save_diagnostics_report(metrics: dict, output_path: str, set_name: str = "Validation") -> None:
     """
     Save comprehensive diagnostics report to text file.
 
@@ -319,4 +319,4 @@ Average Precision = {metrics['avg_precision']:.3f}:
     with open(output_path, "w") as f:
         f.write(report)
 
-    logger.info(f"✓ Diagnostics report: {output_path}")
+    logger.info(f"Diagnostics report: {output_path}")

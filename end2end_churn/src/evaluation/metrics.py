@@ -1,7 +1,5 @@
 """Evaluation metrics computation."""
 
-from typing import Dict
-
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
@@ -15,7 +13,7 @@ from sklearn.metrics import (
 )
 
 
-def compute_metrics(y_true: pd.Series, y_pred: np.ndarray, y_proba: np.ndarray) -> Dict:
+def compute_metrics(y_true: pd.Series, y_pred: np.ndarray, y_proba: np.ndarray) -> dict:
     """
     Compute comprehensive evaluation metrics.
 

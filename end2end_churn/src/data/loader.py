@@ -23,5 +23,5 @@ def load_data(data_path: str) -> pd.DataFrame:
         dataset = arff.load(f)
 
     df = pd.DataFrame(dataset["data"], columns=[attr[0] for attr in dataset["attributes"]])
-    logger.info(f"✓ Loaded {len(df)} records with {len(df.columns)} columns")
+    logger.info(f"Loaded {len(df)} records with {len(df.columns)} columns")
     return df

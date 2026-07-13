@@ -10,7 +10,7 @@ Tests all drift detection methods:
 Comprehensive Drift Detection Tests
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 import pandas as pd

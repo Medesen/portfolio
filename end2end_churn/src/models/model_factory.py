@@ -10,7 +10,7 @@ The factory pattern makes it easy to:
 - Swap models via configuration
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import xgboost as xgb
 from sklearn.ensemble import RandomForestClassifier
@@ -59,7 +59,7 @@ def get_model(model_type: str, random_state: int = 42):
     return models[model_type]
 
 
-def get_param_grid(model_type: str) -> Dict[str, List]:
+def get_param_grid(model_type: str) -> dict[str, list]:
     """
     Get hyperparameter grid for a specific model type.
 
@@ -109,7 +109,7 @@ def get_param_grid(model_type: str) -> Dict[str, List]:
     return param_grids[model_type]
 
 
-def get_quick_param_grid(model_type: str) -> Dict[str, List]:
+def get_quick_param_grid(model_type: str) -> dict[str, list]:
     """
     Get minimal hyperparameter grid for fast experimentation.
 
@@ -171,7 +171,7 @@ def get_model_display_name(model_type: str) -> str:
     return display_names.get(model_type, model_type)
 
 
-def get_all_model_types() -> List[str]:
+def get_all_model_types() -> list[str]:
     """
     Get list of all available model types.
 

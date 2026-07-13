@@ -1,7 +1,5 @@
 """Data preprocessing and splitting utilities."""
 
-from typing import Tuple
-
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
@@ -40,8 +38,8 @@ def preprocess_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     X = df.drop("Churn", axis=1)
     y = df["Churn"].map({"Yes": 1, "No": 0})
 
-    logger.info(f"✓ Features shape: {X.shape}")
-    logger.info(f"✓ Churn rate: {y.mean():.2%}")
+    logger.info(f"Features shape: {X.shape}")
+    logger.info(f"Churn rate: {y.mean():.2%}")
 
     return X, y
 
@@ -53,7 +51,7 @@ def create_three_way_split(
     val_size: float = 0.25,
     random_state: int = 42,
     stratify: bool = True,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]:
     """
     Create train/validation/test splits.
 
@@ -87,8 +85,8 @@ def create_three_way_split(
         stratify=y_temp if stratify else None,
     )
 
-    logger.info(f"✓ Train:      {len(X_train):4d} samples ({len(X_train)/len(X)*100:.1f}%)")
-    logger.info(f"✓ Validation: {len(X_val):4d} samples ({len(X_val)/len(X)*100:.1f}%)")
-    logger.info(f"✓ Test:       {len(X_test):4d} samples ({len(X_test)/len(X)*100:.1f}%)")
+    logger.info(f"Train:      {len(X_train):4d} samples ({len(X_train)/len(X)*100:.1f}%)")
+    logger.info(f"Validation: {len(X_val):4d} samples ({len(X_val)/len(X)*100:.1f}%)")
+    logger.info(f"Test:       {len(X_test):4d} samples ({len(X_test)/len(X)*100:.1f}%)")
 
     return X_train, X_val, X_test, y_train, y_val, y_test

@@ -42,9 +42,9 @@ def test_drift_detection():
     print("Loading dataset...")
     try:
         df = load_data("data/dataset.arff")
-        print(f"✓ Loaded {len(df)} records")
+        print(f"Loaded {len(df)} records")
     except Exception as e:
-        print(f"✗ Failed to load dataset: {e}")
+        print(f"Failed to load dataset: {e}")
         return False
 
     # Remove target column for drift analysis
@@ -64,16 +64,16 @@ def test_drift_detection():
         result = response.json()
 
         if not result["overall_drift_detected"]:
-            print("✓ PASS: No drift detected in normal data")
+            print("PASS: No drift detected in normal data")
         else:
-            print(f"⚠ WARN: Unexpected drift detected: {result['drifted_features']}")
+            print(f"WARN: Unexpected drift detected: {result['drifted_features']}")
             print(f"  This might indicate the thresholds are too sensitive")
     except requests.exceptions.ConnectionError:
-        print("✗ FAIL: Could not connect to API. Is the service running?")
+        print("FAIL: Could not connect to API. Is the service running?")
         print("  Start with: make up")
         return False
     except Exception as e:
-        print(f"✗ FAIL: {e}")
+        print(f"FAIL: {e}")
         return False
 
     print()
@@ -95,17 +95,17 @@ def test_drift_detection():
             result = response.json()
 
             if result["overall_drift_detected"] and "tenure" in result["drifted_features"]:
-                print(f"✓ PASS: Tenure drift detected")
+                print(f"PASS: Tenure drift detected")
                 print(f"  Drifted features: {result['drifted_features']}")
                 print(f"  Total features drifted: {result['n_features_drifted']}")
             else:
-                print(f"✗ FAIL: Tenure drift not detected")
+                print(f"FAIL: Tenure drift not detected")
                 print(f"  Expected 'tenure' in drifted features")
         except Exception as e:
-            print(f"✗ FAIL: {e}")
+            print(f"FAIL: {e}")
             return False
     else:
-        print("⊘ SKIP: 'tenure' column not found in dataset")
+        print("SKIP: 'tenure' column not found in dataset")
 
     print()
     print("-" * 70)
@@ -127,16 +127,16 @@ def test_drift_detection():
             result = response.json()
 
             if result["overall_drift_detected"] and "Contract" in result["drifted_features"]:
-                print(f"✓ PASS: Contract drift detected")
+                print(f"PASS: Contract drift detected")
                 print(f"  Drifted features: {result['drifted_features']}")
             else:
-                print(f"✗ FAIL: Contract drift not detected")
+                print(f"FAIL: Contract drift not detected")
                 print(f"  Expected 'Contract' in drifted features")
         except Exception as e:
-            print(f"✗ FAIL: {e}")
+            print(f"FAIL: {e}")
             return False
     else:
-        print("⊘ SKIP: 'Contract' column not found in dataset")
+        print("SKIP: 'Contract' column not found in dataset")
 
     print()
     print("-" * 70)
@@ -166,18 +166,18 @@ def test_drift_detection():
 
             detected_count = result["n_features_drifted"]
             if detected_count >= 2:
-                print(f"✓ PASS: Multiple features drifted ({detected_count} features)")
+                print(f"PASS: Multiple features drifted ({detected_count} features)")
                 print(f"  Modified: {modified_features}")
                 print(f"  Detected: {result['drifted_features']}")
             else:
-                print(f"⚠ WARN: Only {detected_count} features detected as drifted")
+                print(f"WARN: Only {detected_count} features detected as drifted")
                 print(f"  Modified: {modified_features}")
                 print(f"  Detected: {result['drifted_features']}")
         except Exception as e:
-            print(f"✗ FAIL: {e}")
+            print(f"FAIL: {e}")
             return False
     else:
-        print("⊘ SKIP: Required columns not found in dataset")
+        print("SKIP: Required columns not found in dataset")
 
     print()
     print("-" * 70)
@@ -187,11 +187,11 @@ def test_drift_detection():
     try:
         response = requests.post(f"{API_URL}/drift", json={"customers": []}, timeout=30)
         if response.status_code == 400:
-            print("✓ PASS: Empty batch correctly rejected with 400 status")
+            print("PASS: Empty batch correctly rejected with 400 status")
         else:
-            print(f"✗ FAIL: Expected 400 status, got {response.status_code}")
+            print(f"FAIL: Expected 400 status, got {response.status_code}")
     except Exception as e:
-        print(f"✗ FAIL: {e}")
+        print(f"FAIL: {e}")
         return False
 
     print()
@@ -204,7 +204,7 @@ def test_drift_detection():
         response.raise_for_status()
         info = response.json()
 
-        print("✓ PASS: Drift info endpoint accessible")
+        print("PASS: Drift info endpoint accessible")
         print(f"  Baseline samples: {info['baseline']['n_samples']}")
         print(f"  Baseline churn rate: {info['baseline']['positive_rate']:.2%}")
         print(f"  Numeric features: {info['baseline']['n_numeric_features']}")
@@ -216,7 +216,7 @@ def test_drift_detection():
             f"prediction={info['thresholds']['prediction']}"
         )
     except Exception as e:
-        print(f"✗ FAIL: {e}")
+        print(f"FAIL: {e}")
         return False
 
     print()
@@ -224,7 +224,7 @@ def test_drift_detection():
     print("DRIFT DETECTION TEST SUITE COMPLETE")
     print("=" * 70)
     print()
-    print("✓ All critical tests passed")
+    print("All critical tests passed")
     print()
     print("Next steps:")
     print("  1. Review drift thresholds if needed (docker-compose.yml)")

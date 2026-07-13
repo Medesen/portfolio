@@ -1,82 +1,27 @@
 """
-Training script for customer churn prediction model.
+Training script for the customer churn prediction model.
 
-Usage (via Docker/Make - RECOMMENDED):
-    make train                  # Train with default config
-    make train-quick            # Train with quick config (fast)
-    make train-prod             # Train with production config (thorough)
-    make train-rf               # Train Random Forest specifically
-    make train-xgboost          # Train XGBoost specifically
-    make train-logreg           # Train Logistic Regression specifically
-    make train-register         # Train and register in MLflow Registry
+Usage (via Docker/Make - recommended):
+    make train                  # default config (Random Forest)
+    make train-quick            # quick config for smoke runs
+    make train-prod             # production config
+    make train-xgboost / train-logreg / train-register   # variants
 
-Direct usage (for development only):
+Direct usage (development only):
     python train.py [--config CONFIG_PATH] [--model-type MODEL_TYPE]
 
-This script orchestrates the complete training workflow:
-1. Loads the Telco Customer Churn dataset (ARFF format)
-2. Preprocesses numeric and categorical features
-3. Creates 3-way split (train/validation/test)
-4. Performs hyperparameter tuning with grid search + cross-validation
-5. Evaluates best model comprehensively on validation set
-6. Generates diagnostic visualizations and feature importances
-7. Saves model with versioning and metadata
-
-Features:
-- Hyperparameter Tuning & Model Versioning
-  * Grid search over model parameters
-  * 5-fold cross-validation on training set
-  * Model versioning with timestamps and run IDs
-  * Feature importance analysis and visualization
-  * Metadata tracking (params, metrics, timings)
-  * Modular code structure with src/ package
-
-- Structured Logging
-  * Structured logging to console and file (logs/training.log)
-  * Different log levels for better observability
-
-- Drift Detection
-  * Compute reference statistics from training data
-  * Save baseline distributions for monitoring
-  * Enable drift detection in production API
-
-- MLflow Experiment Tracking
-  * Track all training experiments with MLflow
-  * Log parameters, metrics, and artifacts
-  * Model signatures for input/output validation
-  * Compare runs in MLflow UI
-  * Model lineage and reproducibility
-
-- Configuration Management
-  * Pydantic-based type-safe configuration
-  * Load configs from YAML, JSON, or environment variables
-  * Separate configs for dev, quick testing, and production
-  * Save config with each training run for reproducibility
-
-- Threshold Tuning Strategies
-  * Tune classification threshold beyond default 0.5
-  * Multiple strategies: F1 maximization, precision-constrained, top-k, cost-sensitive
-  * Threshold analysis visualizations
-  * Save threshold strategies in model metadata
-
-- Model Registry & Versioning
-  * Register models in MLflow Registry
-  * Model stages: None → Staging → Production → Archived
-  * Enable loading models from registry by stage
-  * Model lifecycle management
-
-- Code Quality
-  * Decomposed main() function into focused sub-functions
-  * Each function has single responsibility
-  * Improved testability and maintainability
-  * Clear separation of concerns
+The workflow: load the Telco churn dataset (ARFF), preprocess, 3-way split,
+grid-search with cross-validation, evaluate on the validation set, tune the
+classification threshold, evaluate the held-out test set at that threshold,
+compute drift-detection reference statistics, and save the versioned model,
+metadata, config and diagnostics — with every run tracked in MLflow.
 """
 
 import argparse
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import mlflow
 import mlflow.sklearn
@@ -165,8 +110,8 @@ def setup_experiment(config: TrainingConfig, run_id: str, config_source: str) ->
     # Configure MLflow (always enabled)
     mlflow.set_tracking_uri(config.mlflow.tracking_uri)
     mlflow.set_experiment(config.mlflow.experiment_name)
-    logger.info(f"✓ MLflow tracking enabled: {config.mlflow.tracking_uri}")
-    logger.info(f"✓ Experiment: {config.mlflow.experiment_name}")
+    logger.info(f"MLflow tracking enabled: {config.mlflow.tracking_uri}")
+    logger.info(f"Experiment: {config.mlflow.experiment_name}")
 
     # Start MLflow run
     mlflow.start_run()
@@ -177,12 +122,12 @@ def setup_experiment(config: TrainingConfig, run_id: str, config_source: str) ->
     mlflow.set_tag("model_type", config.model.model_type)
     mlflow.set_tag("config_source", config_source)
 
-    logger.info("✓ MLflow run started")
+    logger.info("MLflow run started")
 
 
 def load_and_prepare_data(
     config: TrainingConfig,
-) -> Tuple[
+) -> tuple[
     pd.DataFrame,
     pd.DataFrame,
     pd.DataFrame,
@@ -246,10 +191,10 @@ def train_model(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     preprocessor: ColumnTransformer,
-    numeric_features: List[str],
-    categorical_features: List[str],
+    numeric_features: list[str],
+    categorical_features: list[str],
     config: TrainingConfig,
-) -> Tuple[Pipeline, Dict, float]:
+) -> tuple[Pipeline, dict, float]:
     """
     Perform hyperparameter tuning via grid search and train best model.
 
@@ -267,8 +212,8 @@ def train_model(
     from src.models.model_factory import get_model, get_model_display_name, get_param_grid
 
     logger.info("Building preprocessing pipeline")
-    logger.info(f"✓ {len(numeric_features)} numeric features")
-    logger.info(f"✓ {len(categorical_features)} categorical features")
+    logger.info(f"{len(numeric_features)} numeric features")
+    logger.info(f"{len(categorical_features)} categorical features")
     logger.debug(f"Numeric features: {numeric_features}")
     logger.debug(f"Categorical features: {categorical_features}")
 
@@ -314,7 +259,7 @@ def train_model(
     for param, value in best_params.items():
         mlflow.log_param(param, value)
     mlflow.log_metric("cv_roc_auc", grid_search.best_score_)
-    logger.info("✓ Best hyperparameters and CV score logged to MLflow")
+    logger.info("Best hyperparameters and CV score logged to MLflow")
 
     return best_model, best_params, search_time, grid_search.best_score_
 
@@ -324,10 +269,10 @@ def evaluate_and_analyze(
     X_train: pd.DataFrame,
     X_val: pd.DataFrame,
     y_val: pd.Series,
-    numeric_features: List[str],
-    categorical_features: List[str],
+    numeric_features: list[str],
+    categorical_features: list[str],
     run_id: str,
-) -> Tuple[Dict, np.ndarray, pd.DataFrame]:
+) -> tuple[dict, np.ndarray, pd.DataFrame]:
     """
     Evaluate model on validation set and generate diagnostic artifacts.
 
@@ -357,7 +302,7 @@ def evaluate_and_analyze(
         # Only log scalar values (skip nested dicts like confusion_matrix)
         if isinstance(metric_value, (int, float)):
             mlflow.log_metric(f"val_{metric_name}", metric_value)
-    logger.info("✓ Validation metrics logged to MLflow")
+    logger.info("Validation metrics logged to MLflow")
 
     # Extract feature importances
     logger.info("Extracting feature importances")
@@ -373,32 +318,32 @@ def evaluate_and_analyze(
     plot_confusion_matrix(
         y_val, y_val_pred, cm_path, title="Confusion Matrix (Validation Set, threshold = 0.5)"
     )
-    logger.info("✓ Confusion matrix saved")
+    logger.info("Confusion matrix saved")
 
     roc_path = str(diagnostics_dir / f"roc_curve_{run_id}.png")
     plot_roc_curve(y_val, y_val_proba, roc_path, title="ROC Curve (Validation Set)")
-    logger.info("✓ ROC curve saved")
+    logger.info("ROC curve saved")
 
     pr_path = str(diagnostics_dir / f"precision_recall_curve_{run_id}.png")
     plot_precision_recall_curve(
         y_val, y_val_proba, pr_path, title="Precision-Recall Curve (Validation Set)"
     )
-    logger.info("✓ PR curve saved")
+    logger.info("PR curve saved")
 
     fi_path = str(diagnostics_dir / f"feature_importances_{run_id}.png")
     plot_feature_importances(feature_importance_df, fi_path, top_n=20)
-    logger.info("✓ Feature importances plot saved")
+    logger.info("Feature importances plot saved")
 
     # Save diagnostics report
     logger.info("Saving diagnostics report")
     diag_path = str(diagnostics_dir / f"evaluation_report_{run_id}.txt")
     save_diagnostics_report(metrics, diag_path, set_name="Validation (default 0.5 threshold)")
-    logger.info("✓ Evaluation report saved")
+    logger.info("Evaluation report saved")
 
     # Save feature importances CSV
     fi_csv_path = diagnostics_dir / f"feature_importances_{run_id}.csv"
     feature_importance_df.to_csv(fi_csv_path, index=False)
-    logger.info("✓ Feature importances CSV saved")
+    logger.info("Feature importances CSV saved")
 
     # Log artifacts to MLflow
     mlflow.log_artifact(cm_path, "plots")
@@ -407,12 +352,12 @@ def evaluate_and_analyze(
     mlflow.log_artifact(fi_path, "plots")
     mlflow.log_artifact(str(fi_csv_path), "data")
     mlflow.log_artifact(diag_path, "reports")
-    logger.info("✓ Artifacts logged to MLflow")
+    logger.info("Artifacts logged to MLflow")
 
     return metrics, y_val_pred, y_val_proba, feature_importance_df
 
 
-def tune_thresholds(y_val: pd.Series, y_val_proba: np.ndarray, run_id: str) -> Dict[str, Any]:
+def tune_thresholds(y_val: pd.Series, y_val_proba: np.ndarray, run_id: str) -> dict[str, Any]:
     """
     Tune classification threshold using multiple strategies.
 
@@ -528,7 +473,7 @@ def tune_thresholds(y_val: pd.Series, y_val_proba: np.ndarray, run_id: str) -> D
 
     # Log threshold plot to MLflow
     mlflow.log_artifact(threshold_plot_path, "plots")
-    logger.info("✓ Threshold analysis logged to MLflow")
+    logger.info("Threshold analysis logged to MLflow")
 
     # Prepare threshold info for metadata
     threshold_info = {
@@ -571,14 +516,14 @@ def tune_thresholds(y_val: pd.Series, y_val_proba: np.ndarray, run_id: str) -> D
         "chosen_threshold": float(chosen_threshold),
     }
 
-    logger.info("✓ Threshold strategies computed and saved")
+    logger.info("Threshold strategies computed and saved")
 
     return threshold_info
 
 
 def compute_reference_statistics(
-    X: pd.DataFrame, y: pd.Series, numeric_features: List[str], categorical_features: List[str]
-) -> Dict[str, Any]:
+    X: pd.DataFrame, y: pd.Series, numeric_features: list[str], categorical_features: list[str]
+) -> dict[str, Any]:
     """
     Compute reference statistics for drift detection.
 
@@ -636,7 +581,7 @@ def compute_reference_statistics(
 
 def evaluate_test_set(
     best_model: Pipeline, X_test: pd.DataFrame, y_test: pd.Series, threshold: float
-) -> Dict:
+) -> dict:
     """
     Evaluate model on held-out test set for final performance assessment.
 
@@ -683,24 +628,24 @@ def evaluate_test_set(
     for metric_name, metric_value in test_metrics.items():
         if isinstance(metric_value, (int, float)):
             mlflow.log_metric(f"test_{metric_name}", metric_value)
-    logger.info("✓ Test metrics logged to MLflow")
+    logger.info("Test metrics logged to MLflow")
 
     return test_metrics
 
 
 def save_training_artifacts(
     best_model: Pipeline,
-    best_params: Dict,
-    metrics: Dict,
-    test_metrics: Dict,
+    best_params: dict,
+    metrics: dict,
+    test_metrics: dict,
     search_time: float,
-    numeric_features: List[str],
-    categorical_features: List[str],
-    reference_stats: Dict,
-    threshold_info: Dict,
+    numeric_features: list[str],
+    categorical_features: list[str],
+    reference_stats: dict,
+    threshold_info: dict,
     config: TrainingConfig,
     run_id: str,
-) -> Tuple[str, str, str]:
+) -> tuple[str, str, str]:
     """
     Save model, metadata, and configuration files.
 
@@ -730,18 +675,18 @@ def save_training_artifacts(
     # Save model with version - Returns checksum for integrity verification
     versioned_model_path = models_dir / f"churn_model_{run_id}.joblib"
     versioned_checksum = save_model(best_model, str(versioned_model_path))
-    logger.info(f"✓ Versioned model saved: {versioned_model_path}")
+    logger.info(f"Versioned model saved: {versioned_model_path}")
 
     # Also save as "latest" for easy loading
     latest_model_path = models_dir / "churn_model_latest.joblib"
     latest_checksum = save_model(best_model, str(latest_model_path))
-    logger.info(f"✓ Latest model saved: {latest_model_path}")
+    logger.info(f"Latest model saved: {latest_model_path}")
 
     # Save configuration for this run
     logger.info("Saving run configuration")
     run_config_path = configs_dir / f"run_config_{run_id}.yaml"
     config.save(str(run_config_path))
-    logger.info(f"✓ Configuration saved: {run_config_path}")
+    logger.info(f"Configuration saved: {run_config_path}")
 
     # Save metadata (includes validation, test metrics, reference statistics, threshold info, checksum)
     logger.info("Saving metadata")
@@ -762,7 +707,7 @@ def save_training_artifacts(
         model_checksum=versioned_checksum,  # Include checksum in metadata
     )
     logger.info(
-        f"✓ Metadata saved (includes validation, test metrics, threshold strategies, and checksum)"
+        f"Metadata saved (includes validation, test metrics, threshold strategies, and checksum)"
     )
 
     return versioned_model_path, latest_model_path, metadata_path, run_config_path
@@ -802,7 +747,7 @@ def log_to_mlflow(
     )
     signature = infer_signature(X_val, y_val_proba_full)
     logger.info(
-        f"✓ Model signature created: {len(signature.inputs.inputs)} inputs, output schema with 2 probability columns"
+        f"Model signature created: {len(signature.inputs.inputs)} inputs, output schema with 2 probability columns"
     )
 
     # Determine if we should register the model
@@ -818,42 +763,42 @@ def log_to_mlflow(
             input_example=X_val.iloc[:5],
             registered_model_name=registered_model_name,  # Register if flag set
         )
-        logger.info("✓ Model logged to MLflow")
+        logger.info("Model logged to MLflow")
 
         # If registered, log registration details
         if register_model and hasattr(model_info, "registered_model_version"):
             logger.info("=" * 60)
             logger.info("MODEL REGISTRY")
             logger.info("=" * 60)
-            logger.info(f"✓ Model registered: {registered_model_name}")
-            logger.info(f"✓ Version: {model_info.registered_model_version}")
-            logger.info(f"✓ Stage: None (use promotion script to set stage)")
+            logger.info(f"Model registered: {registered_model_name}")
+            logger.info(f"Version: {model_info.registered_model_version}")
+            logger.info(f"Stage: None (use promotion script to set stage)")
             logger.info("=" * 60)
 
     # Log artifacts to MLflow
     if config.mlflow.log_artifacts:
         mlflow.log_artifact(metadata_path, "metadata")
         mlflow.log_artifact(str(run_config_path), "config")
-        logger.info("✓ Configuration and metadata logged to MLflow")
+        logger.info("Configuration and metadata logged to MLflow")
 
     # Get MLflow run ID
     mlflow_run_id = None
     if mlflow.active_run():
         mlflow_run_id = mlflow.active_run().info.run_id
-        logger.info(f"✓ MLflow run ID: {mlflow_run_id}")
+        logger.info(f"MLflow run ID: {mlflow_run_id}")
 
     return mlflow_run_id
 
 
 def print_training_summary(
-    metrics: Dict,
-    test_metrics: Dict,
-    threshold_info: Dict,
+    metrics: dict,
+    test_metrics: dict,
+    threshold_info: dict,
     feature_importance_df: pd.DataFrame,
     config: TrainingConfig,
     run_id: str,
     mlflow_run_id: Optional[str],
-    metrics_val_tuned: Optional[Dict] = None,
+    metrics_val_tuned: Optional[dict] = None,
 ) -> None:
     """
     Print comprehensive training summary to console.
@@ -903,16 +848,16 @@ def print_training_summary(
         logger.info(f"  {idx+1}. {row['feature']:40s} ({row['importance']:.4f})")
     logger.info("")
     logger.info("Deliverables:")
-    logger.info(f"  ✓ Versioned model: models/churn_model_{run_id}.joblib")
-    logger.info(f"  ✓ Latest model:    models/churn_model_latest.joblib")
-    logger.info(f"  ✓ Configuration:   configs/run_config_{run_id}.yaml")
-    logger.info(f"  ✓ Metadata:        models/metadata_{run_id}.json")
-    logger.info(f"  ✓ Diagnostics:     diagnostics/evaluation_report_{run_id}.txt")
-    logger.info(f"  ✓ Visualizations:  diagnostics/*_{run_id}.png (5 files)")
-    logger.info(f"  ✓ Feature data:    diagnostics/feature_importances_{run_id}.csv")
-    logger.info(f"  ✓ Training log:    logs/training.log")
+    logger.info(f"  Versioned model: models/churn_model_{run_id}.joblib")
+    logger.info(f"  Latest model:    models/churn_model_latest.joblib")
+    logger.info(f"  Configuration:   configs/run_config_{run_id}.yaml")
+    logger.info(f"  Metadata:        models/metadata_{run_id}.json")
+    logger.info(f"  Diagnostics:     diagnostics/evaluation_report_{run_id}.txt")
+    logger.info(f"  Visualizations:  diagnostics/*_{run_id}.png (5 files)")
+    logger.info(f"  Feature data:    diagnostics/feature_importances_{run_id}.csv")
+    logger.info(f"  Training log:    logs/training.log")
     if mlflow_run_id:
-        logger.info(f"  ✓ MLflow tracking: {config.mlflow.tracking_uri}/#{mlflow_run_id}")
+        logger.info(f"  MLflow tracking: {config.mlflow.tracking_uri}/#{mlflow_run_id}")
     logger.info("")
     logger.info("Training workflow complete!")
 
@@ -997,7 +942,7 @@ def main(
         for metric_name, metric_value in metrics_val_tuned.items():
             if isinstance(metric_value, (int, float)):
                 mlflow.log_metric(f"val_tuned_{metric_name}", metric_value)
-        logger.info("✓ Tuned-threshold validation metrics logged to MLflow")
+        logger.info("Tuned-threshold validation metrics logged to MLflow")
 
         # 8. Evaluate on held-out test set
         test_metrics = evaluate_test_set(best_model, X_test, y_test, tuned_threshold)
@@ -1008,7 +953,7 @@ def main(
             X_train, y_train, numeric_features, categorical_features
         )
         logger.info(
-            f"✓ Reference statistics computed ({len(reference_stats['numeric'])} numeric, "
+            f"Reference statistics computed ({len(reference_stats['numeric'])} numeric, "
             f"{len(reference_stats['categorical'])} categorical features)"
         )
 
@@ -1050,7 +995,7 @@ def main(
         # End MLflow run
         if mlflow.active_run():
             mlflow.end_run()
-            logger.info("✓ MLflow run ended")
+            logger.info("MLflow run ended")
 
 
 # ==============================================================================
@@ -1173,7 +1118,7 @@ def plot_threshold_analysis(
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
 
-    logger.info(f"✓ Threshold analysis plot saved: {output_path}")
+    logger.info(f"Threshold analysis plot saved: {output_path}")
 
 
 if __name__ == "__main__":

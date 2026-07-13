@@ -64,7 +64,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -166,7 +166,7 @@ logger.info(f"  • Auto-retrain on drift: {'enabled' if AUTO_RETRAIN_ON_DRIFT e
 class DriftAnalysisRequest(BaseModel):
     """Request body for drift analysis."""
 
-    customers: List[Dict[str, Any]]
+    customers: list[dict[str, Any]]
 
     class Config:
         schema_extra = {
@@ -203,9 +203,9 @@ class DriftAnalysisResponse(BaseModel):
 
     overall_drift_detected: bool
     n_features_drifted: int
-    drifted_features: List[str]
+    drifted_features: list[str]
     prediction_drift_detected: bool
-    detailed_report: Optional[Dict[str, Any]] = None
+    detailed_report: Optional[dict[str, Any]] = None
 
 
 # ==============================================================================
@@ -303,17 +303,17 @@ async def retrain_model_task():
         if result.returncode == 0:
             # Update last retrain time (file-based, multi-worker safe)
             set_last_retrain_time(datetime.now())
-            logger.info("✓ Model retraining completed successfully")
-            logger.info("⚠ New model saved but NOT deployed")
+            logger.info("Model retraining completed successfully")
+            logger.info("New model saved but NOT deployed")
             logger.info("→ Review metrics in diagnostics/ directory")
             logger.info("→ Run 'make restart' to deploy new model")
         else:
-            logger.error(f"✗ Model retraining failed: {result.stderr}")
+            logger.error(f"Model retraining failed: {result.stderr}")
 
     except subprocess.TimeoutExpired:
-        logger.error("✗ Model retraining timed out after 10 minutes")
+        logger.error("Model retraining timed out after 10 minutes")
     except Exception as e:
-        logger.error(f"✗ Model retraining error: {e}", exc_info=True)
+        logger.error(f"Model retraining error: {e}", exc_info=True)
 
 
 def verify_token(
@@ -425,7 +425,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize service metrics
     init_service_metrics(version="1.0.0")
-    logger.info("✓ Prometheus metrics initialized")
+    logger.info("Prometheus metrics initialized")
 
     try:
         # Load model into app.state cache
@@ -457,9 +457,9 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Could not set model metrics: {e}")
 
-        logger.info("✓ Model loaded successfully")
+        logger.info("Model loaded successfully")
     except Exception as e:
-        logger.critical(f"✗ Failed to load model: {e}", exc_info=True)
+        logger.critical(f"Failed to load model: {e}", exc_info=True)
         # Don't fail startup - health check will report unhealthy
 
     logger.info("=" * 60)
@@ -1134,7 +1134,7 @@ async def analyze_drift_endpoint(
 
             # Log warning
             logger.warning(
-                f"⚠ DRIFT DETECTED! {drift_report['summary']['n_features_drifted']} "
+                f"DRIFT DETECTED! {drift_report['summary']['n_features_drifted']} "
                 f"features drifted: {drift_report['summary']['drifted_features']}"
             )
 
@@ -1143,7 +1143,7 @@ async def analyze_drift_endpoint(
                 logger.info("AUTO_RETRAIN_ON_DRIFT enabled - triggering retraining")
                 background_tasks.add_task(retrain_model_task)
         else:
-            logger.info("✓ No significant drift detected")
+            logger.info("No significant drift detected")
 
         # Return response
         return DriftAnalysisResponse(
@@ -1281,7 +1281,7 @@ async def trigger_retraining(
     # Trigger background retraining
     background_tasks.add_task(retrain_model_task)
 
-    logger.warning("⚠ Model retraining triggered via API")
+    logger.warning("Model retraining triggered via API")
 
     return {
         "status": "retraining_triggered",
