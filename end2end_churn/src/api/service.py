@@ -45,7 +45,7 @@ except ImportError:
 
 def load_model_from_registry(
     model_name: str = "churn_prediction_model", stage: str = "Production"
-) -> tuple[Pipeline, str, list, float]:
+) -> tuple[Pipeline, str, list, float, Optional[dict]]:
     """
     Load model from MLflow Registry by stage.
 
@@ -54,7 +54,8 @@ def load_model_from_registry(
         stage: Model stage (Production, Staging, etc.)
 
     Returns:
-        Tuple of (model_pipeline, model_version, expected_features, threshold)
+        Tuple of (model_pipeline, model_version, expected_features, threshold,
+        metadata) — metadata is the run's metadata dict, or None if unavailable
 
     Raises:
         Exception: If model loading from registry fails
@@ -92,6 +93,7 @@ def load_model_from_registry(
         # Try to load metadata from the run
         expected_features = []
         threshold = 0.5
+        metadata = None
 
         try:
             # Get run artifacts
@@ -130,7 +132,7 @@ def load_model_from_registry(
             logger.info("Using defaults: no schema, threshold=0.5")
 
         logger.info(f"Model loaded successfully from registry: {model_name} v{version} ({stage})")
-        return sk_model, f"{version}", expected_features, threshold
+        return sk_model, f"{version}", expected_features, threshold, metadata
 
     except Exception as e:
         logger.error(f"Failed to load model from registry: {e}", exc_info=True)
@@ -167,20 +169,25 @@ def find_latest_metadata_file() -> Optional[Path]:
     return None
 
 
-def load_model(model_path: str = None) -> tuple[Pipeline, str, list, float]:
+def load_model(model_path: str = None) -> tuple[Pipeline, str, list, float, Optional[dict]]:
     """
-    Load the trained model pipeline and extract version, schema, and threshold from metadata.
+    Load the trained model pipeline together with its metadata.
 
     Supports loading from:
     1. Local file path (default or from MODEL_PATH environment variable)
     2. MLflow Registry (if MODEL_SOURCE=registry)
+
+    The metadata dict is returned alongside the model so callers can cache the
+    two as one coherent unit — consumers must never pair the cached model with
+    metadata re-read from disk later, which can belong to a newer retrained model.
 
     Args:
         model_path: Path to the model file (optional, defaults to MODEL_PATH env var
                     or "models/churn_model_latest.joblib")
 
     Returns:
-        Tuple of (model_pipeline, model_version, expected_features, threshold)
+        Tuple of (model_pipeline, model_version, expected_features, threshold,
+        metadata) — metadata is the parsed dict, or None if no metadata was found
 
     Raises:
         FileNotFoundError: If model file doesn't exist
@@ -251,6 +258,7 @@ def load_model(model_path: str = None) -> tuple[Pipeline, str, list, float]:
     version = "unknown"
     expected_features = []
     threshold = 0.5  # Default threshold
+    metadata = None
 
     # If loading latest model, use the metadata paired with the latest model
     if "latest" in str(model_path):
@@ -280,6 +288,7 @@ def load_model(model_path: str = None) -> tuple[Pipeline, str, list, float]:
                 else:
                     logger.debug("No tuned threshold in metadata, using default 0.5")
         except Exception as e:
+            metadata = None
             logger.warning(f"Failed to load metadata from {metadata_path}: {e}")
     else:
         logger.warning(f"Metadata file not found: {metadata_path}")
@@ -287,7 +296,7 @@ def load_model(model_path: str = None) -> tuple[Pipeline, str, list, float]:
     logger.info(
         f"Model loaded successfully: version={version}, features={len(expected_features)}, threshold={threshold:.4f}"
     )
-    return model, version, expected_features, threshold
+    return model, version, expected_features, threshold, metadata
 
 
 def get_model_from_cache(model_cache: ModelCache) -> tuple[Pipeline, str, list, float]:
@@ -305,11 +314,16 @@ def get_model_from_cache(model_cache: ModelCache) -> tuple[Pipeline, str, list, 
     """
     if model_cache.get("model") is None:
         logger.debug("Model not cached, loading from disk")
-        model, version, features, threshold = load_model()
+        model, version, features, threshold, metadata = load_model()
         model_cache["model"] = model
         model_cache["version"] = version
         model_cache["features"] = features
         model_cache["threshold"] = threshold
+        # Cache the metadata together with the model: after a retrain overwrites
+        # the files on disk, the old model keeps serving until restart, and its
+        # drift baseline/threshold must keep coming from ITS metadata — not from
+        # a fresh disk read that would belong to the new model.
+        model_cache["metadata"] = metadata
     else:
         logger.debug(
             f"Using cached model: version {model_cache['version']}, threshold {model_cache['threshold']:.4f}"
@@ -321,6 +335,24 @@ def get_model_from_cache(model_cache: ModelCache) -> tuple[Pipeline, str, list, 
         model_cache["features"],
         model_cache["threshold"],
     )
+
+
+def get_metadata_from_cache(model_cache: ModelCache) -> Optional[dict]:
+    """
+    Get the metadata dict belonging to the cached (serving) model.
+
+    Ensures the model is loaded first, so the returned metadata always pairs
+    with the model that get_model_from_cache serves. Returns None when the
+    model was loaded without a metadata file.
+
+    Args:
+        model_cache: Model cache dictionary from app.state
+
+    Returns:
+        The cached metadata dict, or None if unavailable
+    """
+    get_model_from_cache(model_cache)  # ensure model + metadata are loaded together
+    return model_cache.get("metadata")
 
 
 def predict(
@@ -472,4 +504,6 @@ def reset_model_cache(model_cache: ModelCache) -> None:
     """
     logger.debug("Resetting model cache")
     model_cache.clear()
-    model_cache.update({"model": None, "version": None, "features": None, "threshold": 0.5})
+    model_cache.update(
+        {"model": None, "version": None, "features": None, "threshold": 0.5, "metadata": None}
+    )

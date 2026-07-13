@@ -45,6 +45,7 @@ def client():
         "version": None,
         "features": None,
         "threshold": 0.5,
+        "metadata": None,
     }
 
     return TestClient(app)

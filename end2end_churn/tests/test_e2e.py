@@ -161,8 +161,9 @@ def test_config_saved_is_loadable():
 def test_train_with_default_config():
     """Test training works with default config (no --config arg)."""
     # subprocess.run(timeout=...) raises TimeoutExpired on timeout (it never
-    # returns a -9/124 code), so treat a timeout as a skip on a slow host rather
-    # than a spurious failure.
+    # returns a -9/124 code). A timeout is a real failure — a hung or severely
+    # regressed training run must turn CI red, not be skipped over. Environments
+    # that cannot afford this test should deselect it (-m "not e2e") explicitly.
     try:
         result = subprocess.run(
             ["python", "train.py"],
@@ -172,7 +173,11 @@ def test_train_with_default_config():
             cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         )
     except subprocess.TimeoutExpired:
-        pytest.skip("Default-config training exceeded the 600s test timeout on this host")
+        pytest.fail(
+            "Default-config training exceeded the 600s timeout — the training "
+            "workflow hung or regressed severely (it normally finishes well within "
+            "the limit)."
+        )
 
     # Should complete successfully
     assert result.returncode == 0, f"Training failed unexpectedly: {result.stderr[:500]}"

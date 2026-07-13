@@ -443,5 +443,5 @@ class TestLoadModelFailClosed:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = self._save_unverified_model(tmpdir)
-            model, version, features, threshold = load_model(model_path)
+            model, version, features, threshold, metadata = load_model(model_path)
             assert model is not None

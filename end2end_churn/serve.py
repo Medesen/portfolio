@@ -81,7 +81,7 @@ from slowapi.util import get_remote_address
 
 from src.api.schemas import HealthResponse, PredictionRequest, PredictionResponse
 from src.api.service import (
-    find_latest_metadata_file,
+    get_metadata_from_cache,
     get_model_from_cache,
     predict,
     reset_model_cache,
@@ -446,6 +446,7 @@ async def lifespan(app: FastAPI):
         "version": None,
         "features": None,
         "threshold": 0.5,
+        "metadata": None,
     }
 
     # Initialize service metrics
@@ -460,25 +461,21 @@ async def lifespan(app: FastAPI):
         logger.info(f"Tuned threshold: {threshold:.4f}")
         logger.debug(f"Feature list: {expected_features}")
 
-        # Set model metrics (extract ROC AUC and model age from metadata if available)
+        # Set model metrics (extract ROC AUC and model age from the metadata
+        # cached with the model, so metrics describe the model actually serving)
         try:
-            import json
-            from pathlib import Path
+            metadata = get_metadata_from_cache(app.state.model_cache)
+            if metadata:
+                roc_auc = metadata.get("validation_metrics", {}).get("roc_auc", 0.0)
+                set_model_metrics(version, metadata.get("timestamp", ""), roc_auc)
+                logger.debug(f"Model metrics set: ROC AUC={roc_auc:.4f}")
 
-            metadata_path = find_latest_metadata_file()
-            if metadata_path:
-                with open(metadata_path, "r") as f:
-                    metadata = json.load(f)
-                    roc_auc = metadata.get("validation_metrics", {}).get("roc_auc", 0.0)
-                    set_model_metrics(version, metadata.get("timestamp", ""), roc_auc)
-                    logger.debug(f"Model metrics set: ROC AUC={roc_auc:.4f}")
-
-                    # Set model age metric
-                    if "timestamp" in metadata:
-                        model_timestamp = datetime.fromisoformat(metadata["timestamp"])
-                        age_days = (datetime.now() - model_timestamp).days
-                        model_age_days.set(age_days)
-                        logger.debug(f"Model age: {age_days} days")
+                # Set model age metric
+                if "timestamp" in metadata:
+                    model_timestamp = datetime.fromisoformat(metadata["timestamp"])
+                    age_days = (datetime.now() - model_timestamp).days
+                    model_age_days.set(age_days)
+                    logger.debug(f"Model age: {age_days} days")
         except Exception as e:
             logger.warning(f"Could not set model metrics: {e}")
 
@@ -822,18 +819,8 @@ async def health(model_cache: ModelCache = Depends(get_model_cache)):
         current_time = time.time()
         uptime_seconds = current_time - SERVICE_START_TIMESTAMP
 
-        # Load metadata for additional model info
-        metadata = None
-        try:
-            import json
-            from pathlib import Path
-
-            metadata_path = find_latest_metadata_file()
-            if metadata_path:
-                with open(metadata_path, "r") as f:
-                    metadata = json.load(f)
-        except Exception as e:
-            logger.warning(f"Could not load metadata: {e}")
+        # Metadata cached with the model — describes the model actually serving
+        metadata = model_cache.get("metadata")
 
         # Determine overall status
         if not model_loaded:
@@ -1135,23 +1122,15 @@ async def analyze_drift_endpoint(
     if model is None:
         raise HTTPException(status_code=503, detail="Drift analysis unavailable: model not loaded")
 
-    # Load metadata separately
-    import json
-    from pathlib import Path
-
-    metadata_path = find_latest_metadata_file()
-    if metadata_path is None:
+    # Use the metadata cached WITH the model. Re-reading the latest metadata from
+    # disk here could pair the cached (still-serving) model with a newer retrained
+    # model's baseline and threshold — like-for-like drift requires the model,
+    # threshold, and reference statistics to come from the same load event.
+    metadata = model_cache.get("metadata")
+    if metadata is None:
         raise HTTPException(
-            status_code=503, detail="Drift analysis unavailable: no metadata files found"
-        )
-
-    try:
-        with open(metadata_path, "r") as f:
-            metadata = json.load(f)
-    except Exception as e:
-        logger.error(f"Failed to load metadata: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=503, detail="Drift analysis unavailable: could not load metadata"
+            status_code=503,
+            detail="Drift analysis unavailable: no metadata loaded with the model",
         )
 
     if "reference_statistics" not in metadata:
@@ -1253,27 +1232,14 @@ async def drift_info(
     _, version, _, _ = get_model_from_cache(model_cache)
     logger.info(f"Got model version: {version}")
 
-    # Load metadata separately
-    import json
-    from pathlib import Path
-
-    metadata_path = find_latest_metadata_file()
-    if metadata_path is None:
+    # Use the metadata cached with the serving model (never a fresh disk read,
+    # which could belong to a newer retrained model)
+    metadata = model_cache.get("metadata")
+    if metadata is None:
         raise HTTPException(
-            status_code=503, detail="Drift info unavailable: no metadata files found"
+            status_code=503, detail="Drift info unavailable: no metadata loaded with the model"
         )
-
-    try:
-        with open(metadata_path, "r") as f:
-            metadata = json.load(f)
-        logger.info(f"Drift info: Loaded metadata from {metadata_path}")
-        logger.info(f"Drift info: Metadata keys: {list(metadata.keys())}")
-        logger.info(f"Drift info: Has reference_statistics: {'reference_statistics' in metadata}")
-    except Exception as e:
-        logger.error(f"Failed to load metadata: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=503, detail="Drift info unavailable: could not load metadata"
-        )
+    logger.info(f"Drift info: Metadata keys: {list(metadata.keys())}")
 
     if "reference_statistics" not in metadata:
         logger.error(

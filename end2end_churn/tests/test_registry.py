@@ -115,13 +115,16 @@ def test_load_model_from_registry_success(mock_client_class, mock_load_model, mo
     mock_client.list_artifacts.return_value = []  # No metadata
 
     # Call the function
-    model, version, features, threshold = load_model_from_registry("test_model", "Production")
+    model, version, features, threshold, metadata = load_model_from_registry(
+        "test_model", "Production"
+    )
 
     # Assertions
     assert model is not None
     assert version == "1"
     assert isinstance(features, list)
     assert threshold == 0.5  # Default when no metadata
+    assert metadata is None  # No metadata artifacts in the run
 
     # Verify MLflow calls
     mock_set_uri.assert_called_once_with("./mlruns")
@@ -180,13 +183,16 @@ def test_load_model_from_registry_with_metadata(mock_client_class, mock_load_mod
         mock_client.download_artifacts.return_value = str(metadata_path)
 
         # Call the function
-        model, version, features, threshold = load_model_from_registry("test_model", "Production")
+        model, version, features, threshold, loaded_metadata = load_model_from_registry(
+            "test_model", "Production"
+        )
 
         # Assertions
         assert model is not None
         assert version == "2"
         assert features == ["feature1", "feature2", "feature3"]
         assert threshold == 0.35
+        assert loaded_metadata == metadata  # full metadata dict returned with the model
 
 
 @pytest.mark.integration
@@ -219,10 +225,10 @@ def test_load_model_uses_registry_when_env_set(mock_load_from_registry):
 
     # Setup mock to return expected values
     mock_model = Mock()
-    mock_load_from_registry.return_value = (mock_model, "1", ["feat1"], 0.5)
+    mock_load_from_registry.return_value = (mock_model, "1", ["feat1"], 0.5, None)
 
     # Call load_model (should detect env var and use registry)
-    model, version, features, threshold = load_model()
+    model, version, features, threshold, metadata = load_model()
 
     # Should have called load_model_from_registry
     mock_load_from_registry.assert_called_once_with("churn_prediction_model", "Production")
@@ -325,3 +331,54 @@ def test_find_latest_metadata_none_when_empty(tmp_path, monkeypatch):
     (tmp_path / "models").mkdir()
 
     assert find_latest_metadata_file() is None
+
+
+@pytest.mark.integration
+def test_cached_metadata_stays_paired_with_cached_model(tmp_path, monkeypatch):
+    """The cache must keep serving the metadata loaded WITH the model, even after
+    a retrain overwrites the metadata files on disk.
+
+    Regression test: the drift endpoint previously re-read the latest metadata
+    from disk per request, so after a retrain (which does not swap the cached
+    model until restart) it could score the old cached model against the new
+    model's baseline and threshold.
+    """
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.pipeline import Pipeline as SkPipeline
+    from sklearn.preprocessing import StandardScaler
+
+    from src.api.service import get_metadata_from_cache, get_model_from_cache
+    from src.utils.io import save_model
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("MODEL_SOURCE", raising=False)
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+
+    # Real model + checksum sidecar so load_model's fail-closed check passes
+    pipeline = SkPipeline(
+        [
+            ("scaler", StandardScaler()),
+            ("classifier", RandomForestClassifier(n_estimators=2, random_state=42)),
+        ]
+    )
+    model_path = models_dir / "churn_model_latest.joblib"
+    save_model(pipeline, str(model_path))
+    monkeypatch.setenv("MODEL_PATH", str(model_path))
+
+    original = {"run_id": "original", "reference_statistics": {"marker": "original"}}
+    (models_dir / "metadata_latest.json").write_text(json.dumps(original))
+
+    cache = {"model": None, "version": None, "features": None, "threshold": 0.5, "metadata": None}
+    get_model_from_cache(cache)
+    assert cache["version"] == "original"
+
+    # Simulate a retrain overwriting the on-disk metadata while the old model
+    # keeps serving from the cache
+    retrained = {"run_id": "retrained", "reference_statistics": {"marker": "retrained"}}
+    (models_dir / "metadata_latest.json").write_text(json.dumps(retrained))
+
+    metadata = get_metadata_from_cache(cache)
+    assert metadata is not None
+    assert metadata["run_id"] == "original"  # NOT the retrained model's metadata
+    assert metadata["reference_statistics"]["marker"] == "original"
