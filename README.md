@@ -30,10 +30,10 @@ A retrieval-augmented generation system I built to compare chunking strategies f
 
 **Status:** Complete  
 **Domain:** Telecom customer churn prediction  
-**Best Performance:** ROC AUC 0.836 (validation set)  
+**Best Performance:** ROC AUC 0.837 (held-out test set)  
 **Tech Stack:** FastAPI, MLflow, Prometheus/Grafana, Docker, Kubernetes
 
-A production-ready ML service I built to predict customer churn with complete end-to-end engineering. The project demonstrates training with hyperparameter tuning, REST API serving, drift detection, experiment tracking, monitoring dashboards, comprehensive testing, and CI/CD pipeline. Everything runs via Docker with zero local setup required.
+A production-oriented ML service I built to predict customer churn with complete end-to-end engineering. The project demonstrates training with hyperparameter tuning, REST API serving, drift detection, experiment tracking, monitoring dashboards, comprehensive testing, and CI/CD pipeline. Everything runs via Docker with zero local setup required.
 
 **Highlights:**
 - Complete ML service (training → API → monitoring → deployment)
@@ -84,7 +84,7 @@ A forecasting system I built to compare classical and ML approaches the way time
 - Quantile forecasts with pinball loss and interval-coverage evaluation (0.778 vs 0.80 target)
 - PPML promo-lift estimation with SKU fixed effects and stated identification assumptions
 - Leakage tests that corrupt the future and assert forecasts don't move
-- 26 tests, ~5 minute setup, fully reproducible (`make reproduce` regenerates every README number)
+- 27 tests, ~5 minute setup, fully reproducible (`make reproduce` regenerates every README number)
 
 **[View Project →](demand_forecasting/)**
 
@@ -146,14 +146,14 @@ portfolio/
 │   ├── ARCHITECTURE.md         # System design patterns
 │   ├── DESIGN.md               # Design decisions & trade-offs
 │   ├── CHANGELOG.md            # Development iterations (1-5)
-│   ├── src/                    # Source code (27 Python modules)
+│   ├── src/                    # Source code (31 Python modules)
 │   │   ├── preprocessing/      # HTML → JSON pipeline
 │   │   ├── chunking/          # 3 chunking strategies
 │   │   ├── retrieval/         # Embeddings & vector search
 │   │   ├── generation/        # LLM integration
 │   │   ├── evaluation/        # Metrics & analysis
 │   │   └── utils/             # Config, logging
-│   ├── tests/                  # 101 unit tests
+│   ├── tests/                  # 103 unit tests
 │   ├── data/
 │   │   ├── corpus/            # Scikit-learn docs (420 files, tracked)
 │   │   └── evaluation/        # Test set (35 Q&A pairs, tracked)
@@ -202,7 +202,7 @@ portfolio/
 │   │   ├── models/            # Baselines, SARIMAX, global LightGBM + quantiles
 │   │   ├── analysis/          # PPML promo-lift, forecast plots
 │   │   └── main.py            # CLI: backtest / promo-lift / plot-forecast
-│   ├── tests/                  # 26 tests (leakage, estimator recovery, metrics)
+│   ├── tests/                  # 27 tests (leakage, estimator recovery, metrics)
 │   ├── data/raw/               # Bundled dataset (872 KB, CC BY) + provenance
 │   ├── assets/                 # Example forecast figure
 │   ├── Dockerfile              # Container definition

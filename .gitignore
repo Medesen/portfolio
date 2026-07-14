@@ -208,14 +208,6 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# venv should not be tracked
-venv/
-env/
-ENV/
-.venv
-.venv*
-rag_pipeline/.venv/
-
 # Backup of md files should not be tracked
 rag_pipeline/old_md_files_backup/
 
@@ -224,15 +216,12 @@ rag_pipeline/data/processed/
 rag_pipeline/data/vector_store/
 rag_pipeline/data/state/
 rag_pipeline/logs/
-rag_pipeline/project_analysis.txt
-rag_pipeline/SUMMARY.txt
-rag_pipeline/rag_pipeline_backup_2025-11-21_before_major_revision/
 
 # Generated files from churn prediction project should not be tracked
 # end2end_churn uses Docker only (no venv needed)
-end2end_churn/models/*.joblib
-end2end_churn/models/*.json
-end2end_churn/models/.last_retrain
+# (the whole models/ directory is generated: model binaries, checksum
+# sidecars, metadata JSON, and the .last_retrain timestamp)
+end2end_churn/models/
 end2end_churn/diagnostics/*.png
 end2end_churn/diagnostics/*.txt
 end2end_churn/diagnostics/*.csv
@@ -251,7 +240,6 @@ end2end_churn/configs/
 end2end_churn/htmlcov/
 end2end_churn/.coverage
 end2end_churn/.pytest_cache/
-end2end_churn/project_analysis.txt
 
 # Secrets should never be committed (Security)
 end2end_churn/secrets/*.txt
@@ -261,12 +249,6 @@ end2end_churn/secrets/*.secret
 # Load test reports and results (Issue 8)
 end2end_churn/tests/locust_report.html
 end2end_churn/tests/locust_results*.csv
-# Local working artifacts (kept out of the repo)
-end2end_churn/models/
-rag_pipeline/TODO.txt
 
-# Preserved local-only files copied from ML-portfolio-old — keep OUT of the public repo
-end2end_churn/old_docs/
-end2end_churn/run_ci_checks_locally.sh
-rag_pipeline/notebooks/evaluation_analysis.ipynb
-rag_pipeline/QnA_pedantic_hiring_manager_(ClaudeSonnet4.5).txt
+# Personal/local working artifacts are ignored via .git/info/exclude
+# (machine-local), not here — this file documents the project, not one clone.
