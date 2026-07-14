@@ -21,6 +21,8 @@ A RAG (Retrieval-Augmented Generation) system built to compare chunking strategi
 | Semantic | 0.46 | 0.48 | 0.36 |
 | Hierarchical | 0.50 | 0.47 | 0.37 |
 
+**Evaluation scope (important):** these numbers isolate the *chunking strategies* under plain semantic retrieval — no hybrid BM25 fusion, no query rewriting, no cross-encoder reranking. The shipped default pipeline (`make query`) enables all three, so its end-to-end retrieval quality is not what this table measures. Holding the rest of the pipeline at its simplest configuration keeps the chunking comparison clean, but an end-to-end evaluation of the full default pipeline is future work. The differences between strategies are also small for a 35-question test set and should be read as directional, not definitive.
+
 Based on this analysis, I recommend fixed chunking for technical documentation retrieval.
 
 ---
@@ -172,9 +174,9 @@ The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. E
 
 ### Unit Tests
 
-The project includes 101 unit tests demonstrating testing patterns for core components: configuration loading, chunking strategies, evaluation metrics, embedder functionality, hybrid search (BM25, RRF fusion, alpha weighting), query rewriting (LLM integration, caching, fallback behavior), and cross-encoder reranking (score reordering, fallback behavior, timing metadata). The systematic evaluation framework (35 test questions with IR metrics) serves as the primary validation mechanism for end-to-end behavior.
+The project includes 103 unit tests demonstrating testing patterns for core components: configuration loading, chunking strategies, evaluation metrics, embedder functionality, hybrid search (BM25, RRF fusion, alpha weighting), query rewriting (LLM integration, caching, fallback behavior), and cross-encoder reranking (score reordering, fallback behavior, timing metadata). The systematic evaluation framework (35 test questions with IR metrics) serves as the primary validation mechanism for end-to-end behavior.
 
-**Test Results:** All 101 tests passing
+**Test Results:** All 103 tests passing
 
 **Production considerations:** This test suite demonstrates patterns but is not exhaustive. For production, I would add comprehensive edge case testing, integration tests, and performance tests. (The unit suite already runs in CI on every push via a path-filtered GitHub Actions workflow, installing from the pinned `requirements.lock`.)
 
@@ -604,7 +606,7 @@ See detailed troubleshooting in:
 
 ### What about unit tests?
 
-See the [Testing](#testing) section above. The project includes 101 unit tests demonstrating patterns for core components, with the systematic evaluation framework (35 test questions with IR metrics) serving as the primary end-to-end validation.
+See the [Testing](#testing) section above. The project includes 103 unit tests demonstrating patterns for core components, with the systematic evaluation framework (35 test questions with IR metrics) serving as the primary end-to-end validation.
 
 ### What would you change for production?
 
@@ -618,7 +620,7 @@ Several things documented in [DESIGN.md](DESIGN.md) (see "What Would Change for 
 
 ### How did you validate the evaluation metrics?
 
-I implemented standard Information Retrieval metrics (Recall@k, MRR, NDCG) following academic literature and validated them against 35 curated test questions with known relevant documents. Fixed chunking won with Recall@10 of 0.51, MRR of 0.51, and NDCG@10 of 0.40. Statistical significance was confirmed across all metrics.
+I implemented standard Information Retrieval metrics (Recall@k, MRR, NDCG) following academic literature and validated them against 35 curated test questions with known relevant documents. Fixed chunking won with Recall@10 of 0.51, MRR of 0.51, and NDCG@10 of 0.40. Honest caveats: no statistical significance testing was performed, and with 35 questions the gaps between strategies (e.g. 0.51 vs 0.50 Recall@10) are within noise — the ranking is directional, not proof. The comparison also isolates chunking under semantic-only retrieval; see the evaluation-scope note in the Summary.
 
 ### Why local LLM instead of OpenAI?
 

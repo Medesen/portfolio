@@ -28,9 +28,8 @@ requests>=2.31.0  # For Ollama API calls
 # Evaluation metrics
 numpy>=1.24.0
 
-# Testing (required for unit tests in CI)
-pytest>=7.4.0
-pytest-cov>=4.1.0
+# Testing dependencies live in requirements-dev.txt — CI installs both files;
+# the runtime Docker image installs only the lock built from this file.
 
 # Analysis/visualization extras (matplotlib, seaborn, pandas, scipy, jupyter)
 # are NOT runtime dependencies — nothing in src/ imports them. They live in

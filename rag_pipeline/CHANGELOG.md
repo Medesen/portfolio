@@ -178,6 +178,8 @@ reranking:
 - Semantic: Recall@10: 0.46, MRR: 0.48, NDCG@10: 0.36
 - Hierarchical: Recall@10: 0.50, MRR: 0.47, NDCG@10: 0.37
 - All strategies achieve 90%+ topic coverage
+- Scope: strategies compared under plain semantic retrieval (no hybrid
+  BM25, query rewriting, or reranking) to isolate the chunking variable
 
 ### Changed
 - **Critical design decision:** Pivoted from LLM-based answer judging to retrieval-focused evaluation

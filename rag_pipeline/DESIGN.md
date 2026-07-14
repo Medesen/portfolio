@@ -678,7 +678,9 @@ This project shows:
 - Implementation (iterations 1-4)
 - Quantitative evaluation (iteration 5)
 - Evidence-based conclusion: Fixed chunking wins
-- Statistical validation: 35 test questions
+- Quantitative comparison across 35 test questions — isolating chunking under
+  semantic-only retrieval (no hybrid/rewriting/reranking), with small
+  between-strategy gaps read as directional rather than significance-tested
 
 **This demonstrates:**
 - Scientific thinking

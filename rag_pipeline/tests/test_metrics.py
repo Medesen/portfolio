@@ -77,9 +77,38 @@ def test_ndcg_perfect_ranking():
     metrics = RetrievalMetrics()
     relevant_docs = ["doc1", "doc2"]
     retrieved_docs = ["doc1", "doc2", "doc3"]
-    
+
     ndcg = metrics.ndcg_at_k(retrieved_docs, relevant_docs, k=3)
-    
+
     # Perfect ranking should give NDCG = 1.0
     assert ndcg == 1.0
+
+
+def test_precision_at_k_counts_relevant_in_top_k():
+    """Test Precision@k with more retrieved docs than k."""
+    metrics = RetrievalMetrics()
+    relevant_docs = ["doc1", "doc2", "doc3"]
+    retrieved_docs = ["doc1", "doc4", "doc2", "doc5", "doc6"]
+
+    precision = metrics.precision_at_k(retrieved_docs, relevant_docs, k=5)
+
+    # 2 relevant docs in the top 5 = 2/5 = 0.4
+    assert precision == 0.4
+
+
+def test_precision_at_k_divides_by_k_when_fewer_returned():
+    """Precision@k uses k as the denominator even when fewer docs are returned.
+
+    Dividing by the number returned would reward a system for returning fewer
+    results — with chunk→document deduplication, fewer than k documents is the
+    common case, so this distinction directly affects reported numbers.
+    """
+    metrics = RetrievalMetrics()
+    relevant_docs = ["doc1", "doc2"]
+    retrieved_docs = ["doc1", "doc2"]  # only 2 unique documents returned
+
+    precision = metrics.precision_at_k(retrieved_docs, relevant_docs, k=10)
+
+    # 2 relevant in the top 10 = 2/10 — NOT 2/2
+    assert precision == 0.2
 

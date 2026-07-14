@@ -36,7 +36,10 @@ services:
       - ./data/state:/app/data/state
       - ./data/vector_store:/app/data/vector_store
       - ./logs:/app/logs
-      - sentence-transformers-cache:/home/app/.cache/torch/sentence_transformers
+      # Model cache must live at HF_HOME (set below): sentence-transformers 5.x
+      # caches through huggingface_hub, not the legacy torch path. Without this
+      # mount every `docker compose run` re-downloads the embedder + reranker.
+      - huggingface-cache:/home/app/.cache/huggingface
 
     environment:
       - PYTHONUNBUFFERED=1
@@ -48,5 +51,5 @@ services:
     tty: true
 
 volumes:
-  sentence-transformers-cache:
+  huggingface-cache:
   ollama-models:

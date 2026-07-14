@@ -54,13 +54,13 @@ class QueryProcessor:
         # Load retrieval configuration
         self.default_top_k = config.get("retrieval.top_k", 20)
         self.min_similarity = config.get("retrieval.min_similarity", 0.0)
-        
+
         # Hybrid search configuration
         self.search_mode = config.get("retrieval.search_mode", "semantic")
         self.hybrid_alpha = config.get("retrieval.hybrid_alpha", 0.7)
         self.rrf_k = config.get("retrieval.rrf_k", 60)
         self.overfetch_factor = config.get("retrieval.overfetch_factor", 3)
-        
+
         # Reranking configuration
         self.reranking_enabled = config.get("reranking.enabled", False)
         self.reranking_model = config.get("reranking.model", "cross-encoder/ms-marco-MiniLM-L-6-v2")
@@ -68,6 +68,24 @@ class QueryProcessor:
         self.reranking_final_top_k = config.get("reranking.final_top_k", 10)
         self.reranking_batch_size = config.get("reranking.batch_size", 32)
         self.reranking_device = config.get("reranking.device", config.get("embeddings.device", "cpu"))
+
+        # Fail fast on invalid config values: zero/negative counts or an
+        # out-of-range alpha would otherwise surface as opaque errors deep
+        # inside ChromaDB, the RRF fusion math, or the cross-encoder.
+        for name, value in [
+            ("retrieval.top_k", self.default_top_k),
+            ("retrieval.rrf_k", self.rrf_k),
+            ("retrieval.overfetch_factor", self.overfetch_factor),
+            ("reranking.overfetch_k", self.reranking_overfetch_k),
+            ("reranking.final_top_k", self.reranking_final_top_k),
+            ("reranking.batch_size", self.reranking_batch_size),
+        ]:
+            if not isinstance(value, int) or value < 1:
+                raise ValueError(f"Config {name} must be a positive integer, got {value!r}")
+        if not 0.0 <= self.hybrid_alpha <= 1.0:
+            raise ValueError(
+                f"Config retrieval.hybrid_alpha must be in [0.0, 1.0], got {self.hybrid_alpha!r}"
+            )
         
         # Initialize reranker if enabled
         self.reranker: Optional[CrossEncoderReranker] = None

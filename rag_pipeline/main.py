@@ -4,9 +4,9 @@ Main entry point for the RAG Pipeline system.
 
 This script provides a CLI interface for running various pipeline operations:
 - preprocess: Prepare and process the document corpus
-- index: Build embeddings and vector index (future)
-- query: Query the RAG system (future)
-- evaluate: Run evaluation framework (future)
+- index: Build embeddings and vector index
+- query: Query the RAG system (semantic, keyword, or hybrid search)
+- evaluate: Run the evaluation framework
 """
 
 from __future__ import annotations
@@ -520,6 +520,22 @@ def cmd_evaluate(args, config) -> None:
         sys.exit(1)
 
 
+def positive_int(value: str) -> int:
+    """argparse type: integer >= 1, with a clear CLI error for bad values."""
+    ivalue = int(value)
+    if ivalue < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {value}")
+    return ivalue
+
+
+def unit_float(value: str) -> float:
+    """argparse type: float in [0.0, 1.0], with a clear CLI error for bad values."""
+    fvalue = float(value)
+    if not 0.0 <= fvalue <= 1.0:
+        raise argparse.ArgumentTypeError(f"must be between 0.0 and 1.0, got {value}")
+    return fvalue
+
+
 def main() -> None:
     """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(
@@ -582,10 +598,10 @@ def main() -> None:
     )
     query_parser.add_argument(
         "--top-k",
-        type=int,
+        type=positive_int,
         dest="top_k",
         default=None,
-        help="Number of results to return (default: from config)",
+        help="Number of results to return, >= 1 (default: from config)",
     )
     query_parser.add_argument(
         "--output",
@@ -607,7 +623,7 @@ def main() -> None:
     )
     query_parser.add_argument(
         "--alpha",
-        type=float,
+        type=unit_float,
         default=None,
         help="Hybrid search alpha weight for semantic (0.0-1.0). Only used with hybrid mode.",
     )
@@ -631,9 +647,9 @@ def main() -> None:
     )
     evaluate_parser.add_argument(
         "--max-questions",
-        type=int,
+        type=positive_int,
         default=None,
-        help="Maximum number of questions to evaluate (default: all)",
+        help="Maximum number of questions to evaluate, >= 1 (default: all)",
     )
     evaluate_parser.add_argument(
         "--no-judge",

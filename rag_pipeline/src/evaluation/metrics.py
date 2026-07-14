@@ -135,26 +135,32 @@ class RetrievalMetrics:
         k: int
     ) -> float:
         """
-        Calculate Precision@k: proportion of relevant docs among top-k results.
-        
+        Calculate Precision@k: relevant docs in the top k, divided by k.
+
+        The denominator is always ``k`` (standard definition). Returning fewer
+        than k documents therefore lowers precision — dividing by the number
+        actually returned would reward systems for returning less, which
+        matters here because retrieval deduplicates chunks to document IDs and
+        commonly yields fewer than k documents.
+
         Args:
             retrieved_doc_ids: List of retrieved document IDs (in rank order)
             relevant_doc_ids: List of relevant document IDs
             k: Number of top results to consider
-            
+
         Returns:
             Precision@k score (0.0 to 1.0)
         """
-        if not retrieved_doc_ids[:k]:
+        if k <= 0 or not retrieved_doc_ids[:k]:
             return 0.0
-        
+
         top_k = set(retrieved_doc_ids[:k])
         relevant = set(relevant_doc_ids)
-        
+
         # Count relevant docs in top-k
         relevant_retrieved = len(top_k & relevant)
-        
-        precision = relevant_retrieved / min(k, len(retrieved_doc_ids))
+
+        precision = relevant_retrieved / k
         return precision
     
     def calculate_all_metrics(

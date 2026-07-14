@@ -21,7 +21,7 @@ from ..utils.logger import get_logger
 class RAGEvaluator:
     """
     Main evaluator for RAG pipeline.
-    
+
     Orchestrates end-to-end evaluation including:
     - Loading test set
     - Running retrieval for each question
@@ -29,6 +29,12 @@ class RAGEvaluator:
     - Computing retrieval metrics
     - LLM-based answer quality scoring
     - Aggregating results
+
+    Evaluation scope: retrieval runs through QueryProcessor.process_query with
+    no BM25 index, query rewriter, or reranker — i.e. plain semantic-only
+    retrieval — to isolate the chunking-strategy comparison. This deliberately
+    differs from the shipped default query path (hybrid + rewriting +
+    reranking); results must be labeled accordingly wherever they are reported.
     """
     
     def __init__(

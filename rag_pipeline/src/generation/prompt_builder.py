@@ -68,33 +68,47 @@ Answer (with citations):"""
         Returns:
             Dictionary with 'prompt', 'context_chunks_used', and 'citations_map'
         """
-        # Format context with citations
+        # Format context with citations. Chunks are visited in rank order; a
+        # chunk that doesn't fit the remaining budget is SKIPPED (not a hard
+        # stop) so one oversized top-ranked chunk can't wipe out the entire
+        # context. If even the first chunk exceeds the whole budget, it is
+        # truncated instead — the LLM must never be left with zero context
+        # while relevant chunks were retrieved. Citation numbers are assigned
+        # to the chunks actually used, in order.
         context_parts = []
         citations_map = {}
         total_length = 0
         chunks_used = []
-        
-        for i, chunk in enumerate(context_chunks, start=1):
-            # Format context chunk with citation number
+
+        for chunk in context_chunks:
             content = chunk.get("content", "")
             doc_id = chunk.get("doc_id", "unknown")
             chunk_id = chunk.get("chunk_id", "unknown")
-            
-            # Create citation entry
+
+            i = len(chunks_used) + 1  # citation number for the next used chunk
             if include_metadata:
                 context_entry = f"[{i}] (Source: {doc_id})\n{content}"
             else:
                 context_entry = f"[{i}] {content}"
-            
-            # Check if adding this chunk would exceed max length
+
             if total_length + len(context_entry) > max_context_length:
-                # Stop adding more chunks
-                break
-            
+                if not chunks_used:
+                    # First chunk alone exceeds the budget: truncate to fit
+                    overshoot = total_length + len(context_entry) - max_context_length
+                    content = content[: max(0, len(content) - overshoot)]
+                    if include_metadata:
+                        context_entry = f"[{i}] (Source: {doc_id})\n{content}"
+                    else:
+                        context_entry = f"[{i}] {content}"
+                else:
+                    # Doesn't fit alongside what's already included; try the
+                    # next (smaller) chunk instead of stopping outright
+                    continue
+
             context_parts.append(context_entry)
             total_length += len(context_entry)
             chunks_used.append(chunk)
-            
+
             # Store citation mapping
             citations_map[i] = {
                 "doc_id": doc_id,

@@ -45,16 +45,16 @@ echo "🧼 Removing Python caches"
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 
-# Remove Sentence-Transformers named volume(s).
-# Compose usually names it "<project>_sentence-transformers-cache".
-echo "🗑  Removing Sentence-Transformers cache volumes (if any)"
-VOLS="$(docker volume ls -q | grep -E '(^|_)sentence-transformers-cache$' || true)"
+# Remove model-cache named volume(s), including the legacy name.
+# Compose usually names them "<project>_huggingface-cache".
+echo "🗑  Removing model cache volumes (if any)"
+VOLS="$(docker volume ls -q | grep -E '(^|_)(huggingface-cache|sentence-transformers-cache)$' || true)"
 if [[ -n "${VOLS}" ]]; then
   # Try to remove all matches
   echo "${VOLS}" | xargs -r docker volume rm >/dev/null || true
   echo "   Removed: ${VOLS}"
 else
-  echo "   No sentence-transformers cache volumes found."
+  echo "   No model cache volumes found."
 fi
 
 # Remove Ollama models named volume(s).

@@ -311,7 +311,7 @@ class AnswerGenerator:
   - `./data/state` → State tracking
   - `./data/vector_store` → ChromaDB
   - `./logs` → Application logs
-  - `sentence-transformers-cache` → Embedding models
+  - `huggingface-cache` → Model cache (embedder + reranker, mounted at HF_HOME)
 
 ### Service Communication
 
@@ -330,7 +330,7 @@ Docker Compose automatically creates an internal network where services referenc
 ### Volume Management
 
 **Named Volumes (persistent in Docker):**
-1. `sentence-transformers-cache` (~90 MB) - Embedding models
+1. `huggingface-cache` (~170 MB) - Embedding + reranker models (mounted at HF_HOME)
 2. `ollama-models` (~2 GB) - LLM models
 
 **Bind Mounts (on host filesystem):**
