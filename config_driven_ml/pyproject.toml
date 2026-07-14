@@ -5,6 +5,9 @@ description = "Config-driven ML training pipeline demonstrating a Hydra + Pydant
 requires-python = ">=3.10"
 dependencies = [
     "hydra-core>=1.3",
+    # omegaconf is imported directly (config snapshots) — declared explicitly
+    # rather than relied on as a transitive dependency of hydra-core
+    "omegaconf>=2.3",
     "pydantic>=2.7",
     "scikit-learn>=1.4",
     "joblib>=1.3",

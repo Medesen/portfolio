@@ -1,8 +1,10 @@
 """Domain logic: train and evaluate a regressor on the diabetes dataset.
 
 Deliberately small — the interesting part of this project is the config layer.
-No Hydra imports here: these functions take validated Pydantic configs, which
-keeps them trivially unit-testable.
+No Hydra composition happens here: these functions take validated Pydantic
+configs, which keeps them trivially unit-testable. (OmegaConf — Hydra's config
+engine, declared as a direct dependency — is used only to serialize/load the
+per-run config snapshot in YAML.)
 """
 
 import json
@@ -34,7 +36,9 @@ def load_split(seed: int, test_size: float):
 
 def build_model(cfg: RidgeConfig | GBMConfig, seed: int):
     if isinstance(cfg, RidgeConfig):
-        return Ridge(alpha=cfg.alpha, random_state=seed)
+        # No random_state: Ridge only uses it with solver="sag"/"saga", and the
+        # default auto solver is deterministic — passing the seed would be noise.
+        return Ridge(alpha=cfg.alpha)
     return HistGradientBoostingRegressor(
         learning_rate=cfg.learning_rate,
         max_iter=cfg.max_iter,
