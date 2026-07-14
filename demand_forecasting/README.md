@@ -27,7 +27,7 @@ The global model improves MASE by 35% over seasonal-naive, *uniformly across vol
 | LightGBM (global training, evaluated on the subset) | 0.693 | 0.531 | 10.81 |
 | seasonal-naive | 1.043 | 0.835 | 18.01 |
 
-SARIMAX *wins* on this subset — against LightGBM under **both** training scopes: trained on the 8 SKUs alone and trained globally on all 118 with cross-learning (`--train-scope global`), which lands within noise of the subset-trained run. That is the honest headline of the comparison: a well-specified per-series classical model is hard to beat on long, regular, high-volume series, and cross-learning has nothing to add where each series already carries years of its own history. The global ML model earns its keep on *breadth* — the other 110 series, including the intermittent ones where a Gaussian state-space model has no business being fit.
+SARIMAX *wins* on this subset on MASE and WAPE — against LightGBM under **both** training scopes: trained on the 8 SKUs alone and trained globally on all 118 with cross-learning (`--train-scope global`), which lands within noise of the subset-trained run. LightGBM does keep the better RMSE (10.65/10.81 vs 11.33): the squared-error metric rewards its conservative behaviour on the largest spikes, while SARIMAX's exogenous promo/holiday terms win on the scale-free and volume-weighted views. That split is the honest headline of the comparison: a well-specified per-series classical model is hard to beat on long, regular, high-volume series, and cross-learning has nothing to add where each series already carries years of its own history. The global ML model earns its keep on *breadth* — the other 110 series, including the intermittent ones where a Gaussian state-space model has no business being fit.
 
 **Promotion lift (PPML, SKU + calendar fixed effects, SEs clustered by SKU, n = 212,164):**
 
@@ -145,7 +145,7 @@ Hyperparameters are sensible fixed values, deliberately not tuned: honest tuning
 
 ## Testing
 
-26 tests, all runnable in Docker:
+27 tests, all runnable in Docker:
 
 ```bash
 make test
@@ -173,7 +173,7 @@ demand_forecasting/
 │   ├── models/                  # Baselines, SARIMAX, global LightGBM + quantiles
 │   ├── analysis/                # PPML promo-lift estimation; forecast plots
 │   └── main.py                  # CLI: backtest / promo-lift / plot-forecast
-├── tests/                       # 26 tests incl. leakage + estimator-recovery
+├── tests/                       # 27 tests incl. leakage + estimator-recovery
 ├── assets/                      # Example forecast figure
 ├── Dockerfile / docker-compose.yml / Makefile / setup.sh / setup.ps1
 └── outputs/                     # Backtest predictions & scores (gitignored)

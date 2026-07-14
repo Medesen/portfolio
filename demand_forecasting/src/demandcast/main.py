@@ -29,8 +29,8 @@ def main() -> None:
         choices=["all", "sarimax"],
         default=None,
         help="restrict to the SARIMAX SKU subset for apples-to-apples "
-        "comparison (default: all, except for --model sarimax which "
-        "always runs on its subset)",
+        "comparison (default: all; --model sarimax always runs on its "
+        "subset and rejects --subset all)",
     )
     bt.add_argument(
         "--train-scope",
@@ -104,6 +104,15 @@ def main() -> None:
 
         long = load_long()
 
+        # sarimax is only defensible on its curated subset of long, regular,
+        # high-volume series — fitting per-series Gaussian SARIMAX to all 118
+        # SKUs (76%-zeros series included) is what sarimax.py's own docstring
+        # calls methodological theatre, so the combination is rejected.
+        if args.model == Sarimax.name and args.subset == "all":
+            parser.error(
+                "--model sarimax always runs on its curated SKU subset; "
+                "--subset all is not supported for sarimax"
+            )
         subset = args.subset or ("sarimax" if args.model == Sarimax.name else "all")
         if subset == "sarimax":
             long_eval = long[long["sku"].isin(select_skus(long))]

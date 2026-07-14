@@ -38,6 +38,19 @@ def test_make_folds_rejects_impossible_request(toy_long):
         make_folds(toy_long["date"], n_folds=10, horizon=28, stride=28)
 
 
+def test_make_folds_accepts_minimal_panel():
+    """Exactly one training day plus the requested test days is valid."""
+    dates = pd.Series(pd.date_range("2020-01-01", periods=15, freq="D"))
+    folds = make_folds(dates, n_folds=1, horizon=14, stride=14)
+    assert len(folds) == 1
+    assert folds[0].train_end == dates.iloc[0]  # the single training day
+    assert len(folds[0].test_dates) == 14
+
+    # one day fewer (no training day at all) must still be rejected
+    with pytest.raises(ValueError):
+        make_folds(dates.iloc[1:], n_folds=1, horizon=14, stride=14)
+
+
 def test_seasonal_naive_is_exact_on_pure_weekly_pattern(toy_long):
     folds = make_folds(toy_long["date"], n_folds=2, horizon=14, stride=14)
     preds = run_backtest(toy_long, SeasonalNaive(), folds)

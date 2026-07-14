@@ -47,10 +47,13 @@ def make_folds(
     """
     td = pd.DatetimeIndex(sorted(pd.unique(trading_days)))
     needed = horizon + (n_folds - 1) * stride
-    if needed >= len(td) - 1:
+    # The oldest fold needs at least one training day before its test window,
+    # so the minimum viable panel is `needed + 1` trading days.
+    if needed >= len(td):
         raise ValueError(
             f"{n_folds} folds x stride {stride} with horizon {horizon} need "
-            f"{needed} trading days for testing; only {len(td)} available"
+            f"{needed} test trading days plus at least 1 training day; "
+            f"only {len(td)} available"
         )
 
     folds = []
