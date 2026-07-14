@@ -108,6 +108,9 @@ def run_uplift(
 ) -> dict:
     from sklearn.model_selection import train_test_split
 
+    if not 0.0 < test_size < 1.0:
+        raise ValueError(f"test_size must be strictly between 0 and 1, got {test_size}")
+
     sub = two_arm(df, treatment)
     X, _ = design_matrix(sub)
     y = sub[outcome].to_numpy(float)
@@ -116,27 +119,43 @@ def run_uplift(
 
     idx = np.arange(len(sub))
     tr, te = train_test_split(idx, test_size=test_size, random_state=seed, stratify=t)
+    # Selection fold: carved out of the TRAINING side only. The "best" learner
+    # is chosen on this validation fold, never on the test split — selecting
+    # the winner on the same sample that produces its headline decile/targeting
+    # numbers would bake winner's-curse bias into every downstream claim.
+    fit_idx, val_idx = train_test_split(
+        tr, test_size=0.25, random_state=seed, stratify=t[tr]
+    )
     Xtr, Xte = X.iloc[tr], X.iloc[te]
 
     print(f"\n=== Uplift models: {treatment} vs control, outcome = {outcome} ===")
-    print(f"train n={len(tr)}, test n={len(te)} (held-out); base learner = LightGBM (fixed params)")
+    print(f"train n={len(tr)} (of which {len(val_idx)} form a selection-validation fold), "
+          f"test n={len(te)} (held-out); base learner = LightGBM (fixed params)")
 
-    curves, qcs, best = {}, {}, None
+    curves, qcs, val_qini = {}, {}, {}
     for cls in LEARNERS.values():
+        # Selection: fit on the fit fold, score Qini on the validation fold
+        sel_model = cls(kind=kind).fit(X.iloc[fit_idx], t[fit_idx], y[fit_idx])
+        vq = qini_coefficient(sel_model.predict_uplift(X.iloc[val_idx]), y[val_idx], t[val_idx])
+        val_qini[cls.name] = vq
+
+        # Reporting: refit on the full training side, evaluate once on test.
+        # All three learners are reported on test as a pre-specified comparison.
         model = cls(kind=kind).fit(Xtr, t[tr], y[tr])
         pred = model.predict_uplift(Xte)
         curves[cls.name] = qini_curve(pred, y[te], t[te])
         qc = qini_coefficient(pred, y[te], t[te])
         qcs[cls.name] = {"pred": pred, **qc}
-        print(f"  {cls.name:11s} Qini={qc['qini']:.2f}  (normalized {qc['qini_norm']:.3f}, "
+        print(f"  {cls.name:11s} val Qini={vq['qini']:6.2f} (norm {vq['qini_norm']:.3f}) | "
+              f"test Qini={qc['qini']:.2f}  (normalized {qc['qini_norm']:.3f}, "
               f"q_total={qc['q_total']:.1f})")
-        if best is None or qc["qini"] > best[1]:
-            best = (cls.name, qc["qini"])
 
-    best_name = best[0]
+    best_name = max(val_qini, key=lambda name: val_qini[name]["qini"])
     best_pred = qcs[best_name]["pred"]
-    print(f"\nBest ranker: {best_name} (normalized Qini {qcs[best_name]['qini_norm']:.3f}). "
-          "Decile table (group 1 = highest predicted uplift):")
+    print(f"\nSelected ranker: {best_name} — chosen on the validation fold "
+          f"(val normalized Qini {val_qini[best_name]['qini_norm']:.3f}), so the test split "
+          f"plays no part in selection; its test normalized Qini is "
+          f"{qcs[best_name]['qini_norm']:.3f}. Decile table (group 1 = highest predicted uplift):")
     deciles = uplift_by_group(best_pred, y[te], t[te], n_groups=10)
     print(deciles.round(4).to_string(index=False))
 
@@ -184,7 +203,9 @@ def run_uplift(
           "so the learners separate only slightly and the simplest can win.")
 
     qini_summary = pd.DataFrame(
-        [{"learner": name, "qini": v["qini"], "qini_norm": v["qini_norm"], "q_total": v["q_total"]}
+        [{"learner": name, "qini": v["qini"], "qini_norm": v["qini_norm"], "q_total": v["q_total"],
+          "val_qini": val_qini[name]["qini"], "val_qini_norm": val_qini[name]["qini_norm"],
+          "selected": name == best_name}
          for name, v in qcs.items()]
     )
     out.mkdir(parents=True, exist_ok=True)
@@ -216,9 +237,17 @@ def main() -> None:
     cu = with_out(sub.add_parser("cuped", help="CUPED / regression-adjustment variance reduction"))
     cu.add_argument("--treatment", default="Womens E-Mail", choices=TREATMENTS)
     up = with_out(sub.add_parser("uplift", help="Uplift models, Qini evaluation, targeting simulation"))
+    def fraction(value: str) -> float:
+        f = float(value)
+        if not 0.0 < f < 1.0:
+            raise argparse.ArgumentTypeError(
+                f"must be strictly between 0 and 1, got {value}"
+            )
+        return f
+
     up.add_argument("--treatment", default="Womens E-Mail", choices=TREATMENTS)
     up.add_argument("--outcome", default="visit", choices=OUTCOMES)
-    up.add_argument("--test-size", type=float, default=0.3)
+    up.add_argument("--test-size", type=fraction, default=0.3)
     up.add_argument("--seed", type=int, default=0)
     with_out(sub.add_parser("all", help="Run the whole pipeline (reproduce the README)"))
 

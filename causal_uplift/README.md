@@ -16,8 +16,9 @@ an experiment, in order:
 2. **Can we measure it more cheaply?** CUPED and regression adjustment for
    variance reduction — and an honest accounting of when they *don't* help.
 3. **Whom should we target?** Uplift (heterogeneous-treatment-effect) models —
-   S-/T-/X-learners — evaluated with Qini curves on a held-out split and turned
-   into a concrete targeting policy.
+   S-/T-/X-learners — with the "best" learner chosen on a validation fold,
+   evaluated with Qini curves on an untouched test split, and turned into a
+   concrete targeting policy.
 
 The data is Kevin Hillstrom's classic MineThatData e-mail trial: 64,000 customers
 randomly assigned to a men's e-mail, a women's e-mail, or no e-mail, with visit /
@@ -108,9 +109,13 @@ men's-merchandise buyers whom the women's e-mail turns *off* (DATA_NOTES §3) �
 but the held-out data is too noisy to confirm that sign.
 
 One honest note: the *simplest* learner (S-learner) edges the fancier X-learner
-here (normalized Qini 0.06 vs 0.04). When heterogeneity is modest, meta-learner
-sophistication doesn't automatically pay — the same "right tool for the regime,
-stated plainly" lesson as the sibling forecasting project.
+here (normalized Qini 0.06 vs 0.04 on the test split). The S-learner is selected
+on a validation fold carved out of the training side — never on the test split
+whose decile and targeting numbers are reported above — so the headline is free
+of winner's-curse bias; all three learners' test Qini values are reported as a
+pre-specified comparison in `outputs/uplift_qini.csv`. When heterogeneity is
+modest, meta-learner sophistication doesn't automatically pay — the same "right
+tool for the regime, stated plainly" lesson as the sibling forecasting project.
 
 ## Quick Start (~5 minutes)
 
@@ -175,8 +180,9 @@ upliftlab all
 ### Uplift / targeting
 
 - **Three meta-learners** (S/T/X) on a gradient-boosted base, evaluated the only
-  honest way: Qini curves and a decile table on a **held-out** split, never in
-  sample.
+  honest way: the winner is selected on a **validation fold**, then Qini curves
+  and a decile table are reported on an untouched **held-out test** split —
+  never in sample, and never selected on the split being reported.
 - **A decision, not just a model.** The targeting simulation converts the ranking
   into "mail the top k%," compares it against response-model and random targeting,
   and prices it — the output a marketer would actually act on.

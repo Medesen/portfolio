@@ -88,8 +88,12 @@ def design_matrix(
 ) -> tuple[pd.DataFrame, list[str]]:
     """Build a numeric feature matrix (one-hot categoricals) for the learners.
 
-    Returns ``(X, feature_names)``. One-hot columns are fixed by the known
-    category levels so train and test matrices always align.
+    Returns ``(X, feature_names)``. One-hot columns are derived from the
+    categories present in ``df`` (plain ``pd.get_dummies``), so encode the
+    FULL dataset first and split by row index afterwards — encoding train and
+    test separately can produce misaligned matrices if a level is absent from
+    one side. Every caller in this package follows that encode-then-split
+    order.
     """
     numeric = numeric if numeric is not None else NUMERIC_COVARIATES
     categorical = categorical if categorical is not None else CATEGORICAL_COVARIATES
