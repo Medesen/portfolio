@@ -15,13 +15,13 @@ import pandas as pd
 from scipy import stats
 
 
-def calculate_psi(
-    expected: dict[str, float], actual: dict[str, float], threshold: float = 0.1
-) -> tuple[float, str]:
+def calculate_psi(expected: dict[str, float], actual: dict[str, float]) -> tuple[float, str]:
     """
     Calculate Population Stability Index (PSI) for categorical features.
 
-    PSI measures how much a distribution has shifted.
+    PSI measures how much a distribution has shifted. The interpretation uses
+    the conventional fixed bands; the drift *decision* threshold is applied by
+    the caller (detect_categorical_drift), not here.
 
     PSI < 0.1: No significant change
     0.1 <= PSI < 0.25: Moderate change
@@ -30,7 +30,6 @@ def calculate_psi(
     Args:
         expected: Distribution from training (category -> proportion)
         actual: Distribution from current data (category -> proportion)
-        threshold: PSI threshold for drift alert
 
     Returns:
         Tuple of (PSI value, interpretation)
@@ -177,7 +176,7 @@ def detect_categorical_drift(
 
     # Calculate PSI
     reference_dist = reference_stats["distribution"]
-    psi, interpretation = calculate_psi(reference_dist, current_dist, threshold)
+    psi, interpretation = calculate_psi(reference_dist, current_dist)
 
     drift_detected = psi >= threshold
 

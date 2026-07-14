@@ -55,8 +55,8 @@ def sample_data():
     Returns 100 synthetic customer records with realistic distributions
     matching the Telco Customer Churn dataset schema.
 
-    TotalCharges is calculated based on tenure and MonthlyCharges to satisfy
-    the validation constraint: TotalCharges <= tenure * MonthlyCharges * 1.2
+    TotalCharges is derived from tenure and MonthlyCharges so the synthetic
+    records look like real accumulated billing history.
     """
     np.random.seed(42)
     n_samples = 100
@@ -65,9 +65,7 @@ def sample_data():
     tenure = np.random.randint(0, 72, n_samples)
     monthly_charges = np.random.uniform(18, 120, n_samples)
 
-    # Calculate TotalCharges realistically (with some variation but within validator limits)
-    # TotalCharges should be approximately tenure * MonthlyCharges
-    # Add some noise but keep within validation constraint (<=tenure * monthly * 1.2)
+    # TotalCharges ≈ tenure * MonthlyCharges with some noise (historical accumulation)
     total_charges = tenure * monthly_charges * np.random.uniform(0.7, 1.1, n_samples)
     # Ensure minimum value for customers with 0 tenure
     total_charges = np.maximum(total_charges, monthly_charges * 0.5)

@@ -525,7 +525,7 @@ test-coverage:
 
 test-schema:
 	@echo "Testing schema alignment..."
-	@docker compose run --rm api python test_schema_alignment.py
+	@docker compose run --rm api python demo_schema_alignment.py
 
 # =============================================================================
 # Security Scanning

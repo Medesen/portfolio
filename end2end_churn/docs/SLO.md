@@ -15,7 +15,7 @@ This document defines the Service Level Objectives (SLOs) for the Churn Predicti
 - **Measurement Window**: 30 days (rolling)
 - **Downtime Budget**: 3.6 hours/month
 - **Excludes**: Planned maintenance windows
-- **Metric**: `up{job="churn-api"}`
+- **Metric**: `up{job="churn-service"}`
 
 ### What Counts as "Up"
 - Health endpoint returns 200 OK
@@ -25,7 +25,7 @@ This document defines the Service Level Objectives (SLOs) for the Churn Predicti
 ### Monitoring
 ```promql
 # Current availability (last 30 days)
-avg_over_time(up{job="churn-api"}[30d]) * 100
+avg_over_time(up{job="churn-service"}[30d]) * 100
 ```
 
 ---

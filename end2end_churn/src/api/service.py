@@ -30,7 +30,7 @@ logger = get_logger("churn_api")
 # Import MLflow for registry support
 try:
     import mlflow
-    import mlflow.pyfunc
+    import mlflow.sklearn
 
     MLFLOW_AVAILABLE = True
 except ImportError:
@@ -66,27 +66,33 @@ def load_model_from_registry(
     logger.info(f"Loading model from MLflow Registry: {model_name} ({stage} stage)")
 
     try:
-        # Set tracking URI
-        mlflow.set_tracking_uri("./mlruns")
+        # Honor MLFLOW_TRACKING_URI when set; fall back to the local ./mlruns store
+        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "./mlruns"))
 
-        # Load model from registry
-        model_uri = f"models:/{model_name}/{stage}"
-        model = mlflow.pyfunc.load_model(model_uri)
-
-        # Get the underlying sklearn model
-        sk_model = model._model_impl.python_model if hasattr(model, "_model_impl") else model
-
-        # Get model version info
+        # Resolve the newest version in the requested stage via
+        # search_model_versions (get_latest_versions(stages=...) is deprecated
+        # in MLflow 2.x).
         from mlflow.tracking import MlflowClient
 
         client = MlflowClient()
-        versions = client.get_latest_versions(model_name, stages=[stage])
-
+        versions = [
+            v
+            for v in client.search_model_versions(f"name='{model_name}'")
+            if v.current_stage == stage
+        ]
         if not versions:
             raise Exception(f"No model found in {stage} stage")
 
-        version = versions[0].version
-        run_id = versions[0].run_id
+        newest = max(versions, key=lambda v: int(v.version))
+        version = newest.version
+        run_id = newest.run_id
+
+        # Load the sklearn flavor directly: it returns the actual sklearn
+        # Pipeline (with predict_proba). mlflow.pyfunc.load_model would return
+        # a PyFuncModel wrapper that only exposes predict(), which breaks the
+        # predict_proba() contract this service relies on.
+        model_uri = f"models:/{model_name}/{version}"
+        sk_model = mlflow.sklearn.load_model(model_uri)
 
         logger.info(f"Loaded model from registry: version {version}, run {run_id[:8]}")
 
@@ -476,10 +482,14 @@ def predict(
         pred_duration = time.time() - pred_start_time
         model_prediction_time.observe(pred_duration)
 
-    # Determine risk level
-    if churn_probability >= 0.7:
+    # Determine risk level. The bands are anchored to the deployed decision
+    # threshold so the label can never contradict the binary prediction:
+    # churn_prediction == "Yes" always implies at least Medium risk. High stays
+    # an absolute 0.7 band unless the tuned threshold exceeds it.
+    high_cut = max(0.7, threshold)
+    if churn_probability >= high_cut:
         risk_level = "High"
-    elif churn_probability >= 0.4:
+    elif churn_probability >= threshold:
         risk_level = "Medium"
     else:
         risk_level = "Low"

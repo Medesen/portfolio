@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class PredictionRequest(BaseModel):
@@ -32,6 +32,11 @@ class PredictionRequest(BaseModel):
         "Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"
     ] = Field(..., description="Payment method")
     MonthlyCharges: float = Field(..., gt=0, description="Monthly charges in dollars")
+    # No cross-field cap against tenure * MonthlyCharges: MonthlyCharges is the
+    # CURRENT price while TotalCharges is a historical accumulation, so any
+    # customer whose price ever decreased would violate such a cap (and tenure=0
+    # would make the cap 0). Range plausibility is handled as soft warnings by
+    # the Pandera layer instead of hard 422s.
     TotalCharges: float = Field(..., ge=0, description="Total charges to date in dollars")
 
     # Services - Phone
@@ -64,21 +69,6 @@ class PredictionRequest(BaseModel):
     StreamingMovies: Literal["Yes", "No", "No internet service"] = Field(
         ..., description="Whether customer has streaming movies"
     )
-
-    @field_validator("TotalCharges")
-    @classmethod
-    def validate_total_charges(cls, v: float, info) -> float:
-        """Ensure TotalCharges is reasonable given tenure and monthly charges."""
-        # TotalCharges should generally be <= tenure * MonthlyCharges
-        # Allow some flexibility for discounts/promotions
-        if "tenure" in info.data and "MonthlyCharges" in info.data:
-            max_expected = info.data["tenure"] * info.data["MonthlyCharges"] * 1.2  # 20% buffer
-            if v > max_expected:
-                raise ValueError(
-                    f"TotalCharges ({v}) seems too high for tenure ({info.data['tenure']}) "
-                    f"and MonthlyCharges ({info.data['MonthlyCharges']})"
-                )
-        return v
 
     model_config = {
         "json_schema_extra": {
@@ -136,22 +126,6 @@ class PredictionResponse(BaseModel):
                     "warnings": None,
                     "request_id": "abc-123-def-456",
                 }
-            ]
-        }
-    }
-
-
-class HealthResponse(BaseModel):
-    """Response schema for health check."""
-
-    status: Literal["healthy", "unhealthy"] = Field(..., description="Service health status")
-    model_loaded: bool = Field(..., description="Whether model is loaded successfully")
-    model_version: str | None = Field(None, description="Loaded model version")
-
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {"status": "healthy", "model_loaded": True, "model_version": "20251024_183147"}
             ]
         }
     }

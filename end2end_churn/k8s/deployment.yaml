@@ -55,10 +55,27 @@ spec:
     
     spec:
       # Containers in the pod
+      # Pod security context: run as the non-root user baked into the image
+      # (Dockerfile creates appuser with UID/GID 1000)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+
       containers:
       - name: api
-        image: churn-service:latest  # TODO: Replace with your registry/image:tag
-        imagePullPolicy: IfNotPresent  # Change to Always for production with :latest tag
+        # TODO: Replace with your registry/image and a pinned version tag or
+        # digest (e.g. your-registry/churn-service:v1.2.3). A floating :latest
+        # tag makes rollbacks and audit trails unreliable.
+        image: churn-service:latest
+        imagePullPolicy: Always  # For a local (minikube-loaded) image, use IfNotPresent
+
+        # Container security context: no privilege escalation, drop all capabilities
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
         
         ports:
         - name: http
@@ -140,7 +157,12 @@ spec:
         volumeMounts:
         - name: model-storage
           mountPath: /app/models
-          readOnly: false  # Set to true if models are read-only
+          # Serving only reads the model; a writable shared mount would let any
+          # pod overwrite the artifact every replica serves. Retraining inside
+          # the pod (POST /retrain) is disabled in this setup (see ConfigMap:
+          # AUTO_RETRAIN_ON_DRIFT=false) — retrain out-of-band and roll the
+          # Deployment instead.
+          readOnly: true
         - name: logs
           mountPath: /app/logs
       
@@ -178,12 +200,6 @@ spec:
       # Restart policy
       # Always: Restart container if it stops (default for Deployments)
       restartPolicy: Always
-      
-      # Security context (recommended for production)
-      # securityContext:
-      #   runAsNonRoot: true
-      #   runAsUser: 1000
-      #   fsGroup: 1000
 
 ---
 # PersistentVolumeClaim for model storage
@@ -199,9 +215,11 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce  # Can be mounted by one node at a time
-    # Alternatives:
-    # - ReadOnlyMany: Multiple nodes can read
-    # - ReadWriteMany: Multiple nodes can read/write (requires NFS or similar)
+    # NOTE: With 3 replicas, ReadWriteOnce only works while all pods land on
+    # the same node (fine for single-node clusters like minikube). For a
+    # multi-node cluster use ReadOnlyMany (models are mounted read-only) or
+    # ReadWriteMany (requires NFS or similar) — or bake the model into the
+    # image / fetch it in an initContainer and drop the PVC entirely.
   
   resources:
     requests:

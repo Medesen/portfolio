@@ -324,10 +324,12 @@ class TestChecksumIntegration:
                     "f1": 0.71,
                     "roc_auc": 0.84,
                     "avg_precision": 0.79,
+                    "confusion_matrix": {"tn": 95, "fp": 25, "fn": 18, "tp": 62},
                 },
                 search_time=10.5,
                 output_path=metadata_path,
                 config=TrainingConfig(),
+                threshold={"chosen_strategy": "f1_maximization", "chosen_threshold": 0.33},
                 model_checksum="abc123def456",  # Test checksum
             )
 
@@ -338,6 +340,24 @@ class TestChecksumIntegration:
             assert "model_checksum" in metadata
             assert metadata["model_checksum"]["sha256"] == "abc123def456"
             assert metadata["model_checksum"]["algorithm"] == "sha256"
+
+            # Confusion matrices live inside their metric blocks, each labeled
+            # with the decision threshold it was computed at — never top-level.
+            assert "confusion_matrix" not in metadata
+            assert metadata["validation_metrics"]["confusion_matrix"] == {
+                "tn": 100,
+                "fp": 20,
+                "fn": 15,
+                "tp": 65,
+            }
+            assert metadata["validation_metrics"]["decision_threshold"] == 0.5
+            assert metadata["test_metrics"]["confusion_matrix"] == {
+                "tn": 95,
+                "fp": 25,
+                "fn": 18,
+                "tp": 62,
+            }
+            assert metadata["test_metrics"]["decision_threshold"] == 0.33
 
 
 @pytest.mark.unit

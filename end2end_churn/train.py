@@ -218,7 +218,7 @@ def train_model(
     numeric_features: list[str],
     categorical_features: list[str],
     config: TrainingConfig,
-) -> tuple[Pipeline, dict, float]:
+) -> tuple[Pipeline, dict, float, float]:
     """
     Perform hyperparameter tuning via grid search and train best model.
 
@@ -301,7 +301,7 @@ def evaluate_and_analyze(
     numeric_features: list[str],
     categorical_features: list[str],
     run_id: str,
-) -> tuple[dict, np.ndarray, pd.DataFrame]:
+) -> tuple[dict, np.ndarray, np.ndarray, pd.DataFrame]:
     """
     Evaluate model on validation set and generate diagnostic artifacts.
 
@@ -705,7 +705,7 @@ def save_training_artifacts(
     threshold_info: dict,
     config: TrainingConfig,
     run_id: str,
-) -> tuple[str, str, str]:
+) -> tuple[Path, Path, str, Path]:
     """
     Save model, metadata, and configuration files.
 
@@ -820,7 +820,10 @@ def log_to_mlflow(
     register_model = os.getenv("MLFLOW_REGISTER_MODEL", "false").lower() == "true"
     registered_model_name = "churn_prediction_model" if register_model else None
 
-    # Log model (with optional registration)
+    # Log model (with optional registration). pyfunc_predict_fn="predict_proba"
+    # makes the pyfunc flavor serve probabilities, matching the signature
+    # inferred above — without it, pyfunc predict() would return class labels
+    # while the logged signature promises two probability columns.
     if config.mlflow.log_models:
         model_info = mlflow.sklearn.log_model(
             sk_model=best_model,
@@ -828,6 +831,7 @@ def log_to_mlflow(
             signature=signature,
             input_example=X_val.iloc[:5],
             registered_model_name=registered_model_name,  # Register if flag set
+            pyfunc_predict_fn="predict_proba",
         )
         logger.info("Model logged to MLflow")
 
@@ -1045,12 +1049,12 @@ def main(
             )
         )
 
-        # 10. Log to MLflow (model, signature, artifacts)
+        # 11. Log to MLflow (model, signature, artifacts)
         mlflow_run_id = log_to_mlflow(
             best_model, X_val, y_val_proba, metadata_path, run_config_path, config
         )
 
-        # 11. Print training summary
+        # 12. Print training summary
         print_training_summary(
             metrics,
             test_metrics,
@@ -1062,8 +1066,14 @@ def main(
             metrics_val_tuned=metrics_val_tuned,
         )
 
-    finally:
-        # End MLflow run
+    except Exception:
+        # Record the run as FAILED — the default end_run() status would mark a
+        # crashed training run FINISHED in MLflow.
+        if mlflow.active_run():
+            mlflow.end_run(status="FAILED")
+            logger.info("MLflow run ended (FAILED)")
+        raise
+    else:
         if mlflow.active_run():
             mlflow.end_run()
             logger.info("MLflow run ended")

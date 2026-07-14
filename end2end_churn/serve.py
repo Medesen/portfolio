@@ -79,7 +79,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from src.api.schemas import HealthResponse, PredictionRequest, PredictionResponse
+from src.api.schemas import PredictionRequest, PredictionResponse
 from src.api.service import (
     get_metadata_from_cache,
     get_model_from_cache,
@@ -87,6 +87,7 @@ from src.api.service import (
     reset_model_cache,
 )
 from src.api.types import ModelCache
+from src.api.validation import align_schema
 from src.config import DriftConfig, ServiceConfig
 from src.utils.drift import analyze_drift
 from src.utils.logger import request_id_context, setup_logger
@@ -173,8 +174,8 @@ class DriftAnalysisRequest(BaseModel):
 
     customers: list[dict[str, Any]]
 
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "customers": [
                     {
@@ -201,6 +202,7 @@ class DriftAnalysisRequest(BaseModel):
                 ]
             }
         }
+    }
 
 
 class DriftAnalysisResponse(BaseModel):
@@ -1108,6 +1110,16 @@ async def analyze_drift_endpoint(
             status_code=400, detail="Drift analysis requires at least one customer record"
         )
 
+    # Enforce the configured minimum sample size: PSI/KS statistics on a handful
+    # of records are noise, not drift evidence.
+    if len(drift_request.customers) < drift_config.min_sample_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Drift analysis requires at least {drift_config.min_sample_size} records "
+            f"(got {len(drift_request.customers)}). Distribution statistics on smaller "
+            "batches are unreliable. Adjust DRIFT_MIN_SAMPLE_SIZE if needed.",
+        )
+
     if len(drift_request.customers) > drift_config.max_drift_batch_size:
         raise HTTPException(
             status_code=400,
@@ -1116,8 +1128,8 @@ async def analyze_drift_endpoint(
             f"MAX_DRIFT_BATCH_SIZE.",
         )
 
-    # Get model and its deployed decision threshold from the cache
-    model, version, _, threshold = get_model_from_cache(model_cache)
+    # Get model, its recorded schema, and its deployed decision threshold from the cache
+    model, version, expected_features, threshold = get_model_from_cache(model_cache)
 
     if model is None:
         raise HTTPException(status_code=503, detail="Drift analysis unavailable: model not loaded")
@@ -1144,6 +1156,14 @@ async def analyze_drift_endpoint(
     try:
         # Convert to DataFrame
         df = pd.DataFrame(drift_request.customers)
+
+        # Align to the model's recorded schema — the same preprocessing step
+        # /predict applies — so missing/extra/reordered columns behave
+        # identically in both paths instead of failing only here.
+        if expected_features:
+            df, alignment_info = align_schema(df, expected_features)
+            if any(alignment_info.values()):
+                logger.warning(f"Drift batch schema alignment applied: {alignment_info}")
 
         # Score the batch once at the DEPLOYED decision threshold (the same one
         # used by /predict), not the default 0.5 cut. Prediction drift compares
@@ -1204,9 +1224,14 @@ async def analyze_drift_endpoint(
         )
 
     except Exception as e:
+        # Log full details; return a generic message (never leak internals — same
+        # policy as the global exception handler below)
         logger.error(f"Drift analysis failed: {e}", exc_info=True)
         prediction_error_count.labels(error_type="drift_analysis_error").inc()
-        raise HTTPException(status_code=500, detail=f"Drift analysis failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Drift analysis failed due to an internal error. Please try again later.",
+        )
 
 
 @app.get("/drift/info", tags=["Drift Detection"])

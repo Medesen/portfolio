@@ -84,57 +84,86 @@ def test_load_model_from_registry_not_available():
 
 @pytest.mark.integration
 @patch("mlflow.set_tracking_uri")
-@patch("mlflow.pyfunc.load_model")
+@patch("mlflow.sklearn.load_model")
 @patch("mlflow.tracking.MlflowClient")
 def test_load_model_from_registry_success(mock_client_class, mock_load_model, mock_set_uri):
-    """Test successful model loading from registry."""
+    """Test successful model loading from registry via the sklearn flavor."""
     from src.api.service import MLFLOW_AVAILABLE, load_model_from_registry
 
     if not MLFLOW_AVAILABLE:
         pytest.skip("MLflow not available")
 
-    # Mock the model
-    mock_model = Mock()
-    mock_model._model_impl = Mock()
-    mock_model._model_impl.python_model = Mock()
-    mock_load_model.return_value = mock_model
+    # The sklearn flavor returns the actual pipeline (predict_proba intact) —
+    # NOT a pyfunc wrapper whose only interface is predict().
+    mock_pipeline = Mock(spec=["predict", "predict_proba"])
+    mock_load_model.return_value = mock_pipeline
 
     # Mock the client
     mock_client = Mock()
     mock_client_class.return_value = mock_client
 
-    # Mock version info
-    mock_version = Mock()
-    mock_version.version = "1"
-    mock_version.run_id = "test_run_id_12345"
-    mock_client.get_latest_versions.return_value = [mock_version]
+    # Two Production versions plus one in another stage: the loader must
+    # filter by stage and pick the numerically newest version.
+    v1 = Mock(version="1", run_id="run_v1", current_stage="Production")
+    v3 = Mock(version="3", run_id="test_run_id_12345", current_stage="Production")
+    v4 = Mock(version="4", run_id="run_v4", current_stage="Staging")
+    mock_client.search_model_versions.return_value = [v1, v3, v4]
 
     # Mock run and artifacts
     mock_run = Mock()
     mock_client.get_run.return_value = mock_run
     mock_client.list_artifacts.return_value = []  # No metadata
 
-    # Call the function
-    model, version, features, threshold, metadata = load_model_from_registry(
-        "test_model", "Production"
-    )
+    # Call the function (with the tracking-URI env var unset -> ./mlruns default)
+    with patch.dict(os.environ):
+        os.environ.pop("MLFLOW_TRACKING_URI", None)
+        model, version, features, threshold, metadata = load_model_from_registry(
+            "test_model", "Production"
+        )
 
-    # Assertions
-    assert model is not None
-    assert version == "1"
+    # The loader must hand back the sklearn pipeline itself
+    assert model is mock_pipeline
+    assert version == "3"
     assert isinstance(features, list)
     assert threshold == 0.5  # Default when no metadata
     assert metadata is None  # No metadata artifacts in the run
 
-    # Verify MLflow calls
+    # Verify MLflow calls: env-fallback URI, stage filtering, version-pinned URI
     mock_set_uri.assert_called_once_with("./mlruns")
-    mock_load_model.assert_called_once_with("models:/test_model/Production")
-    mock_client.get_latest_versions.assert_called_once_with("test_model", stages=["Production"])
+    mock_load_model.assert_called_once_with("models:/test_model/3")
+    mock_client.search_model_versions.assert_called_once_with("name='test_model'")
 
 
 @pytest.mark.integration
 @patch("mlflow.set_tracking_uri")
-@patch("mlflow.pyfunc.load_model")
+@patch("mlflow.sklearn.load_model")
+@patch("mlflow.tracking.MlflowClient")
+def test_load_model_from_registry_honors_tracking_uri_env(
+    mock_client_class, mock_load_model, mock_set_uri
+):
+    """MLFLOW_TRACKING_URI must override the ./mlruns default."""
+    from src.api.service import MLFLOW_AVAILABLE, load_model_from_registry
+
+    if not MLFLOW_AVAILABLE:
+        pytest.skip("MLflow not available")
+
+    mock_load_model.return_value = Mock(spec=["predict", "predict_proba"])
+    mock_client = Mock()
+    mock_client_class.return_value = mock_client
+    mock_client.search_model_versions.return_value = [
+        Mock(version="1", run_id="run_v1", current_stage="Production")
+    ]
+    mock_client.list_artifacts.return_value = []
+
+    with patch.dict(os.environ, {"MLFLOW_TRACKING_URI": "http://mlflow.internal:5000"}):
+        load_model_from_registry("test_model", "Production")
+
+    mock_set_uri.assert_called_once_with("http://mlflow.internal:5000")
+
+
+@pytest.mark.integration
+@patch("mlflow.set_tracking_uri")
+@patch("mlflow.sklearn.load_model")
 @patch("mlflow.tracking.MlflowClient")
 def test_load_model_from_registry_with_metadata(mock_client_class, mock_load_model, mock_set_uri):
     """Test model loading from registry with metadata extraction."""
@@ -143,21 +172,17 @@ def test_load_model_from_registry_with_metadata(mock_client_class, mock_load_mod
     if not MLFLOW_AVAILABLE:
         pytest.skip("MLflow not available")
 
-    # Mock the model
-    mock_model = Mock()
-    mock_model._model_impl = Mock()
-    mock_model._model_impl.python_model = Mock()
-    mock_load_model.return_value = mock_model
+    # The sklearn flavor returns the pipeline directly
+    mock_pipeline = Mock(spec=["predict", "predict_proba"])
+    mock_load_model.return_value = mock_pipeline
 
     # Mock the client
     mock_client = Mock()
     mock_client_class.return_value = mock_client
 
     # Mock version info
-    mock_version = Mock()
-    mock_version.version = "2"
-    mock_version.run_id = "test_run_id_67890"
-    mock_client.get_latest_versions.return_value = [mock_version]
+    mock_version = Mock(version="2", run_id="test_run_id_67890", current_stage="Production")
+    mock_client.search_model_versions.return_value = [mock_version]
 
     # Mock run
     mock_run = Mock()
@@ -208,8 +233,10 @@ def test_load_model_from_registry_no_model_in_stage(mock_client_class):
     mock_client = Mock()
     mock_client_class.return_value = mock_client
 
-    # Return empty list (no models in stage)
-    mock_client.get_latest_versions.return_value = []
+    # Versions exist, but none in the requested stage
+    mock_client.search_model_versions.return_value = [
+        Mock(version="1", run_id="run_v1", current_stage="Staging")
+    ]
 
     # Should raise exception (MLflow raises "not found" error)
     with pytest.raises(Exception, match="(No model found|not found)"):

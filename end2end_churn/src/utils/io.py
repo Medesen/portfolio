@@ -153,12 +153,19 @@ def save_metadata(
     """
     Save model metadata including hyperparameters, validation metrics, test metrics, and run info.
 
+    The confusion matrices are nested inside ``validation_metrics`` (computed at
+    the default 0.5 threshold) and ``test_metrics`` (computed at the tuned
+    threshold), each alongside a ``decision_threshold`` key, so metric blocks
+    are unambiguous about the operating point they describe.
+
     Args:
         run_id: Unique run identifier (timestamp)
         best_model: Trained model pipeline (for extracting model type)
         best_params: Best hyperparameters from grid search
-        metrics: Validation set evaluation metrics dictionary
-        test_metrics: Test set evaluation metrics dictionary
+        metrics: Validation set evaluation metrics dictionary (must include
+            'confusion_matrix')
+        test_metrics: Test set evaluation metrics dictionary (should include
+            'confusion_matrix'; stored as None when absent)
         search_time: Time taken for hyperparameter search
         output_path: Path where metadata JSON will be saved
         config: Training configuration (for CV folds, scoring metric, etc.)
@@ -172,6 +179,12 @@ def save_metadata(
     classifier = best_model.named_steps["classifier"]
     model_type = type(classifier).__name__
 
+    # Each metric block carries its own confusion matrix so the artifact is
+    # self-describing: validation metrics are computed at the default 0.5
+    # threshold, test metrics at the tuned threshold (see the 'threshold'
+    # section). A single top-level confusion matrix would be ambiguous — the
+    # previous format stored the validation matrix next to test metrics, which
+    # made the artifact internally contradictory.
     metadata = {
         "run_id": run_id,
         "timestamp": datetime.now().isoformat(),
@@ -184,6 +197,8 @@ def save_metadata(
             "f1": float(metrics["f1"]),
             "roc_auc": float(metrics["roc_auc"]),
             "avg_precision": float(metrics["avg_precision"]),
+            "decision_threshold": 0.5,
+            "confusion_matrix": metrics["confusion_matrix"],
         },
         "test_metrics": {
             "accuracy": float(test_metrics["accuracy"]),
@@ -192,8 +207,13 @@ def save_metadata(
             "f1": float(test_metrics["f1"]),
             "roc_auc": float(test_metrics["roc_auc"]),
             "avg_precision": float(test_metrics["avg_precision"]),
+            "decision_threshold": (
+                float(threshold["chosen_threshold"])
+                if threshold and "chosen_threshold" in threshold
+                else None
+            ),
+            "confusion_matrix": test_metrics.get("confusion_matrix"),
         },
-        "confusion_matrix": metrics["confusion_matrix"],
         "training_info": {
             "grid_search_time_seconds": float(search_time),
             "cross_validation_folds": config.model.cv_folds,  # From config

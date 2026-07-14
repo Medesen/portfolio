@@ -1,0 +1,10 @@
+[run]
+omit =
+    tests/*
+    */site-packages/*
+    */__pycache__/*
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False

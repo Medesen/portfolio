@@ -77,14 +77,6 @@ request_duration = Histogram(
     buckets=[0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
 )
 
-# API endpoint-specific latency (for finer-grained monitoring)
-api_endpoint_duration = Histogram(
-    "churn_api_endpoint_duration_seconds",
-    "API endpoint processing time (excludes middleware)",
-    ["endpoint", "method"],  # Labels: endpoint=/predict, method=POST
-    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 1.0],
-)
-
 # =============================================================================
 # Error Metrics (Four Golden Signals: Errors)
 # =============================================================================

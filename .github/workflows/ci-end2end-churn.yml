@@ -91,7 +91,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.lock
       
       - name: Run unit tests
         run: |
@@ -131,7 +131,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.lock
       
       - name: Train a quick model (for API tests)
         run: |
@@ -174,7 +174,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.lock
       
       - name: Run e2e tests
         run: |
@@ -283,7 +283,7 @@ jobs:
           docker compose build api
       
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: 'churn-service:latest'
           format: 'sarif'
@@ -299,7 +299,7 @@ jobs:
           category: 'container-security'
       
       - name: Run Trivy in table format (for logs)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: 'churn-service:latest'
           format: 'table'
@@ -315,7 +315,7 @@ jobs:
         run: |
           docker run --rm churn-service:latest pip list --format=json > pip-packages.json || true
           # Trivy can also scan pip packages
-          docker run --rm -v $PWD:/scan aquasec/trivy fs --scanners vuln /scan/requirements.txt || true
+          docker run --rm -v $PWD:/scan aquasec/trivy fs --scanners vuln /scan/requirements.lock || true
 
   # =============================================================================
   # Job 7: Load Testing & Performance Validation (Issue 8)

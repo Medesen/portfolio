@@ -27,11 +27,11 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements first (for Docker layer caching)
 # If requirements don't change, this layer is cached and pip install is skipped
-COPY requirements.txt .
+COPY requirements.lock .
 
-# Install Python dependencies
-# --no-cache-dir: Don't store pip cache (reduces image size)
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies from the fully pinned lock file (same resolution
+# CI uses). --no-cache-dir: Don't store pip cache (reduces image size)
+RUN pip install --no-cache-dir -r requirements.lock
 
 # Copy application code
 COPY src/ ./src/
@@ -41,7 +41,7 @@ COPY tests/ ./tests/
 COPY pytest.ini .
 COPY serve.py .
 COPY train.py .
-COPY test_schema_alignment.py .
+COPY demo_schema_alignment.py .
 
 # Create user with specified UID/GID to avoid permission issues
 RUN groupadd -g ${GID} appuser && \

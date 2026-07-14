@@ -2,27 +2,27 @@
 
 [![CI Pipeline](https://github.com/Medesen/portfolio/workflows/CI%20-%20End2End%20Churn%20Prediction/badge.svg)](https://github.com/Medesen/portfolio/actions/workflows/ci-end2end-churn.yml)
 
-A production-ready ML service that predicts customer churn for a telecom dataset. I built this to demonstrate end-to-end ML engineering: from training with hyperparameter tuning to serving via REST API, with MLflow experiment tracking, drift detection, monitoring dashboards, and a full CI/CD pipeline. Everything runs in Docker with zero local setup required.
+A production-oriented ML service that predicts customer churn for a telecom dataset. I built this to demonstrate end-to-end ML engineering: from training with hyperparameter tuning to serving via REST API, with MLflow experiment tracking, drift detection, monitoring dashboards, and a full CI/CD pipeline. Everything runs in Docker with zero local setup required.
 
 ## Summary
 
 **Domain:** Telecom customer churn prediction  
 **Dataset:** Telco Customer Churn (7,043 customers, 20 features)  
 **Task:** Binary classification  
-**Best Performance:** ROC AUC 0.840 (held-out test set)  
+**Best Performance:** ROC AUC 0.837 (held-out test set)  
 **Supported Models:** Random Forest, XGBoost, Logistic Regression  
 **Tech Stack:** FastAPI, MLflow, Prometheus/Grafana, Docker, Kubernetes  
 **Test Coverage:** 200+ tests, 91% coverage (full suite, measured in CI-equivalent Docker run)
 
-**Model Performance (held-out test set, F1-tuned threshold ≈ 0.38):**
-- ROC AUC: 0.840
-- Precision (Churn): 57%
-- Recall (Churn): 68%
+**Model Performance (held-out test set, F1-tuned threshold ≈ 0.33):**
+- ROC AUC: 0.837
+- Precision (Churn): 53%
+- Recall (Churn): 74%
 - F1: 0.62
 
-At the default 0.5 threshold the model trades the other way — higher precision, much lower recall (66% / 47% on the validation set). Both are reported, clearly labeled, in [Performance Metrics](#performance-metrics).
+At the default 0.5 threshold the model trades the other way — higher precision, much lower recall (67% / 48% on the validation set). Both are reported, clearly labeled, in [Performance Metrics](#performance-metrics).
 
-**Business Context:** In churn prediction, false negatives (missed churners) cost significantly more than false positives (unnecessary retention campaigns) due to lost customer lifetime value. Industry estimates suggest this cost ratio is often 20x or higher. The model uses threshold tuning to balance these asymmetric costs, prioritizing recall while maintaining acceptable precision.
+**Business Context:** In churn prediction, false negatives (missed churners) cost significantly more than false positives (unnecessary retention campaigns) due to lost customer lifetime value. Industry estimates commonly put this cost ratio at 10–50x. The model uses threshold tuning to balance these asymmetric costs, prioritizing recall while maintaining acceptable precision.
 
 ---
 
@@ -148,7 +148,7 @@ Deployment is fully containerized—everything runs in Docker with no local Pyth
 
 **Docker-only execution:** Rather than support both local and containerized workflows, I made Docker mandatory. This eliminates "works on my machine" issues and ensures hiring managers can run the project with just `make setup`. It also enforces production parity—training happens in the same environment where models deploy.
 
-**Threshold optimization:** The default 0.5 classification threshold ignores both class imbalance and business costs. For churn prediction, missing a churner (false negative) costs significantly more than an unnecessary retention campaign (false positive)—often 20x or more due to lost lifetime value. I implemented F1-optimized thresholds (≈0.38 for this dataset) and included alternative strategies like precision-constrained and cost-sensitive thresholds.
+**Threshold optimization:** The default 0.5 classification threshold ignores both class imbalance and business costs. For churn prediction, missing a churner (false negative) costs significantly more than an unnecessary retention campaign (false positive)—commonly estimated at 10–50x due to lost lifetime value. I implemented F1-optimized thresholds (≈0.33 for this dataset) and included alternative strategies like precision-constrained and cost-sensitive thresholds (the cost-sensitive example in training uses a 10x ratio).
 
 **MLflow tracking as default:** I made experiment tracking mandatory rather than optional. This prevents lost experiments and adds minimal overhead (~100ms per run) while ensuring complete reproducibility. The model registry supports proper staging workflows, though local file loading remains the default for simplicity.
 
@@ -814,7 +814,7 @@ Before production deployment:
 
 The default 0.5 classification threshold is inappropriate for imbalanced data and ignores business costs. **In churn prediction, false negatives (missed churners) typically cost 10-50x more than false positives** (unnecessary retention campaigns) due to lost customer lifetime value.
 
-The model automatically optimizes thresholds using F1 maximization, which provides a reasonable balance for this cost asymmetry. For this dataset, the optimal threshold is ≈0.38 instead of 0.5, raising churn recall from 47% to 68% at 57% precision on the held-out test set.
+The model automatically optimizes thresholds using F1 maximization, which provides a reasonable balance for this cost asymmetry. For this dataset, the optimal threshold is ≈0.33 instead of 0.5, raising churn recall from 48% (validation set at the 0.5 default) to 74% on the held-out test set, at 53% precision.
 
 **Available Strategies:**
 - **F1 Maximization** (default) - Balances precision/recall for imbalanced data
@@ -865,22 +865,22 @@ SHA256 checksums validate model files:
 
 ## Performance Metrics
 
-**Model Performance (held-out test set, F1-tuned threshold ≈ 0.38):**
-- ROC AUC: 0.840
-- Precision (Churn): 57%
-- Recall (Churn): 68%
-- Accuracy: 78%
+**Model Performance (held-out test set, F1-tuned threshold ≈ 0.33):**
+- ROC AUC: 0.837
+- Precision (Churn): 53%
+- Recall (Churn): 74%
+- Accuracy: 76%
 
 **For comparison (validation set, default 0.5 threshold):**
-- ROC AUC: 0.836
-- Precision (Churn): 66%
-- Recall (Churn): 47%
+- ROC AUC: 0.831
+- Precision (Churn): 67%
+- Recall (Churn): 48%
 - Accuracy: 80%
 
 Threshold tuning deliberately trades precision and raw accuracy for recall — the right direction when a missed churner costs far more than a wasted retention offer.
 
 **Business Impact (Illustrative):**
-The model catches 68% of churners (255 out of 374 in the held-out test set) at 57% precision. In typical telecom scenarios, missing a churner costs significantly more than unnecessary retention efforts—often **estimated at 20x or higher** due to lost lifetime value vs. relatively low-cost retention campaigns. 
+The model catches 74% of churners (275 out of 374 in the held-out test set) at 53% precision. In typical telecom scenarios, missing a churner costs significantly more than unnecessary retention efforts—commonly **estimated at 10–50x** due to lost lifetime value vs. relatively low-cost retention campaigns. 
 
 The model's threshold tuning (F1 maximization) balances these asymmetric costs, prioritizing recall while maintaining acceptable precision. The exact cost ratio varies by business context, customer segment, and retention strategy.
 
@@ -1010,7 +1010,7 @@ I used standard classification metrics (ROC AUC, precision, recall, F1) on a hel
 
 The default 0.5 threshold assumes balanced classes and equal costs for false positives vs false negatives. In churn prediction, this is wrong on both counts:
 - Classes are imbalanced (~26.5% churn rate)
-- False negatives (missed churners) cost 20x more than false positives due to lost lifetime value
+- False negatives (missed churners) cost far more than false positives — commonly estimated at 10–50x — due to lost lifetime value
 
 F1 optimization provides a reasonable balance. For production, I'd recommend cost-sensitive thresholds once actual business costs are quantified.
 

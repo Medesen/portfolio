@@ -94,16 +94,18 @@ class TestPSICalculation:
         # PSI should be non-zero due to missing category
         assert psi > 0, "PSI should detect missing category"
 
-    def test_psi_custom_threshold(self):
-        """PSI should respect custom threshold parameter."""
-        expected = {"A": 0.5, "B": 0.5}
-        actual = {"A": 0.4, "B": 0.6}
+    def test_categorical_drift_threshold_applies_in_detector(self):
+        """The drift decision threshold lives in detect_categorical_drift, not calculate_psi."""
+        reference_stats = {"distribution": {"A": 0.5, "B": 0.5}}
+        current = pd.Series(["A"] * 20 + ["B"] * 80)
 
-        # With very high threshold, should be stable
-        psi, interpretation = calculate_psi(expected, actual, threshold=1.0)
+        strict = detect_categorical_drift(reference_stats, current, threshold=0.01)
+        lenient = detect_categorical_drift(reference_stats, current, threshold=10.0)
 
-        assert psi < 1.0
-        assert interpretation in ["stable", "moderate_drift"]
+        # Same PSI value either way; only the decision changes with the threshold
+        assert strict["metrics"]["psi"] == lenient["metrics"]["psi"]
+        assert strict["drift_detected"] is True
+        assert lenient["drift_detected"] is False
 
 
 # =============================================================================

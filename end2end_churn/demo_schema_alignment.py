@@ -1,7 +1,9 @@
 """
-Test script to demonstrate schema alignment and validation.
+Demo script for schema alignment and validation (run with `python demo_schema_alignment.py`).
 
-This script tests the API's ability to handle:
+Not a pytest suite — it prints its checks instead of asserting them; the
+assertion-based coverage of the same behavior lives in tests/. This script
+demonstrates the API's ability to handle:
 1. Perfect input (no warnings)
 2. Reordered columns (should handle gracefully)
 3. Extra columns (should ignore them)

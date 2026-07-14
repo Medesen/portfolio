@@ -9,6 +9,7 @@ Provides commands for:
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -26,8 +27,8 @@ MODEL_NAME = "churn_prediction_model"
 
 
 def setup_mlflow():
-    """Configure MLflow tracking URI."""
-    tracking_uri = "./mlruns"
+    """Configure MLflow tracking URI (MLFLOW_TRACKING_URI env var, default ./mlruns)."""
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "./mlruns")
     mlflow.set_tracking_uri(tracking_uri)
     return MlflowClient()
 

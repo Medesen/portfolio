@@ -273,7 +273,8 @@ def test_predict_endpoint_with_all_features(client, sample_features):
 @pytest.mark.api
 def test_drift_endpoint_valid_request(client, sample_features):
     """Test /drift endpoint with valid data."""
-    customers = sample_features.head(50).to_dict("records")
+    # The full 100-row fixture: /drift enforces DRIFT_MIN_SAMPLE_SIZE (default 100)
+    customers = sample_features.to_dict("records")
     request_data = {"customers": customers}
 
     response = client.post("/drift", json=request_data)
@@ -307,6 +308,19 @@ def test_drift_endpoint_empty_batch(client):
 
     # Should return 400 (Bad Request) - business logic error
     assert response.status_code in [400, 422]
+
+
+@pytest.mark.integration
+@pytest.mark.api
+def test_drift_endpoint_rejects_batch_below_min_sample_size(client, sample_features):
+    """Batches below DRIFT_MIN_SAMPLE_SIZE are rejected: drift statistics on a
+    handful of records are noise, not evidence."""
+    customers = sample_features.head(5).to_dict("records")
+
+    response = client.post("/drift", json={"customers": customers})
+
+    assert response.status_code == 400
+    assert "at least" in response.json()["detail"]
 
 
 @pytest.mark.integration

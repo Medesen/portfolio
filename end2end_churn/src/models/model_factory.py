@@ -40,7 +40,6 @@ def get_model(model_type: str, random_state: int = 42):
         "xgboost": xgb.XGBClassifier(
             random_state=random_state,
             eval_metric="logloss",
-            use_label_encoder=False,  # Suppress label encoder warnings
             objective="binary:logistic",  # Explicit binary classification
             verbosity=0,  # Suppress training output warnings
             n_jobs=1,  # Avoid nested parallelism with GridSearchCV
