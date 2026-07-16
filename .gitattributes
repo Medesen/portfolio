@@ -57,3 +57,8 @@ Makefile text eol=lf
 # (the Hillstrom CSV ships with CRLF line endings; do not normalize them)
 causal_uplift/data/raw/hillstrom_email.csv binary
 
+# Vendored third-party corpus - scikit-learn's own HTML docs, bundled as RAG
+# input for reproducibility (see rag_pipeline/README.md). Not authored here, so
+# keep it out of GitHub's language stats; it is 87% of tracked bytes.
+rag_pipeline/data/corpus/** linguist-vendored
+
