@@ -96,7 +96,8 @@ Ranking by predicted **uplift** beats both random targeting and the naive
 "response model" (target whoever is most likely to visit) at every depth —
 mailing only the **top 30%** captures **55%** of the incremental visits that
 mailing everyone would. At ~**$9.38 of incremental spend per incremental visit**
-— the ratio of the spend and visit ATEs, experiment-wide; indicative only, since
+— the ratio of the Women's-arm spend and visit ATEs, computed on the full
+experiment sample rather than the test split; indicative only, since
 spend's ATE carries a wide CI — that top-10% group is worth ~**$936 per 1,000
 mailed**. The
 decile table shows both the strength and the honest limit of the ranking: the
@@ -189,7 +190,7 @@ upliftlab all
 
 ## Testing
 
-18 tests, all runnable in Docker:
+22 tests, all runnable in Docker:
 
 ```bash
 make test
@@ -223,7 +224,7 @@ causal_uplift/
 │   ├── experiment/               # Balance (SMD), ATE inference, CUPED / adjustment
 │   ├── uplift/                   # S/T/X-learners; Qini, deciles, targeting, plot
 │   └── main.py                   # CLI: balance / ate / cuped / uplift / all
-├── tests/                        # 18 tests incl. estimator-recovery on known truth
+├── tests/                        # 22 tests incl. estimator-recovery on known truth
 ├── assets/                       # Qini figure
 ├── Dockerfile / docker-compose.yml / Makefile / setup.sh / setup.ps1
 └── outputs/                      # Result tables (gitignored)

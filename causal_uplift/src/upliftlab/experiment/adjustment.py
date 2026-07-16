@@ -97,7 +97,15 @@ def cuped(
     y = sub[outcome].to_numpy(dtype=float)
     x = sub[pre_covariate].to_numpy(dtype=float)
 
-    theta = np.cov(y, x, ddof=1)[0, 1] / x.var(ddof=1)
+    if not (np.isfinite(y).all() and np.isfinite(x).all()):
+        raise ValueError("cuped requires finite outcome and covariate values (no NaN/inf)")
+    var_x = x.var(ddof=1) if len(x) >= 2 else float("nan")
+    if not var_x > 1e-12:
+        raise ValueError(
+            f"pre_covariate {pre_covariate!r} has (near-)zero variance; "
+            "theta = Cov(Y, X) / Var(X) is undefined for a constant covariate"
+        )
+    theta = np.cov(y, x, ddof=1)[0, 1] / var_x
     y_adj = y - theta * (x - x.mean())
     ate_adj, se_adj = diff_in_means(y_adj, t)
     return _result(outcome, "CUPED", pre_covariate, y, t, ate_adj, se_adj, theta=theta, alpha=alpha)

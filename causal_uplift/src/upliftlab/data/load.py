@@ -12,7 +12,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 _RAW_REL = Path("data") / "raw" / "hillstrom_email.csv"
@@ -85,15 +84,17 @@ def design_matrix(
     df: pd.DataFrame,
     numeric: list[str] | None = None,
     categorical: list[str] | None = None,
+    columns: list[str] | None = None,
 ) -> tuple[pd.DataFrame, list[str]]:
     """Build a numeric feature matrix (one-hot categoricals) for the learners.
 
-    Returns ``(X, feature_names)``. One-hot columns are derived from the
-    categories present in ``df`` (plain ``pd.get_dummies``), so encode the
-    FULL dataset first and split by row index afterwards — encoding train and
-    test separately can produce misaligned matrices if a level is absent from
-    one side. Every caller in this package follows that encode-then-split
-    order.
+    Returns ``(X, feature_names)``. When ``columns`` is given, the output is
+    reindexed to exactly that column set: dummy levels absent from ``df`` are
+    filled with 0.0 and levels unseen in ``columns`` are dropped — the
+    ``OneHotEncoder(handle_unknown="ignore")`` behaviour. Callers that split
+    into train/test derive the schema from the *training* rows and pass it
+    back in for every other split, so the test set never influences the
+    feature schema (see ``run_uplift``).
     """
     numeric = numeric if numeric is not None else NUMERIC_COVARIATES
     categorical = categorical if categorical is not None else CATEGORICAL_COVARIATES
@@ -102,6 +103,8 @@ def design_matrix(
         dummies = pd.get_dummies(df[col], prefix=col, drop_first=True, dtype=float)
         parts.append(dummies.reset_index(drop=True))
     X = pd.concat(parts, axis=1)
+    if columns is not None:
+        X = X.reindex(columns=columns, fill_value=0.0)
     return X, list(X.columns)
 
 

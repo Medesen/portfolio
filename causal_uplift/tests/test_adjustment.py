@@ -29,6 +29,22 @@ def test_cuped_no_reduction_when_covariate_uncorrelated():
     assert abs(r.var_reduction) < 0.05
 
 
+def test_cuped_rejects_constant_covariate():
+    # A zero-variance covariate makes theta = Cov(Y, X) / Var(X) undefined;
+    # this must be a clear error, not a silent division by zero.
+    d = _df(rho=0.5).copy()
+    d["pre"] = 1.0
+    with pytest.raises(ValueError, match="zero variance"):
+        cuped(d, "y", pre_covariate="pre", arm_col="t", control=0, treatment=1)
+
+
+def test_cuped_rejects_non_finite_values():
+    d = _df(rho=0.5).copy()
+    d.loc[0, "pre"] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        cuped(d, "y", pre_covariate="pre", arm_col="t", control=0, treatment=1)
+
+
 def test_regression_adjustment_beats_single_covariate_cuped():
     # y depends on x2, x3, and pre; adjusting for all should reduce variance
     # more than CUPED on `pre` alone.

@@ -52,6 +52,12 @@ def make_synthetic_rct(
     confound : if > 0, treatment probability depends on ``x1`` (assignment is no
         longer randomized) — used to prove the balance check flags imbalance.
     """
+    if not (isinstance(n, (int, np.integer)) and n >= 1):
+        raise ValueError(f"n must be a positive integer, got {n!r}")
+    if not 0.0 < p_treat < 1.0:
+        raise ValueError(f"p_treat must be strictly between 0 and 1, got {p_treat!r}")
+    if not -1.0 <= rho_pre <= 1.0:
+        raise ValueError(f"rho_pre is a correlation and must be in [-1, 1], got {rho_pre!r}")
     rng = np.random.default_rng(seed)
     x1, x2, x3 = (rng.standard_normal(n) for _ in range(3))
     pre = rng.standard_normal(n)

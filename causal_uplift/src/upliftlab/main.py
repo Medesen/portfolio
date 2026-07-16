@@ -1,8 +1,9 @@
 """CLI entry point: ``upliftlab {balance,ate,cuped,uplift,all}``.
 
 Each subcommand prints its result and writes a CSV to ``outputs/`` (the Qini
-figure goes to ``assets/``). ``all`` runs the full pipeline and reproduces every
-number and figure in the README.
+figure goes to ``outputs/qini_curve.png``; commit a copy to ``assets/`` for the
+README). ``all`` runs the full pipeline and reproduces every number and figure
+in the README.
 """
 
 from __future__ import annotations
@@ -112,13 +113,17 @@ def run_uplift(
         raise ValueError(f"test_size must be strictly between 0 and 1, got {test_size}")
 
     sub = two_arm(df, treatment)
-    X, _ = design_matrix(sub)
     y = sub[outcome].to_numpy(float)
     t = sub["t"].to_numpy(int)
     kind = "continuous" if outcome == "spend" else "binary"
 
     idx = np.arange(len(sub))
     tr, te = train_test_split(idx, test_size=test_size, random_state=seed, stratify=t)
+    # Feature schema comes from the TRAINING rows only; the full frame is then
+    # encoded to that schema (unseen test levels one-hot to all-zero), so the
+    # test split never influences which dummy columns exist.
+    _, train_cols = design_matrix(sub.iloc[tr])
+    X, _ = design_matrix(sub, columns=train_cols)
     # Selection fold: carved out of the TRAINING side only. The "best" learner
     # is chosen on this validation fold, never on the test split — selecting
     # the winner on the same sample that produces its headline decile/targeting
