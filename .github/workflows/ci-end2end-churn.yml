@@ -267,6 +267,9 @@ jobs:
     name: Container Security Scan (advisory)
     runs-on: ubuntu-latest
     needs: docker-test
+    # Advisory also at the job level: infrastructure failures (e.g. an
+    # unresolvable action ref) must not fail the workflow either.
+    continue-on-error: true
     defaults:
       run:
         working-directory: end2end_churn
@@ -288,7 +291,9 @@ jobs:
           docker compose build api
       
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
+        # Pinned to the v0.36.0 commit: upstream re-tagged releases (0.x.y ->
+        # v0.x.y), which orphaned bare version pins; a SHA can't be re-pointed.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           image-ref: 'churn-service:latest'
           format: 'sarif'
@@ -304,7 +309,7 @@ jobs:
           category: 'container-security'
       
       - name: Run Trivy in table format (for logs)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           image-ref: 'churn-service:latest'
           format: 'table'
