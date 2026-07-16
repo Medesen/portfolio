@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 from typing import Dict, Any, Optional
-from functools import lru_cache
 import hashlib
 
 from ..generation.llm_client import OllamaClient
@@ -22,39 +21,41 @@ class QueryRewriter:
     Includes LRU caching for repeated queries and graceful fallback on LLM failure.
     """
     
+    # Written flush-left: a class-level indented literal would send 4+ spaces
+    # of leading whitespace on every line to the LLM.
     REWRITE_PROMPT = """You are a query rewriter for a scikit-learn documentation search system.
 
-    Rewrite the following query to improve search results:
-    - Clarify ambiguous phrases
-    - Add relevant synonyms for scikit-learn concepts
-    - Remove conversational filler words (um, like, I want to know, how do I, etc.)
-    - Expand abbreviations while keeping the original
-    - Keep the query concise and focused on technical terms
-    - Preserve the core technical topic from the original query
-    - Ignore irrelevant content and focus only on the machine learning question
+Rewrite the following query to improve search results:
+- Clarify ambiguous phrases
+- Add relevant synonyms for scikit-learn concepts
+- Remove conversational filler words (um, like, I want to know, how do I, etc.)
+- Expand abbreviations while keeping the original
+- Keep the query concise and focused on technical terms
+- Preserve the core technical topic from the original query
+- Ignore irrelevant content and focus only on the machine learning question
 
-    Examples:
-    - "um how do i normalize stuff" → "StandardScaler normalize features preprocessing"
-    - "SVM" → "Support Vector Machine SVM classification"
-    - "so I was eating pizza yesterday and wondered about cross validation lol" → "cross-validation model evaluation KFold"
-    - "RF for classification" → "Random Forest RandomForestClassifier ensemble"
-    - "my cat walked on my keyboard but anyway how to handle missing data" → "missing values imputation SimpleImputer"
-    - "PCA dimensionality" → "Principal Component Analysis PCA dimensionality reduction"
-    - "logistic regression example" → "LogisticRegression binary classification linear model"
-    - "k means clustering" → "KMeans clustering unsupervised learning"
-    - "yo bro I need help with decision trees and overfitting, gonna grab coffee brb" → "DecisionTreeClassifier overfitting pruning max_depth"
-    - "train test split" → "train_test_split model evaluation data splitting"
-    - "gradient boosting vs random forest" → "GradientBoostingClassifier RandomForestClassifier ensemble comparison"
-    - "how to tune hyperparameters" → "GridSearchCV hyperparameter tuning model selection"
-    - "neural network mlp" → "MLPClassifier neural network multi-layer perceptron"
-    - "I was at the gym thinking about feature selection what are the methods" → "feature selection SelectKBest RFE mutual_info"
-    - "confusion matrix accuracy" → "confusion_matrix accuracy_score precision recall metrics"
-    - "pipeline preprocessing" → "Pipeline ColumnTransformer preprocessing workflow"
+Examples:
+- "um how do i normalize stuff" → "StandardScaler normalize features preprocessing"
+- "SVM" → "Support Vector Machine SVM classification"
+- "so I was eating pizza yesterday and wondered about cross validation lol" → "cross-validation model evaluation KFold"
+- "RF for classification" → "Random Forest RandomForestClassifier ensemble"
+- "my cat walked on my keyboard but anyway how to handle missing data" → "missing values imputation SimpleImputer"
+- "PCA dimensionality" → "Principal Component Analysis PCA dimensionality reduction"
+- "logistic regression example" → "LogisticRegression binary classification linear model"
+- "k means clustering" → "KMeans clustering unsupervised learning"
+- "yo bro I need help with decision trees and overfitting, gonna grab coffee brb" → "DecisionTreeClassifier overfitting pruning max_depth"
+- "train test split" → "train_test_split model evaluation data splitting"
+- "gradient boosting vs random forest" → "GradientBoostingClassifier RandomForestClassifier ensemble comparison"
+- "how to tune hyperparameters" → "GridSearchCV hyperparameter tuning model selection"
+- "neural network mlp" → "MLPClassifier neural network multi-layer perceptron"
+- "I was at the gym thinking about feature selection what are the methods" → "feature selection SelectKBest RFE mutual_info"
+- "confusion matrix accuracy" → "confusion_matrix accuracy_score precision recall metrics"
+- "pipeline preprocessing" → "Pipeline ColumnTransformer preprocessing workflow"
 
-    Return ONLY the rewritten query, nothing else. No explanations, no quotes.
+Return ONLY the rewritten query, nothing else. No explanations, no quotes.
 
-    Original query: {query}
-    Rewritten query:"""
+Original query: {query}
+Rewritten query:"""
 
     def __init__(
         self,
@@ -108,8 +109,16 @@ class QueryRewriter:
         return hashlib.md5(query.lower().strip().encode()).hexdigest()
     
     def _get_from_cache(self, query: str) -> Optional[str]:
-        """Get a cached rewrite if available."""
+        """Get a cached rewrite if available, refreshing its recency.
+
+        Moving the key to the end of the eviction order on read is what makes
+        the cache LRU rather than FIFO: an entry that keeps being used is not
+        the one evicted at capacity.
+        """
         key = self._get_cache_key(query)
+        if key in self._cache:
+            self._cache_order.remove(key)
+            self._cache_order.append(key)
         return self._cache.get(key)
     
     def _add_to_cache(self, query: str, rewritten: str) -> None:

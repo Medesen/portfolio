@@ -1,9 +1,7 @@
 """Tests for hybrid search functionality (BM25 + Semantic with RRF)."""
 
 import pytest
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 import numpy as np
 
 from src.retrieval.bm25_index import BM25Index
@@ -421,8 +419,6 @@ class TestRRFMathematics:
     
     def test_rrf_k_dampening_effect(self):
         """Verify higher rrf_k reduces impact of top-ranked documents."""
-        alpha = 0.7
-        
         # With k=60, rank 1 vs rank 10 difference
         k_60_rank_1 = 1 / (60 + 1)
         k_60_rank_10 = 1 / (60 + 10)

@@ -81,9 +81,10 @@ def run_benchmark(
         logger_name="benchmark_vector_store"
     )
     
-    # BM25 index
+    # BM25 index — lives under the "bm25" subdirectory of the vector store,
+    # matching where the Indexer writes it (see Indexer.__init__ / main.py)
     bm25_index = BM25Index(
-        persist_directory=config.get_path("paths.vector_store_dir")
+        persist_directory=config.get_path("paths.vector_store_dir") / "bm25"
     )
     if not bm25_index.load_index(strategy):
         logger.error(f"Failed to load BM25 index for strategy '{strategy}'")
@@ -212,10 +213,14 @@ def run_benchmark(
             }
             
             # Print summary for this overfetch value
+            def _fmt(metric_key: str, fallback_key: str) -> str:
+                value = avg_metrics.get(metric_key, avg_metrics.get(fallback_key))
+                return f"{value:.4f}" if isinstance(value, (int, float)) else "N/A"
+
             logger.info(f"\n  Results for overfetch_k={overfetch_k}:")
-            logger.info(f"    Recall@{final_top_k}: {avg_metrics.get(f'recall@{final_top_k}', avg_metrics.get('recall@10', 'N/A')):.4f}")
+            logger.info(f"    Recall@{final_top_k}: {_fmt(f'recall@{final_top_k}', 'recall@10')}")
             logger.info(f"    MRR: {avg_metrics.get('mrr', 0):.4f}")
-            logger.info(f"    NDCG@{final_top_k}: {avg_metrics.get(f'ndcg@{final_top_k}', avg_metrics.get('ndcg@10', 'N/A')):.4f}")
+            logger.info(f"    NDCG@{final_top_k}: {_fmt(f'ndcg@{final_top_k}', 'ndcg@10')}")
             logger.info(f"    Topic Coverage: {avg_metrics.get('topic_coverage', 0):.4f}")
             logger.info(f"    Avg Rerank Time: {avg_rerank_time_ms:.1f}ms")
             logger.info(f"    Avg Total Time: {avg_total_time_ms:.1f}ms")

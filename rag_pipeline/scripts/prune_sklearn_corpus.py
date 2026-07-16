@@ -3,7 +3,7 @@
 Prepare a reproducible, slimmed-down scikit-learn documentation corpus for RAG.
 
 Usage:
-  python scripts/prepare_sklearn_corpus.py \
+  python scripts/prune_sklearn_corpus.py \
       --root data/corpus \
       --input-name scikit-learn-docs \
       [--suffix stable|dev|none] \
@@ -21,11 +21,9 @@ with --input-name and it will still prune + (re)write the DATASET_CARD.md.
 from __future__ import annotations
 import argparse
 import datetime as dt
-import os
 import re
 import shutil
 from pathlib import Path
-from typing import Iterable, List
 
 KEEP_API = True  # keep entire api/ (small, useful)
 # Keep selected auto_examples subfolders (the "keep-a-bit-more" variant)
@@ -95,7 +93,7 @@ add or rename pages. Re-run this same script to regenerate a consistent corpus.
 ## Provenance
 - Version: {version} {label}
 - Processed at: {timestamp} UTC
-- Script: scripts/prepare_sklearn_corpus.py (deterministic rules as above)
+- Script: scripts/prune_sklearn_corpus.py (deterministic rules as above)
 """
 
 def detect_version_and_label(doc_root: Path, user_suffix: str | None) -> tuple[str, str | None]:
@@ -243,10 +241,7 @@ def main():
 
   doc_root = args.root / args.input_name
   if not doc_root.exists():
-      # Allow passing a versioned name as input if it already exists
-      doc_root = args.root / args.input_name
-      if not doc_root.exists():
-          raise SystemExit(f"Could not find docs at: {doc_root}")
+      raise SystemExit(f"Could not find docs at: {doc_root}")
 
   # Detect version/label BEFORE deleting _static
   version, label = detect_version_and_label(doc_root, args.suffix)

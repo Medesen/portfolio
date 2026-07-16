@@ -19,7 +19,7 @@ A RAG (Retrieval-Augmented Generation) system built to compare chunking strategi
 |----------|-----------|-----|---------|
 | Fixed | 0.51 | 0.51 | 0.40 |
 | Semantic | 0.46 | 0.48 | 0.36 |
-| Hierarchical | 0.50 | 0.47 | 0.37 |
+| Hierarchical | 0.49 | 0.46 | 0.36 |
 
 **Evaluation scope (important):** these numbers isolate the *chunking strategies* under plain semantic retrieval — no hybrid BM25 fusion, no query rewriting, no cross-encoder reranking. The shipped default pipeline (`make query`) enables all three, so its end-to-end retrieval quality is not what this table measures. Holding the rest of the pipeline at its simplest configuration keeps the chunking comparison clean, but an end-to-end evaluation of the full default pipeline is future work. The differences between strategies are also small for a 35-question test set and should be read as directional, not definitive.
 
@@ -174,9 +174,9 @@ The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. E
 
 ### Unit Tests
 
-The project includes 103 unit tests demonstrating testing patterns for core components: configuration loading, chunking strategies, evaluation metrics, embedder functionality, hybrid search (BM25, RRF fusion, alpha weighting), query rewriting (LLM integration, caching, fallback behavior), and cross-encoder reranking (score reordering, fallback behavior, timing metadata). The systematic evaluation framework (35 test questions with IR metrics) serves as the primary validation mechanism for end-to-end behavior.
+The project includes 111 unit tests demonstrating testing patterns for core components: configuration loading, chunking strategies, evaluation metrics, embedder functionality, hybrid search (BM25, RRF fusion, alpha weighting), query rewriting (LLM integration, caching, fallback behavior), and cross-encoder reranking (score reordering, fallback behavior, timing metadata). The systematic evaluation framework (35 test questions with IR metrics) serves as the primary validation mechanism for end-to-end behavior.
 
-**Test Results:** All 103 tests passing
+**Test Results:** All 111 tests passing
 
 **Production considerations:** This test suite demonstrates patterns but is not exhaustive. For production, I would add comprehensive edge case testing, integration tests, and performance tests. (The unit suite already runs in CI on every push via a path-filtered GitHub Actions workflow, installing from the pinned `requirements.lock`.)
 
@@ -242,9 +242,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system design.
 ## Domain & Dataset
 
 **Domain:** Technical documentation Q&A  
-**Dataset:** Scikit-learn 1.7.2 documentation (420 documents)
+**Dataset:** Scikit-learn 1.7.2 documentation (420 HTML documents; 416 processed — 4 are skipped for having <50 characters of extractable content)
 
-**Corpus composition:**
+**Corpus composition (416 processed documents):**
 - API documentation: 251 files (60.3%)
 - User guides: 46 files (11.1%)
 - Example notebooks: 82 files (19.7%)
@@ -352,15 +352,22 @@ make clean-all
 Edit `config/config.yaml` to customize:
 
 ```yaml
-# Chunking strategies
+# Chunking strategies (note: nested under chunking.strategies, and each
+# strategy carries an enabled flag — this shape must match config/config.yaml,
+# which is validated on load)
 chunking:
-  fixed:
-    chunk_size: 512  # tokens (~384 words)
-    overlap: 50
-  semantic:
-    max_chunk_size: 1000  # words
-  hierarchical:
-    max_chunk_size: 1000
+  strategies:
+    fixed:
+      enabled: true
+      chunk_size: 512  # tokens (~384 words)
+      overlap: 50
+    semantic:
+      enabled: true
+      max_chunk_size: 1000  # words
+      method: "sentence"
+    hierarchical:
+      enabled: true
+      max_chunk_size: 1000
 
 # Embedding model (easy to swap!)
 embeddings:
@@ -580,7 +587,7 @@ docker compose exec ollama ollama list
 **Generation is slow**
 - Normal for CPU: ~2-3 seconds (3B model)
 - Use smaller model: Change to `llama3.2:1b` in config
-- Or use larger model for better quality: `llama3.2:8b` (slower, needs more RAM)
+- Or use larger model for better quality: `llama3.1:8b` (slower, needs more RAM; Llama 3.2 only ships 1B/3B)
 
 **Tests fail with import errors**
 ```bash
@@ -606,7 +613,7 @@ See detailed troubleshooting in:
 
 ### What about unit tests?
 
-See the [Testing](#testing) section above. The project includes 103 unit tests demonstrating patterns for core components, with the systematic evaluation framework (35 test questions with IR metrics) serving as the primary end-to-end validation.
+See the [Testing](#testing) section above. The project includes 111 unit tests demonstrating patterns for core components, with the systematic evaluation framework (35 test questions with IR metrics) serving as the primary end-to-end validation.
 
 ### What would you change for production?
 
@@ -700,6 +707,6 @@ notes. The repository-wide [LICENSE](../LICENSE) applies the same terms.
 
 ---
 
-**Last Updated:** December 2025  
+**Last Updated:** July 2026  
 **Docker Support:** Linux, macOS, Windows  
 **Total Setup Time:** ~10 minutes

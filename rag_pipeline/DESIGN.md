@@ -1,7 +1,7 @@
 # Design Principles & Trade-offs
 
-**Version:** 1.2  
-**Last Updated:** December 2025
+**Version:** 1.3  
+**Last Updated:** July 2026
 
 This document explains the design philosophy behind the RAG Pipeline, key architectural decisions, and trade-offs made throughout development.
 
@@ -592,7 +592,7 @@ This adds ~1-2 seconds of startup overhead per query. For production deployments
    - Integration tests
    - Performance/load tests
    - Deployment pipelines
-   - (Unit tests and GitHub Actions CI are already in place — 101 tests run on
+   - (Unit tests and GitHub Actions CI are already in place — 111 tests run on
      every push from the pinned lock file)
 
 5. **Error Recovery**

@@ -1,7 +1,7 @@
 # System Architecture
 
-**Version:** 1.2  
-**Last Updated:** December 2025
+**Version:** 1.3  
+**Last Updated:** July 2026
 
 This document describes the complete architecture of the RAG Pipeline system, including data flow, component interactions, and infrastructure design.
 
@@ -28,7 +28,7 @@ This document describes the complete architecture of the RAG Pipeline system, in
 │                                                                      │
 │  INPUT: Scikit-learn HTML Docs (420 files)                         │
 │         ↓                                                           │
-│  [1] PREPROCESSING → Structured JSON (420 files, ~4 MB)           │
+│  [1] PREPROCESSING → Structured JSON (416 files, ~4 MB)           │
 │         ↓                                                           │
 │  [2] CHUNKING → 3 Strategies → ~4,000 Total Chunks                │
 │         ├─ Fixed: ~1,600 chunks (512 tokens, 50 overlap)          │
@@ -73,7 +73,7 @@ This document describes the complete architecture of the RAG Pipeline system, in
 ```
 Raw HTML (420 docs)
     ↓ [ITERATION 1: Preprocessing]
-Structured JSON (420 files, ~4 MB)
+Structured JSON (416 files, ~4 MB — 4 of 420 inputs skipped for <50 chars)
     ├─ doc_id, title, content, doc_type
     └─ metadata (sections, file_size, etc.)
     ↓ [ITERATION 2: Chunking]
@@ -296,7 +296,7 @@ class AnswerGenerator:
 ### Service Definitions
 
 **Ollama Service**
-- **Image:** `ollama/ollama:latest`
+- **Image:** `ollama/ollama:0.32.0` (pinned in docker-compose.yml)
 - **Purpose:** Run local LLM
 - **Volume:** `ollama-models` (persists ~2 GB model)
 - **Healthcheck:** `ollama list || exit 1` every 10s

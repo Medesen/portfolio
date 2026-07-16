@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 from typing import Dict, Any, Optional, List
-import json
 import requests
 from requests.exceptions import RequestException, Timeout
 

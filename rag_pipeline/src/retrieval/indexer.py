@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from ..utils.config import Config
 from ..utils.logger import get_logger
-from ..chunking import FixedSizeChunker, SemanticChunker, HierarchicalChunker, Chunk
+from ..chunking import FixedSizeChunker, SemanticChunker, HierarchicalChunker
 from .embedder import Embedder
 from .vector_store import VectorStore
 from .bm25_index import BM25Index
@@ -133,7 +133,7 @@ class IndexingStateTracker:
         """Mark a strategy as indexed."""
         self.state["strategies"][strategy_name] = {
             "completed": True,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "chunk_count": chunk_count,
             "doc_count": doc_count,
         }
@@ -147,7 +147,7 @@ class IndexingStateTracker:
         
         self.state["bm25_strategies"][strategy_name] = {
             "completed": True,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "chunk_count": chunk_count,
         }
         self.save_state()
@@ -330,7 +330,18 @@ class Indexer:
         
         self.logger.info(f"\nIndexing with strategy: {strategy_name}")
         self.logger.info("-" * 60)
-        
+
+        # Rebuilding: drop any existing collection first. add_chunks uses
+        # get_or_create_collection, so without this a re-index after a
+        # chunking-config change would interleave new chunk IDs with stale
+        # ones in the same collection, and the resulting count would
+        # permanently mismatch the state file.
+        if self.vector_store.get_collection_info(strategy_name) is not None:
+            self.logger.info(
+                f"Dropping existing collection '{strategy_name}' before rebuild"
+            )
+            self.vector_store.delete_collection(strategy_name)
+
         # Get chunker
         chunker = self.chunkers[strategy_name]
         
@@ -353,13 +364,13 @@ class Indexer:
             embedding_dimension=embedding_dim
         )
         
-        # Build BM25 index
-        if not self.state_tracker.is_bm25_indexed(strategy_name, self.bm25_index):
-            self.logger.info(f"Building BM25 index for strategy '{strategy_name}'...")
-            self.bm25_index.build_index(chunks_with_embeddings, strategy_name)
-            self.state_tracker.mark_bm25_completed(strategy_name, len(all_chunks))
-        else:
-            self.logger.info(f"BM25 index for '{strategy_name}' already exists (skipping)")
+        # Build BM25 index — always rebuilt alongside the collection: the
+        # chunks it must mirror were just regenerated, so a stale "completed"
+        # BM25 state must not leave a keyword index that no longer matches
+        # the vector collection.
+        self.logger.info(f"Building BM25 index for strategy '{strategy_name}'...")
+        self.bm25_index.build_index(chunks_with_embeddings, strategy_name)
+        self.state_tracker.mark_bm25_completed(strategy_name, len(all_chunks))
         
         # Mark as completed
         self.state_tracker.mark_strategy_completed(

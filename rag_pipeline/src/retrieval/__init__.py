@@ -1,21 +1,29 @@
-"""Retrieval components: embeddings, vector storage, and hybrid search."""
+"""Retrieval components: embeddings, vector storage, and hybrid search.
 
-from .embedder import Embedder
-from .vector_store import VectorStore
-from .indexer import Indexer
-from .query_processor import QueryProcessor
-from .bm25_index import BM25Index
-from .hybrid_searcher import HybridSearcher
-from .query_rewriter import QueryRewriter
-from .reranker import CrossEncoderReranker
+Submodules are imported lazily (PEP 562): importing this package does not pull
+in sentence-transformers, ChromaDB, or the cross-encoder until the class that
+needs them is actually requested. This keeps ``import src.retrieval`` cheap and
+lets modules with lighter dependencies be used (and tested) in environments
+where the heavy optional dependencies are absent.
+"""
 
-__all__ = [
-    "Embedder",
-    "VectorStore",
-    "Indexer",
-    "QueryProcessor",
-    "BM25Index",
-    "HybridSearcher",
-    "QueryRewriter",
-    "CrossEncoderReranker",
-]
+from importlib import import_module
+
+_LAZY_IMPORTS = {
+    "Embedder": ".embedder",
+    "VectorStore": ".vector_store",
+    "Indexer": ".indexer",
+    "QueryProcessor": ".query_processor",
+    "BM25Index": ".bm25_index",
+    "HybridSearcher": ".hybrid_searcher",
+    "QueryRewriter": ".query_rewriter",
+    "CrossEncoderReranker": ".reranker",
+}
+
+__all__ = list(_LAZY_IMPORTS)
+
+
+def __getattr__(name: str):
+    if name in _LAZY_IMPORTS:
+        return getattr(import_module(_LAZY_IMPORTS[name], __name__), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

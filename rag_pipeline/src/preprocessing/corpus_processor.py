@@ -5,7 +5,7 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -63,7 +63,7 @@ class StateTracker:
     def mark_pruning_completed(self):
         """Mark pruning as completed."""
         self.state["pruning_completed"] = True
-        self.state["pruning_timestamp"] = datetime.utcnow().isoformat()
+        self.state["pruning_timestamp"] = datetime.now(timezone.utc).isoformat()
         self.save_state()
 
     def is_processing_completed(self) -> bool:
@@ -113,7 +113,7 @@ class StateTracker:
     def mark_processing_completed(self, file_count: int, processed_files: List[str]):
         """Mark processing as completed."""
         self.state["processing_completed"] = True
-        self.state["processing_timestamp"] = datetime.utcnow().isoformat()
+        self.state["processing_timestamp"] = datetime.now(timezone.utc).isoformat()
         self.state["file_count"] = file_count
         self.state["processed_files"] = processed_files[:100]  # Store sample
         self.save_state()

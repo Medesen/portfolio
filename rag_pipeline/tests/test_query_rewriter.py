@@ -1,7 +1,7 @@
 """Tests for LLM-based query rewriting."""
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from src.retrieval.query_rewriter import QueryRewriter
 

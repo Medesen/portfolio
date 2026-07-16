@@ -25,7 +25,12 @@ rm_rf() {
   local p="$1"
   if [[ -e "$p" || -L "$p" ]]; then
     echo "🧹 Removing $p"
-    rm -rf -- "$p" 2>/dev/null || sudo rm -rf -- "$p"
+    # No silent sudo escalation: if Docker created root-owned files here,
+    # say so and let the user decide.
+    if ! rm -rf -- "$p" 2>/dev/null; then
+      echo "⚠️  Could not remove $p (likely root-owned files from Docker)."
+      echo "   Re-run as: sudo rm -rf -- \"$p\""
+    fi
   else
     # Ensure parent is not left as an empty dir we want to keep
     true

@@ -14,13 +14,6 @@ preprocessing:
   # "scikit-learn-docs" (no version) or "scikit-learn-X.Y.Z-docs" (with version)
   input_name: "scikit-learn*-docs"  # Pattern for auto-detection
   force_reprocess: false  # Set to true to force re-pruning and re-processing
-  file_patterns:
-    - "*.html"
-  # Folders to process within the pruned corpus
-  process_folders:
-    - "api"
-    - "modules"
-    - "auto_examples"
 
 # Logging Configuration
 logging:

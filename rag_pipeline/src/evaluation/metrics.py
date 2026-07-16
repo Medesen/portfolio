@@ -1,7 +1,7 @@
 """Retrieval metrics for RAG evaluation."""
 
 from __future__ import annotations
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Optional
 import math
 
 from ..utils.logger import get_logger
@@ -167,7 +167,7 @@ class RetrievalMetrics:
         self,
         retrieved_doc_ids: List[str],
         relevant_doc_ids: List[str],
-        k_values: List[int] = [5, 10, 20]
+        k_values: Optional[List[int]] = None
     ) -> Dict[str, Any]:
         """
         Calculate all retrieval metrics for a query.
@@ -180,6 +180,8 @@ class RetrievalMetrics:
         Returns:
             Dictionary with all metrics
         """
+        if k_values is None:
+            k_values = [5, 10, 20]
         metrics = {
             "mrr": self.reciprocal_rank(retrieved_doc_ids, relevant_doc_ids)
         }

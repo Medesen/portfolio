@@ -81,3 +81,53 @@ def test_chunk_id_generation(sample_document):
         assert chunk.chunk_id == expected_id
         assert chunk.chunk_index == i
 
+
+
+def test_fixed_chunker_rejects_overlap_not_smaller_than_chunk_size():
+    """overlap >= chunk_size would make the chunk window non-advancing
+    (an infinite loop during indexing); the constructor must refuse it."""
+    with pytest.raises(ValueError, match="overlap"):
+        FixedSizeChunker({"chunk_size": 100, "overlap": 100})
+    with pytest.raises(ValueError, match="overlap"):
+        FixedSizeChunker({"chunk_size": 100, "overlap": 150})
+    # The ~0.75 token->word conversion can collapse nearby values
+    # (5 and 4 tokens both floor to 3 words) — also rejected.
+    with pytest.raises(ValueError, match="overlap"):
+        FixedSizeChunker({"chunk_size": 5, "overlap": 4})
+
+
+def test_hierarchical_chunker_handles_repeated_headings_and_preamble():
+    """Repeated heading strings must not produce empty or out-of-order
+    sections, and text before the first heading must be kept."""
+    from src.chunking.hierarchical_chunker import HierarchicalChunker
+
+    content = (
+        "Intro text before any heading. "
+        "Examples early mention of the word Examples in prose. "
+        "Parameters This section describes parameters in detail. "
+        "Examples This is the real examples section content. "
+        "Notes Closing notes content."
+    )
+    document = {
+        "doc_id": "doc1",
+        "content": content,
+        "metadata": {"sections": ["Parameters", "Examples", "Notes"]},
+    }
+    chunker = HierarchicalChunker({"max_chunk_size": 1000})
+    chunks = chunker.chunk_document(document)
+
+    # No empty chunks, ever
+    assert all(chunk.content.strip() for chunk in chunks)
+    # The preamble (including the early "Examples" prose) is preserved
+    assert any("Intro text before any heading" in c.content for c in chunks)
+    # "Examples" resolves to the occurrence AFTER "Parameters", not the
+    # early prose mention — so the Parameters section ends where the real
+    # Examples section starts
+    examples_chunks = [
+        c for c in chunks if c.metadata.get("section_heading") == "Examples"
+    ]
+    assert len(examples_chunks) == 1
+    assert "real examples section" in examples_chunks[0].content
+    # Every character of the document lands in exactly one chunk
+    reassembled = " ".join(c.content for c in chunks)
+    assert "Closing notes content" in reassembled

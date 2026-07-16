@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import re
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Optional, Tuple
 
 from .base_chunker import BaseChunker, Chunk
 
@@ -83,45 +83,53 @@ class HierarchicalChunker(BaseChunker):
     
     def _split_by_sections(
         self, content: str, sections: List[str]
-    ) -> List[Tuple[str, str]]:
+    ) -> List[Tuple[Optional[str], str]]:
         """
-        Split content by section headings.
-        
+        Split content by section headings, scanning left to right.
+
+        Each heading is located strictly AFTER the position where the previous
+        heading matched. Technical docs repeat heading strings constantly
+        ("Examples", "Notes", "Parameters"), so matching every heading at its
+        first occurrence — as an earlier implementation did — could place a
+        section's end before its start, yielding empty chunks. Headings that
+        cannot be found in the flattened text are skipped, and any text before
+        the first matched heading is kept as a heading-less preamble section
+        rather than silently dropped.
+
         Args:
             content: Full document content
-            sections: List of section headings
-            
+            sections: List of section headings, in document order
+
         Returns:
-            List of (section_heading, section_content) tuples
+            List of (section_heading, section_content) tuples; the heading is
+            None for the preamble.
         """
-        result = []
-        
-        # Build regex pattern to find section boundaries
-        # Escape special regex characters in section headings
-        escaped_sections = [re.escape(s) for s in sections]
-        
-        for i, section in enumerate(sections):
-            # Find this section in the content
-            pattern = re.escape(section)
-            matches = list(re.finditer(pattern, content))
-            
-            if not matches:
+        # Locate each heading sequentially so boundaries are monotone.
+        positions: List[Tuple[str, int]] = []
+        search_from = 0
+        for section in sections:
+            idx = content.find(section, search_from)
+            if idx == -1:
                 continue
-            
-            # Use the first match
-            start_pos = matches[0].start()
-            
-            # Find the end (start of next section or end of content)
-            if i + 1 < len(sections):
-                next_pattern = re.escape(sections[i + 1])
-                next_matches = list(re.finditer(next_pattern, content))
-                end_pos = next_matches[0].start() if next_matches else len(content)
-            else:
-                end_pos = len(content)
-            
+            positions.append((section, idx))
+            search_from = idx + len(section)
+
+        if not positions:
+            # Headings exist in metadata but none survive in the flattened
+            # text: treat the whole document as one heading-less section.
+            return [(None, content)] if content.strip() else []
+
+        result: List[Tuple[Optional[str], str]] = []
+        preamble = content[: positions[0][1]].strip()
+        if preamble:
+            result.append((None, preamble))
+
+        for i, (section, start_pos) in enumerate(positions):
+            end_pos = positions[i + 1][1] if i + 1 < len(positions) else len(content)
             section_content = content[start_pos:end_pos].strip()
-            result.append((section, section_content))
-        
+            if section_content:
+                result.append((section, section_content))
+
         return result
     
     def _split_large_section(

@@ -8,7 +8,6 @@ These tests verify that:
 - Edge cases are handled properly
 """
 
-import pytest
 from src.evaluation.metrics import RetrievalMetrics
 
 

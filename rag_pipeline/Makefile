@@ -29,7 +29,7 @@ help:
 	@echo "  make preprocess     - Preprocess corpus (420 documents)"
 	@echo "  make index          - Build vector index (all strategies)"
 	@echo "  make query Q=\"...\" - Query the system and generate answer"
-	@echo "  make query-retrieval Q=\"...\" - Retrieval only (no LLM, for debugging)"
+	@echo "  make query-retrieve Q=\"...\" - Retrieval only (no LLM, for debugging)"
 	@echo "  make eval           - Run evaluation framework"
 	@echo "  make benchmark      - Benchmark reranking overfetch values"
 	@echo ""

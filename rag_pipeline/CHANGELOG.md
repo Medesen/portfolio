@@ -6,6 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.0] - 2026-07-16 (Review fixes: correctness and claim hygiene)
+
+### Fixed
+
+**Chunking:**
+- Hierarchical chunker: headings are now located sequentially (left to right).
+  Previously every heading matched at its *first* occurrence, so repeated
+  heading strings ("Examples", "Notes") could slice a section's end before its
+  start and emit empty chunks; text before the first heading was silently
+  dropped. Both fixed; a regression test covers repeated headings + preamble.
+  The full evaluation was re-run from a clean index after the fix: fixed and
+  semantic reproduce their published numbers exactly, hierarchical moves from
+  Recall@10 0.50 / MRR 0.47 / NDCG@10 0.37 (buggy chunker, recorded in the
+  earlier entries below) to **0.49 / 0.46 / 0.36**. The finding is unchanged —
+  fixed chunking still wins every metric.
+- Fixed-size chunker now rejects `overlap >= chunk_size` (previously an
+  infinite loop during indexing).
+- `HTMLParser._extract_text_with_structure` no longer carries a dead
+  "structure-preserving" implementation whose output was discarded; it returns
+  the same flattened text as before, and the docstring now says so.
+
+**Indexing:**
+- Re-indexing (including `index --force`) now drops the existing ChromaDB
+  collection and always rebuilds the BM25 index, instead of interleaving new
+  chunk IDs with stale ones in the same collection.
+
+**Benchmark:**
+- `make benchmark` could never load the BM25 index (it looked in
+  `vector_store/` instead of `vector_store/bm25/`). Fixed.
+
+**Configuration:**
+- `config.yaml` is now validated on load: unknown sections/keys, empty files,
+  and out-of-range values (e.g. `top_k: -3`) fail immediately with the
+  offending key path. Removed the dead `preprocessing.file_patterns` and
+  `preprocessing.process_folders` keys (they were read by nothing).
+
+**Evaluation:**
+- LLM-judge failures now return "no score" and are excluded from averages,
+  instead of being recorded as a fabricated neutral 3/5.
+- Removed `scripts/run_evaluation.py`: it duplicated `main.py evaluate` with
+  different defaults (it silently re-enabled the abandoned LLM judge).
+
+### Changed
+- Package `__init__` files import lazily (PEP 562), so importing e.g.
+  `src.evaluation.metrics` no longer drags in sentence-transformers/ChromaDB.
+- Query-rewrite cache is now actually LRU (reads refresh recency).
+- Test suite: 111 tests (current per-file counts: hybrid_search 26,
+  query_rewriter 23, reranker 18, config 10, metrics 8,
+  bm25_strategy_switching 8, chunking 6, query_processor 5, embedder 4,
+  generation 3).
+
+---
+
 ## [1.2.0] - 2025-12-05 (Advanced Retrieval Features)
 
 ### Added
@@ -76,14 +129,6 @@ reranking:
   overfetch_k: 50
   final_top_k: 10
 ```
-
----
-
-## [1.0.0] - 2025-10-21
-
-### ✅ Project Complete - All 5 Iterations Finished
-
-**Major milestone:** Production-ready RAG system with systematic evaluation proving fixed chunking wins for technical documentation.
 
 ---
 
@@ -347,6 +392,14 @@ reranking:
 - Added IMPROVEMENTS_SUMMARY.md
 - Created initial README.md
 - Added PROJECT_DESCRIPTION.md
+
+---
+
+## [1.0.0] - 2025-10-21
+
+### ✅ Project Complete - All 5 Iterations Finished
+
+**Major milestone:** Production-ready RAG system with systematic evaluation proving fixed chunking wins for technical documentation.
 
 ---
 

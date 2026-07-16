@@ -7,8 +7,7 @@ wrong BM25 index to be used for hybrid search.
 """
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock
 
 from src.retrieval.bm25_index import BM25Index
 

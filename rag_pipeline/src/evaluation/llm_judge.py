@@ -82,22 +82,29 @@ class LLMJudge:
         scores = {}
         explanations = {}
         
+        failed_criteria = []
         for criterion in criteria:
             self.logger.info(f"Judging '{criterion}' for question: {question[:50]}...")
-            
+
             score, explanation = self._judge_criterion(
                 question, answer, context, criterion
             )
-            
-            scores[criterion] = score
+
             explanations[criterion] = explanation
-        
+            if score is None:
+                # A failed LLM call is missing data, not a neutral 3/5 —
+                # excluding it keeps the averages honest.
+                failed_criteria.append(criterion)
+            else:
+                scores[criterion] = score
+
         elapsed_time = time.time() - start_time
-        
+
         return {
             "scores": scores,
             "explanations": explanations,
-            "average_score": sum(scores.values()) / len(scores) if scores else 0.0,
+            "failed_criteria": failed_criteria,
+            "average_score": sum(scores.values()) / len(scores) if scores else None,
             "judging_time": elapsed_time
         }
     
@@ -107,18 +114,20 @@ class LLMJudge:
         answer: str,
         context: str,
         criterion: str
-    ) -> tuple[float, str]:
+    ) -> tuple[Optional[float], str]:
         """
         Judge answer on a specific criterion.
-        
+
         Args:
             question: Original question
             answer: Generated answer
             context: Context used
             criterion: Criterion to evaluate
-            
+
         Returns:
-            Tuple of (score, explanation)
+            Tuple of (score, explanation). The score is None when the LLM call
+            failed or returned nothing — callers must exclude it from averages
+            rather than treat the failure as a neutral 3/5.
         """
         # Build prompt
         prompt = self._build_judging_prompt(question, answer, context, criterion)
@@ -156,7 +165,7 @@ class LLMJudge:
             if not response_text or response_text.strip() == "":
                 self.logger.error(f"❌ Empty response from LLM for criterion: {criterion}")
                 self.logger.error(f"Full response dict: {response}")
-                return 3.0, "Empty LLM response"
+                return None, "Empty LLM response"
             
             # Parse the response
             self.logger.debug("Parsing response...")
@@ -169,7 +178,7 @@ class LLMJudge:
             
         except Exception as e:
             self.logger.error(f"❌ Error judging {criterion}: {e}", exc_info=True)
-            return 3.0, f"Error during judgment: {str(e)}"
+            return None, f"Error during judgment: {str(e)}"
     
     def _build_judging_prompt(
         self,
@@ -407,7 +416,7 @@ Explanation: [Your critical reasoning in 2-3 sentences, focusing on what's missi
         
         # Default if nothing found
         if score is None:
-            self.logger.warning(f"❌ Could not extract score from any pattern!")
+            self.logger.warning("❌ Could not extract score from any pattern!")
             self.logger.warning(f"Response text: {response_text}")
             score = 3.0
         else:
@@ -498,11 +507,13 @@ Explanation: [Your critical reasoning in 2-3 sentences, focusing on what's missi
         
         summary = {}
         
-        # Calculate averages for each criterion
+        # Calculate averages for each criterion, skipping judgments where the
+        # LLM call failed (score absent) instead of counting them as 0.
         for criterion in all_criteria:
             scores = [
-                j.get("scores", {}).get(criterion, 0.0)
-                for j in judgments
+                s
+                for s in (j.get("scores", {}).get(criterion) for j in judgments)
+                if s is not None
             ]
             if scores:
                 summary[f"{criterion}_mean"] = sum(scores) / len(scores)

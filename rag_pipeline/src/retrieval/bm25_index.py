@@ -72,7 +72,12 @@ class BM25Index:
         self.stemmer = None
         self.stopwords: Set[str] = self.DEFAULT_STOPWORDS
         self._initialize_nlp()
-    
+
+    @property
+    def loaded_strategy(self) -> Optional[str]:
+        """Name of the strategy whose index is currently loaded, or None."""
+        return self._loaded_strategy
+
     def _initialize_nlp(self) -> None:
         """Initialize NLTK stemmer and stopwords with fallback."""
         try:

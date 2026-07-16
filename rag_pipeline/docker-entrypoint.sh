@@ -1,5 +1,5 @@
-# docker-entrypoint.sh
 #!/usr/bin/env bash
+# docker-entrypoint.sh
 set -euo pipefail
 
 # Who we're going to drop to

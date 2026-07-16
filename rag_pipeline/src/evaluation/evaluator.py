@@ -350,9 +350,10 @@ class RAGEvaluator:
                     # Display all criterion scores
                     scores = judgment.get("scores", {})
                     score_str = ", ".join([f"{k}: {v:.1f}" for k, v in scores.items()])
-                    avg_score = judgment.get("average_score", 0)
+                    avg_score = judgment.get("average_score")
+                    avg_str = f"{avg_score:.2f}" if avg_score is not None else "n/a (all criteria failed)"
                     print(f"  ✓ Judging complete in {judge_time:.2f}s", flush=True)
-                    print(f"    Scores: [{score_str}] → avg: {avg_score:.2f}", flush=True)
+                    print(f"    Scores: [{score_str}] → avg: {avg_str}", flush=True)
                     
                     result["judgment"] = judgment
             else:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 from typing import List, Dict, Any, Optional, Union
 import time
-from pathlib import Path
 import numpy as np
 
 from .embedder import Embedder
@@ -254,7 +253,11 @@ class QueryProcessor:
         # Remember whether the caller asked for a specific top_k before defaulting,
         # so an explicit --top-k is honored as the post-rerank cut (see below).
         explicit_top_k = top_k
-        # Determine parameters: reranking.final_top_k takes precedence when reranking is enabled
+        # Determine parameters: reranking.final_top_k takes precedence when
+        # reranking is enabled. Deliberate coupling: the semantic-only and
+        # keyword-only modes below never invoke the reranker, but they inherit
+        # this same default so result counts stay comparable across modes when
+        # reranking is toggled. Pass an explicit top_k to opt out.
         if top_k is None:
             top_k = self.reranking_final_top_k if self.reranking_enabled else self.default_top_k
         search_mode = search_mode or self.search_mode
@@ -275,7 +278,7 @@ class QueryProcessor:
             return result
         
         # Load BM25 index for the strategy if not already loaded or different strategy
-        if self.bm25_index._loaded_strategy != strategy:
+        if self.bm25_index.loaded_strategy != strategy:
             if not self.bm25_index.load_index(strategy):
                 self.logger.warning(
                     f"BM25 index not found for strategy '{strategy}'. "

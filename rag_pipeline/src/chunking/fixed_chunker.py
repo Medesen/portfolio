@@ -26,10 +26,29 @@ class FixedSizeChunker(BaseChunker):
         # Default: 512 tokens ≈ 384 words
         self.chunk_size = self.config.get("chunk_size", 512)
         self.overlap = self.config.get("overlap", 50)
-        
+
         # Convert tokens to approximate word count (1 token ≈ 0.75 words)
         self.chunk_size_words = int(self.chunk_size * 0.75)
         self.overlap_words = int(self.overlap * 0.75)
+
+        # The chunk window advances by (chunk_size_words - overlap_words) each
+        # iteration; if that is not positive the loop in chunk_document never
+        # terminates. Validate on the converted word counts, not the raw token
+        # values — the 0.75 conversion can collapse nearby values (e.g.
+        # chunk_size=5, overlap=4 both floor to 3 words).
+        if self.chunk_size_words < 1:
+            raise ValueError(
+                f"chunk_size={self.chunk_size} tokens converts to "
+                f"{self.chunk_size_words} words; it must be at least 2 tokens"
+            )
+        if self.overlap < 0:
+            raise ValueError(f"overlap must be >= 0 tokens, got {self.overlap}")
+        if self.overlap_words >= self.chunk_size_words:
+            raise ValueError(
+                f"overlap ({self.overlap} tokens ≈ {self.overlap_words} words) must be "
+                f"smaller than chunk_size ({self.chunk_size} tokens ≈ "
+                f"{self.chunk_size_words} words), or the chunk window cannot advance"
+            )
         
     def get_strategy_name(self) -> str:
         """Get strategy name."""

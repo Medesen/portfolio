@@ -25,20 +25,21 @@ Question: {query}
 
 Answer (with citations):"""
 
-    STRUCTURED_TEMPLATE = """
-    You are an expert on scikit-learn. Follow these rules:
-    1. Only answer based on the provided context
-    2. If the context doesn't contain the answer, say so clearly
-    3. Cite sources using [1], [2] format
-    4. Be concise but complete
-    5. Include code examples when relevant
-    Context from scikit-learn documentation:
+    # Written flush-left like DEFAULT_TEMPLATE above: an indented class-level
+    # literal would send 4 spaces of leading whitespace on every line to the LLM.
+    STRUCTURED_TEMPLATE = """You are an expert on scikit-learn. Follow these rules:
+1. Only answer based on the provided context
+2. If the context doesn't contain the answer, say so clearly
+3. Cite sources using [1], [2] format
+4. Be concise but complete
+5. Include code examples when relevant
+Context from scikit-learn documentation:
 
-    {context}
+{context}
 
-    Question: {query}
+Question: {query}
 
-    Provide a clear, well-cited answer:"""
+Provide a clear, well-cited answer:"""
 
     def __init__(self, template: str = None):
         """

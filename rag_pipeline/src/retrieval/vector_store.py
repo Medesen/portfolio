@@ -61,20 +61,21 @@ class VectorStore:
         self,
         collection_name: str,
         embedding_dimension: int,
-        metadata: Dict[str, Any] = None
+        metadata: Optional[Dict[str, Any]] = None
     ) -> chromadb.Collection:
         """
         Create or get a collection.
-        
+
         Args:
             collection_name: Name of the collection
             embedding_dimension: Dimension of embeddings
             metadata: Collection metadata
-            
+
         Returns:
             ChromaDB collection
         """
-        collection_metadata = metadata or {}
+        # Copy so the caller's dictionary is never mutated
+        collection_metadata = dict(metadata or {})
         collection_metadata["embedding_dimension"] = embedding_dimension
         
         try:
@@ -208,15 +209,16 @@ class VectorStore:
             self.logger.error(f"Error querying collection '{collection_name}': {e}")
             raise
     
-    def get_collection_info(self, collection_name: str) -> Dict[str, Any]:
+    def get_collection_info(self, collection_name: str) -> Optional[Dict[str, Any]]:
         """
         Get information about a collection.
-        
+
         Args:
             collection_name: Name of the collection
-            
+
         Returns:
-            Dictionary with collection information
+            Dictionary with collection information, or None if the collection
+            does not exist
         """
         try:
             collection = self.client.get_collection(collection_name)

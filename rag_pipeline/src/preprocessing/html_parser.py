@@ -7,6 +7,8 @@ from typing import Dict, List, Optional
 
 from bs4 import BeautifulSoup, Tag
 
+from ..utils.logger import get_logger
+
 
 class HTMLParser:
     """Parser for extracting structured content from scikit-learn HTML docs."""
@@ -38,7 +40,7 @@ class HTMLParser:
 
     def __init__(self):
         """Initialize the HTML parser."""
-        pass
+        self.logger = get_logger("html_parser")
 
     def parse_file(self, file_path: Path, corpus_root: Path) -> Optional[Dict]:
         """
@@ -92,7 +94,7 @@ class HTMLParser:
 
         except Exception as e:
             # Log error but don't crash
-            print(f"Error parsing {file_path}: {e}")
+            self.logger.error(f"Error parsing {file_path}: {e}")
             return None
 
     def _extract_title(self, soup: BeautifulSoup) -> str:
@@ -141,34 +143,16 @@ class HTMLParser:
 
     def _extract_text_with_structure(self, element: Tag) -> str:
         """
-        Extract text while preserving basic structure (headings, paragraphs).
+        Flatten an element to plain, space-separated text.
 
-        Args:
-            element: BeautifulSoup Tag to extract from
-
-        Returns:
-            Structured text content
+        This intentionally does NOT preserve heading or paragraph structure:
+        an earlier "structure-preserving" implementation built a structured
+        version and then discarded it, so the flat text below is what every
+        published evaluation ran on. Downstream consumers — in particular the
+        hierarchical chunker, which locates heading strings inside this text —
+        rely on exactly this flattened form.
         """
-        parts = []
-
-        for child in element.descendants:
-            if isinstance(child, Tag):
-                # Add extra spacing for structural elements
-                if child.name in ["h1", "h2", "h3", "h4", "h5", "h6"]:
-                    text = child.get_text(strip=True)
-                    if text:
-                        parts.append(f"\n\n{text}\n")
-                elif child.name in ["p", "div", "li"]:
-                    # Let BeautifulSoup handle these naturally
-                    pass
-            elif isinstance(child, str):
-                text = child.strip()
-                if text:
-                    parts.append(text)
-
-        # Use get_text for cleaner output
-        text = element.get_text(separator=" ", strip=True)
-        return text
+        return element.get_text(separator=" ", strip=True)
 
     def _clean_text(self, text: str) -> str:
         """Clean extracted text."""
