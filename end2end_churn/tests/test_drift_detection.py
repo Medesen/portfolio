@@ -10,8 +10,6 @@ Tests all drift detection methods:
 Comprehensive Drift Detection Tests
 """
 
-from typing import Any
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -29,6 +27,7 @@ from src.utils.drift import (
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestPSICalculation:
     """Test Population Stability Index calculation for categorical features."""
 
@@ -113,6 +112,7 @@ class TestPSICalculation:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestNumericDrift:
     """Test numeric feature drift detection using relative change and KS test."""
 
@@ -249,6 +249,7 @@ class TestNumericDrift:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestCategoricalDrift:
     """Test categorical feature drift detection using PSI."""
 
@@ -332,6 +333,7 @@ class TestCategoricalDrift:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestPredictionDrift:
     """Test prediction drift detection."""
 

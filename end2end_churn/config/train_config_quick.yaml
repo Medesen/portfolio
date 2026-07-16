@@ -25,6 +25,10 @@ mlflow:
   log_models: true
   log_artifacts: false               # Skip artifact logging for speed
 
+# NOTE: drift thresholds are consumed by the SERVING layer, which reads them
+# from environment variables (DRIFT_THRESHOLD_* in docker-compose.yml / .env).
+# train.py validates but does not use this block; it documents the deployment
+# defaults.
 drift:
   numeric_threshold: 0.2
   categorical_threshold: 0.25

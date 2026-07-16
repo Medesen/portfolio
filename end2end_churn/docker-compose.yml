@@ -36,8 +36,11 @@ services:
       # Falls back to SERVICE_TOKEN env var for development
       - SERVICE_TOKEN_FILE=/run/secrets/service_token
       - SERVICE_TOKEN=${SERVICE_TOKEN:-}
+      # Request handling
+      - REQUEST_TIMEOUT_SECONDS=${REQUEST_TIMEOUT_SECONDS:-30}
       # Drift detection
       - MAX_DRIFT_BATCH_SIZE=${MAX_DRIFT_BATCH_SIZE:-500}
+      - DRIFT_MIN_SAMPLE_SIZE=${DRIFT_MIN_SAMPLE_SIZE:-100}
       - DRIFT_THRESHOLD_NUMERIC=${DRIFT_THRESHOLD_NUMERIC:-0.2}
       - DRIFT_THRESHOLD_CATEGORICAL=${DRIFT_THRESHOLD_CATEGORICAL:-0.25}
       - DRIFT_THRESHOLD_PREDICTION=${DRIFT_THRESHOLD_PREDICTION:-0.1}
@@ -77,7 +80,9 @@ services:
   # Prometheus (optional monitoring)
   # Start with: docker compose --profile monitoring up -d
   prometheus:
-    image: prom/prometheus:latest
+    # Pinned for reproducibility (matching the pinned Python lock file);
+    # bump deliberately, not via :latest
+    image: prom/prometheus:v3.13.1
     container_name: churn-prometheus
     ports:
       - "9090:9090"
@@ -102,7 +107,8 @@ services:
   # Grafana (optional visualization)
   # Start with: docker compose --profile monitoring up -d
   grafana:
-    image: grafana/grafana:latest
+    # Pinned for reproducibility; bump deliberately, not via :latest
+    image: grafana/grafana:12.3.8
     container_name: churn-grafana
     ports:
       - "3000:3000"
@@ -110,7 +116,10 @@ services:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      # No default password: set GRAFANA_PASSWORD in .env (make up-monitoring
+      # enforces this). Grafana refuses to start with an empty admin password,
+      # so an unset variable fails loudly instead of shipping admin/admin.
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=http://localhost:3000
     restart: unless-stopped

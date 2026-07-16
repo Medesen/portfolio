@@ -116,7 +116,7 @@ def detect_numeric_drift(
 
             # Drift detected if p-value < threshold (reject null hypothesis of same distribution)
             ks_drift = ks_p_value < ks_p_value_threshold
-        except Exception as e:
+        except Exception:
             # KS test failed (e.g., not enough samples), fall back to relative change only
             ks_statistic = None
             ks_p_value = None

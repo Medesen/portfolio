@@ -25,10 +25,14 @@ mlflow:
   log_models: true                           # Log trained models
   log_artifacts: true                        # Log plots, metadata, etc.
 
+# NOTE: drift thresholds are consumed by the SERVING layer, which reads them
+# from environment variables (DRIFT_THRESHOLD_* in docker-compose.yml / .env).
+# train.py validates but does not use this block; it documents the deployment
+# defaults.
 drift:
-  numeric_threshold: 0.2                     # KS statistic threshold
+  numeric_threshold: 0.2                     # Relative change in feature mean/std (the KS test uses its own p-value)
   categorical_threshold: 0.25                # PSI threshold for categorical features
-  prediction_threshold: 0.1                  # PSI threshold for predictions
+  prediction_threshold: 0.1                  # Absolute change in predicted churn rate
   min_sample_size: 100                       # Minimum samples for drift detection
   max_drift_batch_size: 1000                 # Maximum batch size for drift analysis
 

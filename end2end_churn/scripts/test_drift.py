@@ -10,16 +10,17 @@ This script tests the drift detection endpoint with various scenarios:
 5. Validation set as "future" data (should be stable)
 
 Usage:
-    python scripts/test_drift.py
+    python scripts/test_drift.py                # from the host (API on localhost:8000)
 
-    Or with Docker:
-    docker compose run --rm --entrypoint python api scripts/test_drift.py
+    Or with Docker (the Makefile does this; a fresh `compose run` container
+    must reach the running API by its service name, not localhost):
+    docker compose run --rm -e API_URL=http://api:8000 api python scripts/test_drift.py
 """
 
+import os
 import sys
 from pathlib import Path
 
-import pandas as pd
 import requests
 
 # Add project root to path
@@ -27,8 +28,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data.loader import load_data
 
-# API endpoint
-API_URL = "http://localhost:8000"
+# API endpoint. Inside a docker compose run container, localhost is that
+# container itself — set API_URL=http://api:8000 to reach the API service.
+API_URL = os.environ.get("API_URL", "http://localhost:8000")
+
+# Seeded sampling: a drift *test suite* must be deterministic
+SAMPLE_SEED = 42
 
 
 def test_drift_detection():
@@ -51,12 +56,15 @@ def test_drift_detection():
     if "Churn" in df.columns:
         df = df.drop("Churn", axis=1)
 
+    # Collect assertion failures; connection errors still abort immediately.
+    failures = []
+
     print()
     print("-" * 70)
     print("Test 1: Normal Data (No Drift Expected)")
     print("-" * 70)
 
-    normal_sample = df.sample(min(100, len(df))).to_dict("records")
+    normal_sample = df.sample(min(100, len(df)), random_state=SAMPLE_SEED).to_dict("records")
 
     try:
         response = requests.post(f"{API_URL}/drift", json={"customers": normal_sample}, timeout=30)
@@ -67,7 +75,7 @@ def test_drift_detection():
             print("PASS: No drift detected in normal data")
         else:
             print(f"WARN: Unexpected drift detected: {result['drifted_features']}")
-            print(f"  This might indicate the thresholds are too sensitive")
+            print("  This might indicate the thresholds are too sensitive")
     except requests.exceptions.ConnectionError:
         print("FAIL: Could not connect to API. Is the service running?")
         print("  Start with: make up")
@@ -81,7 +89,7 @@ def test_drift_detection():
     print("Test 2: Numeric Drift (Tenure +50%)")
     print("-" * 70)
 
-    drifted_sample = df.sample(min(100, len(df))).copy()
+    drifted_sample = df.sample(min(100, len(df)), random_state=SAMPLE_SEED + 1).copy()
     if "tenure" in drifted_sample.columns:
         drifted_sample["tenure"] = drifted_sample["tenure"] * 1.5
 
@@ -95,12 +103,13 @@ def test_drift_detection():
             result = response.json()
 
             if result["overall_drift_detected"] and "tenure" in result["drifted_features"]:
-                print(f"PASS: Tenure drift detected")
+                print("PASS: Tenure drift detected")
                 print(f"  Drifted features: {result['drifted_features']}")
                 print(f"  Total features drifted: {result['n_features_drifted']}")
             else:
-                print(f"FAIL: Tenure drift not detected")
-                print(f"  Expected 'tenure' in drifted features")
+                print("FAIL: Tenure drift not detected")
+                print("  Expected 'tenure' in drifted features")
+                failures.append("Test 2: tenure drift not detected")
         except Exception as e:
             print(f"FAIL: {e}")
             return False
@@ -112,7 +121,7 @@ def test_drift_detection():
     print("Test 3: Categorical Drift (Contract Distribution)")
     print("-" * 70)
 
-    drifted_sample = df.sample(min(100, len(df))).copy()
+    drifted_sample = df.sample(min(100, len(df)), random_state=SAMPLE_SEED + 2).copy()
     if "Contract" in drifted_sample.columns:
         # Force all contracts to Month-to-month (extreme distribution shift)
         drifted_sample["Contract"] = "Month-to-month"
@@ -127,11 +136,12 @@ def test_drift_detection():
             result = response.json()
 
             if result["overall_drift_detected"] and "Contract" in result["drifted_features"]:
-                print(f"PASS: Contract drift detected")
+                print("PASS: Contract drift detected")
                 print(f"  Drifted features: {result['drifted_features']}")
             else:
-                print(f"FAIL: Contract drift not detected")
-                print(f"  Expected 'Contract' in drifted features")
+                print("FAIL: Contract drift not detected")
+                print("  Expected 'Contract' in drifted features")
+                failures.append("Test 3: Contract drift not detected")
         except Exception as e:
             print(f"FAIL: {e}")
             return False
@@ -143,7 +153,7 @@ def test_drift_detection():
     print("Test 4: Multiple Features Drift")
     print("-" * 70)
 
-    drifted_sample = df.sample(min(100, len(df))).copy()
+    drifted_sample = df.sample(min(100, len(df)), random_state=SAMPLE_SEED + 3).copy()
     modified_features = []
 
     if "tenure" in drifted_sample.columns:
@@ -190,6 +200,7 @@ def test_drift_detection():
             print("PASS: Empty batch correctly rejected with 400 status")
         else:
             print(f"FAIL: Expected 400 status, got {response.status_code}")
+            failures.append(f"Test 5: empty batch returned {response.status_code}, expected 400")
     except Exception as e:
         print(f"FAIL: {e}")
         return False
@@ -224,6 +235,13 @@ def test_drift_detection():
     print("DRIFT DETECTION TEST SUITE COMPLETE")
     print("=" * 70)
     print()
+    if failures:
+        print(f"{len(failures)} test(s) FAILED:")
+        for failure in failures:
+            print(f"  - {failure}")
+        print()
+        return False
+
     print("All critical tests passed")
     print()
     print("Next steps:")

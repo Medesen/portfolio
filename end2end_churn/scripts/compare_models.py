@@ -13,9 +13,11 @@ Direct usage (for development only):
 
 Output:
     - Training logs for each model
-    - Comparison report (diagnostics/model_comparison_report.txt)
+    - Comparison report (diagnostics/model_comparison_report_<run_id>.txt)
     - Comparison visualization (diagnostics/model_comparison_YYYYMMDD_HHMMSS.png)
-    - Individual model artifacts in models/ directory
+
+Note: this script compares models; it does not persist model artifacts.
+Use train.py to train and save a deployable model.
 """
 
 import argparse
@@ -26,7 +28,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -288,7 +289,7 @@ def generate_comparison_report(results: list[dict], output_path: str, run_id: st
             f.write(f"  Training Time:       {r['training_time']:.2f}s\n")
             f.write(f"  Grid Search Time:    {r['search_time']:.2f}s\n")
             f.write(f"  Grid Size:           {r['n_combinations']} combinations\n")
-            f.write(f"\n  Best Parameters:\n")
+            f.write("\n  Best Parameters:\n")
             for param, value in r["best_params"].items():
                 f.write(f"    {param}: {value}\n")
             f.write("\n\n")

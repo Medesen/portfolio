@@ -66,7 +66,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
-import numpy as np
 import pandas as pd
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
@@ -99,7 +98,6 @@ from src.utils.prometheus_metrics import (
     prediction_error_count,
     request_count,
     request_duration,
-    service_start_time,
     set_model_metrics,
 )
 
@@ -150,11 +148,11 @@ SERVICE_START_TIMESTAMP = time.time()
 security = HTTPBearer(auto_error=False)  # Don't auto-fail if missing
 
 logger.info("Configuration loaded:")
-logger.info(f"  • Service config:")
+logger.info("  • Service config:")
 logger.info(f"    - MAX_BATCH_SIZE: {service_config.max_batch_size}")
 logger.info(f"    - MAX_REQUEST_SIZE_MB: {service_config.max_request_size_mb}")
 logger.info(f"    - Authentication: {'enabled' if service_config.service_token else 'disabled'}")
-logger.info(f"  • Drift config:")
+logger.info("  • Drift config:")
 logger.info(f"    - MAX_DRIFT_BATCH_SIZE: {drift_config.max_drift_batch_size}")
 logger.info(
     f"    - Thresholds: numeric={drift_config.numeric_threshold}, "
@@ -1345,13 +1343,22 @@ async def trigger_retraining(
     # concurrent /retrain calls cannot both pass the check and launch duplicate runs.
     if not check_and_reserve_retraining():
         last_retrain = get_last_retrain_time()
-        time_since_last = datetime.now() - last_retrain if last_retrain else timedelta(0)
-        hours_remaining = MIN_RETRAIN_INTERVAL_HOURS - (time_since_last.total_seconds() / 3600)
-        raise HTTPException(
-            status_code=429,
-            detail=f"Retraining triggered too recently. Minimum {MIN_RETRAIN_INTERVAL_HOURS}h "
-            f"between retrains. Try again in {hours_remaining:.1f} hours.",
-        )
+        if last_retrain is not None:
+            time_since_last = datetime.now() - last_retrain
+            hours_remaining = MIN_RETRAIN_INTERVAL_HOURS - (time_since_last.total_seconds() / 3600)
+            detail = (
+                f"Retraining triggered too recently. Minimum {MIN_RETRAIN_INTERVAL_HOURS}h "
+                f"between retrains. Try again in {max(hours_remaining, 0.0):.1f} hours."
+            )
+        else:
+            # The reservation failed without a readable prior timestamp — an
+            # I/O problem with the state file, not an actual rate limit.
+            # Don't tell the caller to wait 24 hours for a limit that isn't set.
+            detail = (
+                "Could not reserve the retraining slot (retrain state file "
+                "unreadable or locked). Check server logs; this is not a rate limit."
+            )
+        raise HTTPException(status_code=429, detail=detail)
 
     # Trigger background retraining (slot already reserved above)
     background_tasks.add_task(retrain_model_task)

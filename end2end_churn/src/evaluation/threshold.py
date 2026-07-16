@@ -207,7 +207,6 @@ def tune_threshold_cost_sensitive(
     precisions, recalls, thresholds = precision_recall_curve(y_true, y_proba)
 
     n_positive = y_true.sum()
-    n_negative = len(y_true) - n_positive
 
     best_cost = float("inf")
     best_threshold = 0.5

@@ -74,14 +74,15 @@ pretty = true
 # - Dynamic return types from hyperparameter tuning
 # - Missing type stubs for scientific computing libraries
 
-# Exclude directories
+# Exclude directories (mypy excludes are path REGEXES: anchor them so a bare
+# pattern like 'config' cannot silently exempt src/config.py)
 exclude = [
-    'venv',
-    'mlruns',
-    'mlartifacts',
-    'tests',
-    '\.pytest_cache',
-    'config',  # Config directory contains YAML files, not Python modules
+    '^venv/',
+    '^mlruns/',
+    '^mlartifacts/',
+    '^tests/',
+    '^\.pytest_cache/',
+    '^config/',  # Config directory contains YAML files, not Python modules
 ]
 
 # Per-module options for third-party libraries without type stubs

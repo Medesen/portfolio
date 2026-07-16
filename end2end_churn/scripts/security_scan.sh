@@ -4,8 +4,10 @@
 # This script runs Trivy vulnerability scanner on the churn-service Docker image
 # to identify security vulnerabilities in the base image, OS packages, and Python dependencies.
 #
-# Usage:
-#   ./scripts/security_scan.sh [--severity CRITICAL,HIGH] [--format table|json|sarif]
+# Usage (positional arguments):
+#   ./scripts/security_scan.sh [SEVERITY] [FORMAT]
+#   e.g. ./scripts/security_scan.sh CRITICAL,HIGH table
+#   Defaults: SEVERITY=CRITICAL,HIGH  FORMAT=table
 #
 # Container Security Scanning
 

@@ -57,10 +57,20 @@ def list_models(client: MlflowClient):
             )
             print(f"   Description: {model.description or 'No description'}")
 
-            # Get latest versions
-            latest_versions = client.get_latest_versions(model.name)
+            # Get latest versions via search_model_versions —
+            # get_latest_versions is deprecated in MLflow 2.x (same pattern
+            # as src/api/service.py)
+            all_versions = client.search_model_versions(f"name='{model.name}'")
+            newest_per_stage: dict = {}
+            for v in all_versions:
+                stage_key = v.current_stage or "None"
+                if stage_key not in newest_per_stage or int(v.version) > int(
+                    newest_per_stage[stage_key].version
+                ):
+                    newest_per_stage[stage_key] = v
+            latest_versions = list(newest_per_stage.values())
             if latest_versions:
-                print(f"\n   Latest Versions by Stage:")
+                print("\n   Latest Versions by Stage:")
                 table_data = []
                 for version in latest_versions:
                     table_data.append(
@@ -156,7 +166,7 @@ def promote_model(client: MlflowClient, model_name: str, version: str, stage: st
         version_info = client.get_model_version(model_name, version)
         current_stage = version_info.current_stage
 
-        print(f"\nPromoting model...")
+        print("\nPromoting model...")
         print(f"   Model: {model_name}")
         print(f"   Version: {version}")
         print(f"   Current Stage: {current_stage}")
@@ -177,7 +187,7 @@ def promote_model(client: MlflowClient, model_name: str, version: str, stage: st
             print("\nNote: Existing Production models were archived automatically")
 
         # Show current state
-        print(f"\nCurrent state:")
+        print("\nCurrent state:")
         list_versions(client, model_name)
 
     except Exception as e:
@@ -193,7 +203,14 @@ def get_model_info(client: MlflowClient, model_name: str, version: str = None, s
             versions = [model_version]
             title = f"MODEL INFO: {model_name} v{version}"
         elif stage:
-            versions = client.get_latest_versions(model_name, stages=[stage])
+            # search_model_versions instead of the deprecated
+            # get_latest_versions(stages=...) — same pattern as src/api/service.py
+            staged = [
+                v
+                for v in client.search_model_versions(f"name='{model_name}'")
+                if v.current_stage == stage
+            ]
+            versions = [max(staged, key=lambda v: int(v.version))] if staged else []
             if not versions:
                 print(f"\nNo model in stage '{stage}'")
                 return
@@ -223,7 +240,7 @@ def get_model_info(client: MlflowClient, model_name: str, version: str = None, s
             # Get run info for additional details
             try:
                 run = client.get_run(mv.run_id)
-                print(f"\n   Metrics from Training Run:")
+                print("\n   Metrics from Training Run:")
                 for key, value in sorted(run.data.metrics.items()):
                     if isinstance(value, float):
                         print(f"      {key}: {value:.4f}")
@@ -245,7 +262,7 @@ def delete_version(client: MlflowClient, model_name: str, version: str):
         # Get version info first
         version_info = client.get_model_version(model_name, version)
 
-        print(f"\n WARNING: About to delete model version")
+        print("\n WARNING: About to delete model version")
         print(f"   Model: {model_name}")
         print(f"   Version: {version}")
         print(f"   Stage: {version_info.current_stage}")

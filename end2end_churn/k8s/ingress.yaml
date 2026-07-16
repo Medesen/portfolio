@@ -24,7 +24,10 @@ metadata:
     # Nginx ingress controller
     nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/rate-limit: "100"  # Requests per second
+    # Real ingress-nginx rate-limit annotations (there is no
+    # "rate-limit" annotation; unknown annotations are silently ignored)
+    nginx.ingress.kubernetes.io/limit-rps: "100"        # Requests per second per client IP
+    nginx.ingress.kubernetes.io/limit-connections: "20" # Concurrent connections per client IP
     
     # CORS configuration (if needed for browser clients)
     nginx.ingress.kubernetes.io/enable-cors: "true"

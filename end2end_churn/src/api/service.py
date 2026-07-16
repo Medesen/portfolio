@@ -16,7 +16,6 @@ from ..utils.prometheus_metrics import (
     data_quality_issue_count,
     model_prediction_time,
     prediction_count,
-    prediction_error_count,
     prediction_probability_histogram,
     schema_mismatch_count,
 )
@@ -102,8 +101,8 @@ def load_model_from_registry(
         metadata = None
 
         try:
-            # Get run artifacts
-            run = client.get_run(run_id)
+            # Validate the run exists (raises if not), then list its artifacts
+            client.get_run(run_id)
             artifacts = client.list_artifacts(run_id, "metadata")
 
             # Look for metadata file

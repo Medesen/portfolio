@@ -12,6 +12,12 @@ This directory contains Kubernetes manifests for deploying the Churn Prediction 
 > - **Mount training data** if you intend to use the `/retrain` endpoint (it runs
 >   `train.py`, which needs the dataset).
 > - **Replace the placeholder secret** in `secret.yaml` (it contains no real token).
+> - **Pick a model-publication mechanism for multi-node clusters.** The PVC in
+>   `deployment.yaml` is `ReadWriteOnce`, which only works with 3 replicas while
+>   every pod lands on the same node (fine on minikube). For a real cluster,
+>   either bake the immutable model into the image, fetch it from object storage
+>   in an initContainer, or use a `ReadOnlyMany` volume — see the NOTE in the
+>   PVC section of `deployment.yaml`.
 >
 > They are provided to show the intended production shape (replicas, HPA,
 > probes, config/secret separation), not as a one-command deploy.
@@ -158,8 +164,11 @@ kubectl rollout restart deployment/churn-prediction-api
 
 ```bash
 # Create secret for service token
+# NOTE: the key must be `service-token` — deployment.yaml consumes
+# secretKeyRef key: service-token; a different key leaves pods stuck in
+# CreateContainerConfigError.
 kubectl create secret generic churn-secrets \
-  --from-literal=SERVICE_TOKEN=your-secret-token
+  --from-literal=service-token=your-secret-token
 
 # Reference in deployment.yaml:
 # env:
@@ -167,7 +176,7 @@ kubectl create secret generic churn-secrets \
 #     valueFrom:
 #       secretKeyRef:
 #         name: churn-secrets
-#         key: SERVICE_TOKEN
+#         key: service-token
 ```
 
 ## Scaling

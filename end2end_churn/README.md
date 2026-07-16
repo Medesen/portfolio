@@ -7,12 +7,12 @@ A production-oriented ML service that predicts customer churn for a telecom data
 ## Summary
 
 **Domain:** Telecom customer churn prediction  
-**Dataset:** Telco Customer Churn (7,043 customers, 20 features)  
+**Dataset:** Telco Customer Churn (7,043 customers, 19 features)  
 **Task:** Binary classification  
 **Best Performance:** ROC AUC 0.837 (held-out test set)  
 **Supported Models:** Random Forest, XGBoost, Logistic Regression  
 **Tech Stack:** FastAPI, MLflow, Prometheus/Grafana, Docker, Kubernetes  
-**Test Coverage:** 200+ tests, 91% coverage (full suite, measured in CI-equivalent Docker run)
+**Test Coverage:** 200+ tests, 91% coverage of src/ (full suite, measured in CI-equivalent Docker run; the serve.py and train.py entry points are exercised by the tests but outside the measured universe)
 
 **Model Performance (held-out test set, F1-tuned threshold ≈ 0.33):**
 - ROC AUC: 0.837
@@ -140,7 +140,7 @@ I built a complete ML service with training, serving, and monitoring. The traini
 
 The API layer uses FastAPI with Pydantic for request validation, includes rate limiting per endpoint, and implements proper error handling with request tracing. I added drift detection that monitors numeric features (mean/std changes), categorical features (Population Stability Index), and prediction distributions. When drift crosses thresholds, the system can trigger automatic retraining.
 
-The monitoring stack uses Prometheus for metrics collection (latency histograms, request counts, drift events) and Grafana for visualization. I built three dashboards: API overview, latency/SLO tracking, and ML-specific metrics. The test suite has 200+ tests covering unit, integration, and end-to-end workflows, achieving 91% coverage across the full suite; CI enforces a coverage floor on the unit-test job.
+The monitoring stack uses Prometheus for metrics collection (latency histograms, request counts, drift events) and Grafana for visualization. I built three dashboards: API overview, latency/SLO tracking, and ML-specific metrics. The test suite has 200+ tests covering unit, integration, and end-to-end workflows, achieving 91% coverage of src/ across the full suite (coverage is scoped to src/ — the serve.py and train.py entry points are exercised but not measured); CI enforces a coverage floor on the unit-test job.
 
 Deployment is fully containerized—everything runs in Docker with no local Python setup required. The CI/CD pipeline on GitHub Actions runs linting, tests, security scanning, and load testing on every push. Kubernetes manifests include auto-scaling, health probes, resource limits, and ingress configuration.
 
@@ -169,9 +169,9 @@ Deployment is fully containerized—everything runs in Docker with no local Pyth
 
 ### Test Suite Overview
 
-The project includes 200+ tests (91% full-suite coverage) demonstrating patterns for all major components: preprocessing, training pipeline, model factory, API endpoints, drift detection, threshold tuning, and monitoring integration.
+The project includes 200+ tests (91% full-suite coverage of src/) demonstrating patterns for all major components: preprocessing, training pipeline, model factory, API endpoints, drift detection, threshold tuning, and monitoring integration.
 
-**Test Results:** 200+ tests passing | 91% full-suite code coverage
+**Test Results:** 200+ tests passing | 91% full-suite code coverage of src/
 
 **Production considerations:** This test suite is comprehensive for a portfolio project but not exhaustive. For production, I would add property-based testing, chaos engineering tests, performance regression tests, and more extensive edge case coverage.
 
@@ -205,7 +205,7 @@ make test-api             # API endpoint tests
 
 **Domain:** Telecom customer churn  
 **Source:** Kaggle Telco Customer Churn (IBM Sample Data)  
-**Size:** 7,043 customers, 20 features
+**Size:** 7,043 customers, 19 features (4 numeric + 15 categorical; customerID and the Churn target are excluded)
 
 **Feature Categories:**
 - Demographics: gender, SeniorCitizen, Partner, Dependents
@@ -493,7 +493,7 @@ kubectl scale deployment churn-prediction --replicas=5
 
 **Features:**
 - 3 replicas with auto-scaling (3-10 pods)
-- Resource limits (CPU: 250m-1000m, Memory: 512Mi-1Gi)
+- Resource limits (CPU: 250m-1000m, Memory: 512Mi-2Gi)
 - Health probes (liveness, readiness, startup)
 - ConfigMap for configuration
 - Ingress with TLS and rate limiting
@@ -709,11 +709,11 @@ docker compose down                                    # Stop services
 
 # Training variations
 docker compose run --rm api python train.py --config config/train_config_quick.yaml  # Quick training
-docker compose run --rm api python train.py --compare-all  # Compare all models
+docker compose run --rm api python scripts/compare_models.py  # Compare all 3 models
 
-# Testing
+# Testing (tests are organized by pytest markers, not directories)
 docker compose run --rm api pytest tests/ -v           # Run all tests
-docker compose run --rm api pytest tests/unit/ -v      # Unit tests only
+docker compose run --rm api pytest -m unit -v          # Unit tests only
 
 # API testing (requires API to be running)
 curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @test_request.json
@@ -830,7 +830,7 @@ All strategies are computed during training and saved in metadata. The API autom
 
 - mypy configured strict in `pyproject.toml` (`disallow_untyped_defs = true`)
 - TypedDict for structured data; generic type annotations throughout
-- **Honest status:** mypy currently reports ~108 errors, mostly ML-library
+- **Honest status:** mypy currently reports ~110 errors, mostly ML-library
   interface friction, so it runs as an *advisory, non-blocking* CI step;
   burning that debt down is future work. Formatting (black) and import order
   (isort) *are* blocking CI gates.

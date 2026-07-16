@@ -1,6 +1,31 @@
 # Customer Churn Prediction API - Dockerfile
-# Uses Python 3.12 slim image for smaller size
+# Two-stage build: compilers and git exist only in the builder stage, so the
+# runtime image ships neither build tooling nor its CVE surface.
+#
+# Deliberate trade-off: the test suite (tests/, pytest, locust) IS part of the
+# runtime image — this project's documented workflow is Docker-only testing
+# ("make test" runs pytest inside the same image that serves), and the load
+# test runs locust from the api image. A stricter deployment would split a
+# separate requirements-runtime.lock; here the single lock keeps CI, tests,
+# and serving on one pinned resolution.
 
+# ============================ builder ============================
+FROM python:3.12-slim AS builder
+
+# build-essential/git: only needed while resolving and building wheels
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.lock .
+
+# Install the fully pinned lock file (same resolution CI uses) into a venv
+# that can be copied wholesale into the runtime stage
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.lock
+
+# ============================ runtime ============================
 FROM python:3.12-slim
 
 # Accept UID/GID as build arguments (defaults to 1000:1000)
@@ -14,24 +39,17 @@ ENV NB_USER=${NB_USER} NB_UID=${UID} NB_GID=${GID}
 # Set working directory in container
 WORKDIR /app
 
-# Install system dependencies
-# build-essential: Required for compiling some Python packages (numpy, scipy)
+# Runtime system dependencies only
 # curl: Needed for health checks
 # gosu: For dropping privileges in entrypoint
 RUN apt-get update && apt-get install -y \
-    build-essential \
     curl \
     gosu \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for Docker layer caching)
-# If requirements don't change, this layer is cached and pip install is skipped
-COPY requirements.lock .
-
-# Install Python dependencies from the fully pinned lock file (same resolution
-# CI uses). --no-cache-dir: Don't store pip cache (reduces image size)
-RUN pip install --no-cache-dir -r requirements.lock
+# Python dependencies come pre-built from the builder stage
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
 COPY src/ ./src/

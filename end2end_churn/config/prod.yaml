@@ -1,9 +1,13 @@
-# Production Configuration
-# This configuration is optimized for production training with thorough
-# hyperparameter search and rigorous validation.
+# Production-style Configuration
+# Same data and MLflow store as the default config, but with the thorough
+# hyperparameter search and stricter validation a production training run
+# would use. Runnable as-is via `make train-prod`.
 
 data:
-  data_path: "/data/production/dataset.arff"  # Production data path
+  # In a real deployment this would point at an immutable production data
+  # snapshot (e.g. object storage); here it uses the bundled dataset so the
+  # documented command actually runs.
+  data_path: "data/dataset.arff"
   random_state: 42
   test_size: 0.15                              # More data for training
   val_size: 0.15                               # Smaller validation set
@@ -20,15 +24,22 @@ model:
   n_jobs: -1
 
 mlflow:
-  tracking_uri: "http://mlflow-server:5000"    # Remote MLflow server
+  # In a real deployment this would be a remote MLflow server
+  # (e.g. http://mlflow.internal:5000); the compose stack ships no such
+  # service, so the runnable default is the local file store.
+  tracking_uri: "./mlruns"
   experiment_name: "churn_prediction_prod"
   log_models: true
   log_artifacts: true
 
+# NOTE: drift thresholds are consumed by the SERVING layer, which reads them
+# from environment variables (DRIFT_THRESHOLD_* in docker-compose.yml /
+# .env). train.py validates but does not use this block; it documents the
+# stricter values a production deployment would export.
 drift:
-  numeric_threshold: 0.15                      # More sensitive to drift
-  categorical_threshold: 0.20                  # More sensitive
-  prediction_threshold: 0.08                   # More sensitive
+  numeric_threshold: 0.15                      # Relative mean/std change (stricter)
+  categorical_threshold: 0.20                  # PSI threshold (stricter)
+  prediction_threshold: 0.08                   # Absolute churn-rate change (stricter)
   min_sample_size: 500                         # Larger sample requirement
   max_drift_batch_size: 5000                   # Larger batches allowed
 

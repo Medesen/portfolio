@@ -192,13 +192,20 @@ class DriftConfig(BaseModel):
     """Configuration for drift detection."""
 
     numeric_threshold: float = Field(
-        0.2, ge=0.0, le=1.0, description="Numeric drift threshold (Kolmogorov-Smirnov)"
+        0.2,
+        ge=0.0,
+        le=1.0,
+        description="Relative change in a numeric feature's mean/std that counts "
+        "as drift (the KS test applies its own p-value separately)",
     )
     categorical_threshold: float = Field(
         0.25, ge=0.0, le=1.0, description="PSI threshold for categorical features"
     )
     prediction_threshold: float = Field(
-        0.1, ge=0.0, le=1.0, description="Prediction drift threshold (PSI)"
+        0.1,
+        ge=0.0,
+        le=1.0,
+        description="Absolute change in the predicted churn rate that counts as drift",
     )
     min_sample_size: int = Field(100, ge=10, description="Minimum sample size for drift detection")
     max_drift_batch_size: int = Field(
@@ -217,6 +224,10 @@ class TrainingConfig(BaseModel):
     data: DataConfig = Field(default_factory=DataConfig)
     model: ModelConfig = Field(default_factory=ModelConfig)
     mlflow: MLflowConfig = Field(default_factory=MLflowConfig)
+    # Validated here so the training YAMLs can document deployment defaults,
+    # but CONSUMED by the serving layer, which builds its DriftConfig from
+    # DRIFT_THRESHOLD_* environment variables (see serve.py) — train.py does
+    # not read these values.
     drift: DriftConfig = Field(default_factory=DriftConfig)
 
     @classmethod

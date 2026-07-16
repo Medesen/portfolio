@@ -6,7 +6,6 @@ Tests data loading, preprocessing, and split creation.
 Comprehensive Testing
 """
 
-import numpy as np
 import pandas as pd
 import pytest
 

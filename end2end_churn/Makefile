@@ -12,7 +12,8 @@
         test test-unit test-integration test-e2e test-quick test-coverage \
         security-scan security-scan-critical \
         load-test load-test-ui \
-        clean clean-data clean-models clean-all purge
+        clean clean-data clean-models clean-all purge \
+        quick-update rebuild
 
 # Default target - show help when running 'make' with no arguments
 help:
@@ -94,6 +95,10 @@ help:
 	@echo "  make clean-all      - Complete cleanup (Docker + generated files)"
 	@echo "  make purge          - NUCLEAR: Remove ALL generated files (uses Docker for cleanup)"
 	@echo ""
+	@echo "Development Shortcuts:"
+	@echo "  make quick-update   - Retrain model and restart the API"
+	@echo "  make rebuild        - Rebuild image, retrain, and start the API"
+	@echo ""
 	@echo "Examples:"
 	@echo "  make setup                                      # First-time setup"
 	@echo "  make train                                      # Train single model (Random Forest)"
@@ -116,9 +121,6 @@ setup: build
 	@mkdir -p secrets
 	@touch secrets/service_token.txt
 	@echo "✓ Secrets directory created"
-	@echo ""
-	@echo "Building Docker image..."
-	@docker compose build
 	@echo ""
 	@echo "Training initial model..."
 	@$(MAKE) train
@@ -210,7 +212,7 @@ compare-models:
 	@echo "✓ All 3 models trained and compared!"
 	@echo ""
 	@echo "Results saved:"
-	@echo "  - diagnostics/model_comparison_report.txt"
+	@echo "  - diagnostics/model_comparison_report_<run_id>.txt"
 	@echo "  - diagnostics/model_comparison_YYYYMMDD_HHMMSS.png"
 	@echo ""
 	@echo "View all training experiments:"
@@ -229,7 +231,7 @@ compare-models-quick:
 	@echo "✓ All 3 models compared (quick mode)!"
 	@echo ""
 	@echo "Results saved:"
-	@echo "  - diagnostics/model_comparison_report.txt"
+	@echo "  - diagnostics/model_comparison_report_<run_id>.txt"
 	@echo "  - diagnostics/model_comparison_YYYYMMDD_HHMMSS.png"
 	@echo ""
 
@@ -303,6 +305,13 @@ down:
 up-monitoring:
 	@echo "Starting full monitoring stack..."
 	@echo "This includes: API, Prometheus, and Grafana"
+	@if [ -z "$$GRAFANA_PASSWORD" ] && ! grep -qE '^GRAFANA_PASSWORD=..*' .env 2>/dev/null; then \
+		echo ""; \
+		echo "Error: GRAFANA_PASSWORD is not set."; \
+		echo "Set a non-default Grafana admin password first, e.g.:"; \
+		echo "  echo \"GRAFANA_PASSWORD=\$$(openssl rand -hex 16)\" >> .env"; \
+		exit 1; \
+	fi
 	@docker compose --profile monitoring up -d
 	@echo ""
 	@echo "✓ All services started!"
@@ -412,25 +421,27 @@ test-auth:
 
 test-validation:
 	@echo "Testing error handling and validation..."
+	@echo "(/predict takes a SINGLE customer object; /drift takes a batch)"
 	@echo ""
-	@echo "1. Testing empty batch (should return 400):"
+	@echo "1. Testing empty request body on /predict (should return 422):"
 	@curl -s -X POST http://localhost:8000/predict \
+		-H "Content-Type: application/json" \
+		-d '{}' -w "\nHTTP Status: %{http_code}\n\n" | head -n 20
+	@echo ""
+	@echo "2. Testing invalid data type on /predict (should return 422):"
+	@curl -s -X POST http://localhost:8000/predict \
+		-H "Content-Type: application/json" \
+		-d '{"tenure": "invalid", "MonthlyCharges": 50}' -w "\nHTTP Status: %{http_code}\n\n" | head -n 20
+	@echo ""
+	@echo "3. Testing empty batch on /drift (should return 400):"
+	@curl -s -X POST http://localhost:8000/drift \
 		-H "Content-Type: application/json" \
 		-d '{"customers": []}' -w "\nHTTP Status: %{http_code}\n\n" | head -n 20
-	@echo ""
-	@echo "2. Testing invalid data type (should return 422):"
-	@curl -s -X POST http://localhost:8000/predict \
-		-H "Content-Type: application/json" \
-		-d '{"customers": [{"tenure": "invalid", "MonthlyCharges": 50}]}' -w "\nHTTP Status: %{http_code}\n\n" | head -n 20
-	@echo ""
-	@echo "3. Testing missing required field (should return 422):"
-	@curl -s -X POST http://localhost:8000/predict \
-		-H "Content-Type: application/json" \
-		-d '{"customers": [{"tenure": 12}]}' -w "\nHTTP Status: %{http_code}\n\n" | head -n 20
 
 test-drift:
 	@echo "Running comprehensive drift detection tests..."
-	@docker compose run --rm api python scripts/test_drift.py
+	@echo "(requires the API to be up: make up)"
+	@docker compose run --rm -e API_URL=http://api:8000 api python scripts/test_drift.py
 
 drift-info:
 	@echo "Fetching drift detection configuration..."
@@ -560,7 +571,7 @@ load-test:
 	@echo "  • Users: 50 concurrent"
 	@echo "  • Spawn rate: 10 users/second"
 	@echo "  • Duration: 60 seconds"
-	@echo "  • Target: http://localhost:8000"
+	@echo "  • Target: http://api:8000 (the running API service on the compose network)"
 	@echo ""
 	@echo "Validating SLOs:"
 	@echo "  • p95 latency < 500ms"
@@ -575,7 +586,7 @@ load-test:
 			--users 50 \
 			--spawn-rate 10 \
 			--run-time 60s \
-			--host http://host.docker.internal:8000 \
+			--host http://api:8000 \
 			--html /app/tests/locust_report.html \
 			--csv /app/tests/locust_results \
 	"
@@ -589,18 +600,18 @@ load-test-ui:
 	@echo ""
 	@echo "Configuration:"
 	@echo "  • Open: http://localhost:8089"
-	@echo "  • Target: http://host.docker.internal:8000"
+	@echo "  • Target: http://api:8000 (the running API service on the compose network)"
 	@echo "  • Suggested settings:"
 	@echo "    - Users: 50"
 	@echo "    - Spawn rate: 10"
-	@echo "    - Host: http://host.docker.internal:8000"
+	@echo "    - Host: http://api:8000"
 	@echo ""
 	@echo "Press Ctrl+C to stop"
 	@echo ""
 	@docker compose run --rm -p 8089:8089 --entrypoint bash api -c "\
 		pip install locust==2.32.3 >/dev/null 2>&1 && \
 		cd tests && \
-		locust -f locustfile.py --host http://host.docker.internal:8000 \
+		locust -f locustfile.py --host http://api:8000 \
 	"
 
 # =============================================================================
@@ -620,7 +631,7 @@ clean-data:
 
 clean-models:
 	@echo "Removing trained models..."
-	@rm -rf models/*.joblib models/*.json 2>/dev/null || true
+	@rm -rf models/*.joblib models/*.json models/*.sha256 models/.last_retrain 2>/dev/null || true
 	@echo "✓ Models removed (run 'make train' to retrain)"
 
 clean-all: clean clean-data clean-models

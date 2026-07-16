@@ -51,7 +51,7 @@ request_count = Counter(
 prediction_count = Counter(
     "churn_predictions_total",
     "Total number of individual predictions made",
-    ["predicted_class"],  # Labels: 0 (no churn), 1 (churn)
+    ["predicted_class"],  # Labels: "Yes" (churn) / "No" (no churn)
 )
 
 prediction_probability_histogram = Histogram(
@@ -167,4 +167,9 @@ def set_model_metrics(run_id: str, timestamp: str, roc_auc: float):
         timestamp: Model training timestamp
         roc_auc: Model validation ROC AUC score
     """
+    # Clear any previous label-set first: run_id/timestamp/roc_auc are encoded
+    # as labels, so after a model reload the old series would otherwise keep
+    # reporting 1 alongside the new one and consumers would see two "current"
+    # models.
+    model_info.clear()
     model_info.labels(run_id=run_id, timestamp=timestamp, roc_auc=f"{roc_auc:.4f}").set(1)

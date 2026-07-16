@@ -680,7 +680,7 @@ def evaluate_test_set(
     logger.info(f"Test Avg Precision: {test_metrics['avg_precision']:.4f}")
 
     cm = test_metrics["confusion_matrix"]
-    logger.info(f"\nTest Confusion Matrix:")
+    logger.info("\nTest Confusion Matrix:")
     logger.info(f"  TN={cm['tn']}, FP={cm['fp']}")
     logger.info(f"  FN={cm['fn']}, TP={cm['tp']}")
 
@@ -737,9 +737,9 @@ def save_training_artifacts(
     versioned_checksum = save_model(best_model, str(versioned_model_path))
     logger.info(f"Versioned model saved: {versioned_model_path}")
 
-    # Also save as "latest" for easy loading
+    # Also save as "latest" for easy loading (writes its own .sha256 sidecar)
     latest_model_path = models_dir / "churn_model_latest.joblib"
-    latest_checksum = save_model(best_model, str(latest_model_path))
+    save_model(best_model, str(latest_model_path))
     logger.info(f"Latest model saved: {latest_model_path}")
 
     # Save configuration for this run
@@ -767,7 +767,7 @@ def save_training_artifacts(
         model_checksum=versioned_checksum,  # Include checksum in metadata
     )
     logger.info(
-        f"Metadata saved (includes validation, test metrics, threshold strategies, and checksum)"
+        "Metadata saved (includes validation, test metrics, threshold strategies, and checksum)"
     )
 
     # Pair the "latest" model with its own metadata file so loaders never glob a
@@ -842,7 +842,7 @@ def log_to_mlflow(
             logger.info("=" * 60)
             logger.info(f"Model registered: {registered_model_name}")
             logger.info(f"Version: {model_info.registered_model_version}")
-            logger.info(f"Stage: None (use promotion script to set stage)")
+            logger.info("Stage: None (use promotion script to set stage)")
             logger.info("=" * 60)
 
     # Log artifacts to MLflow
@@ -914,18 +914,18 @@ def print_training_summary(
     logger.info(f"  Threshold: {threshold_info['chosen_threshold']:.4f}")
     logger.info("")
     logger.info("Top 5 Features:")
-    for idx, row in feature_importance_df.head(5).iterrows():
-        logger.info(f"  {idx+1}. {row['feature']:40s} ({row['importance']:.4f})")
+    for rank, (_, row) in enumerate(feature_importance_df.head(5).iterrows(), start=1):
+        logger.info(f"  {rank}. {row['feature']:40s} ({row['importance']:.4f})")
     logger.info("")
     logger.info("Deliverables:")
     logger.info(f"  Versioned model: models/churn_model_{run_id}.joblib")
-    logger.info(f"  Latest model:    models/churn_model_latest.joblib")
+    logger.info("  Latest model:    models/churn_model_latest.joblib")
     logger.info(f"  Configuration:   configs/run_config_{run_id}.yaml")
     logger.info(f"  Metadata:        models/metadata_{run_id}.json")
     logger.info(f"  Diagnostics:     diagnostics/evaluation_report_{run_id}.txt")
     logger.info(f"  Visualizations:  diagnostics/*_{run_id}.png (5 files)")
     logger.info(f"  Feature data:    diagnostics/feature_importances_{run_id}.csv")
-    logger.info(f"  Training log:    logs/training.log")
+    logger.info("  Training log:    logs/training.log")
     if mlflow_run_id:
         logger.info(f"  MLflow tracking: {config.mlflow.tracking_uri}/#{mlflow_run_id}")
     logger.info("")

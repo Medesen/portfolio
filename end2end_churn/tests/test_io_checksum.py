@@ -9,7 +9,6 @@ Model Checksum Validation Tests
 import json
 import os
 import tempfile
-from pathlib import Path
 
 import pytest
 from sklearn.ensemble import RandomForestClassifier

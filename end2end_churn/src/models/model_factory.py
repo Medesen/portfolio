@@ -10,8 +10,6 @@ The factory pattern makes it easy to:
 - Swap models via configuration
 """
 
-from typing import Optional
-
 import xgboost as xgb
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
