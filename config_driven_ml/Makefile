@@ -18,6 +18,11 @@ train: outputs ## Train a model. Pass Hydra overrides via ARGS, e.g. make train 
 	docker compose run --rm mlctl train $(ARGS)
 
 evaluate: outputs ## Re-score a run, e.g. make evaluate RUN=outputs/baseline/gbm/seed_42
+ifndef RUN
+	@echo "Error: provide a run directory with RUN=..."
+	@echo "Example: make evaluate RUN=outputs/baseline/gbm/seed_42"
+	@exit 1
+endif
 	docker compose run --rm mlctl evaluate run_dir=$(RUN)
 
 sweep: outputs ## Multirun example: both models x three seeds

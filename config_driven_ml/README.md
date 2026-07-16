@@ -8,9 +8,9 @@ A small, config-driven ML training pipeline built to demonstrate a pattern I con
 **Task:** Regression on the diabetes dataset (bundled with scikit-learn, 442 samples)  
 **Pattern:** Pydantic models as single source of truth → Hydra ConfigStore → validated CLI  
 **Models:** Gradient boosting (HistGradientBoostingRegressor) and Ridge, swappable via a config group  
-**Baseline Result:** GBM RMSE 59.1 / R² 0.34 vs Ridge RMSE 63.0 / R² 0.25 (seed 42)  
+**Baseline Result:** Ridge RMSE 55.5 / R² 0.42 vs GBM RMSE 59.1 / R² 0.34 (seed 42) — on 442 rows the regularized linear model beats the boosted trees, which is exactly the kind of one-command comparison the config layer is for  
 **Tech Stack:** Hydra, Pydantic v2, scikit-learn, Docker  
-**Test Coverage:** 15 tests (schema constraints, Hydra composition, train/evaluate roundtrip)  
+**Test Coverage:** 18 tests (schema constraints, Hydra composition, train/evaluate roundtrip, artifact integrity)  
 **Setup Time:** ~2 minutes
 
 **What the config layer gives you:**
@@ -18,7 +18,7 @@ A small, config-driven ML training pipeline built to demonstrate a pattern I con
 - Invalid values rejected with readable errors before any training starts
 - Named experiment configs that inherit from the base and change only what differs
 - Multirun sweeps: `mlctl train -m model=ridge,gbm seed=0,1,2`
-- A config snapshot saved with every run, so any run can be re-evaluated from its output directory within the same environment (dependencies pinned via `requirements.lock`; a `run_metadata.json` fingerprint flags scikit-learn / dataset drift)
+- A config snapshot, the exact held-out row indices (`split.json`, with a dataset checksum), and a SHA-256 sidecar for the model artifact saved with every run — so any run can be re-evaluated from its output directory and tampered or drifted artifacts are refused rather than silently rescored
 
 ---
 
@@ -135,7 +135,7 @@ A Pydantic discriminated union and a Hydra config group are the same idea approa
 
 **Explicit factory over Hydra's `_target_` instantiation:** Hydra can instantiate classes directly from config via `_target_` fields. I deliberately used a plain factory function (`build_model`) instead. At this scale, `_target_` adds indirection and import-time magic without buying anything; at the scale of dozens of swappable components it earns its keep. Knowing where that line sits is part of the demonstration.
 
-**Config snapshots for reproducibility:** Every training run writes its fully resolved config next to the model artifact. The `evaluate` command rebuilds the exact train/test split from the snapshot — within the same environment, the roundtrip test asserts re-evaluation reproduces the training metrics bit-for-bit. A `run_metadata.json` fingerprint (scikit-learn version, dataset shape) is written alongside so re-evaluation warns if the environment has since drifted.
+**Config snapshots for reproducibility:** Every training run writes its fully resolved config next to the model artifact, plus `split.json` (the held-out row indices and a SHA-256 of the dataset) and `model.joblib.sha256` (an integrity sidecar for the artifact). The `evaluate` command recovers the exact test rows from `split.json` and verifies both checksums before deserializing anything — the roundtrip test asserts re-evaluation reproduces the training metrics bit-for-bit, and tamper tests assert a modified artifact or foreign dataset is refused. A `run_metadata.json` fingerprint (scikit-learn version, dataset shape) additionally warns if the environment has drifted. (The checksum establishes integrity — the artifact is what training wrote — not that an artifact from an untrusted source is safe to load.)
 
 **Deterministic output paths:** Output directories are built by interpolation (`outputs/${experiment_name}/${model.kind}/seed_${seed}`) rather than timestamps, so sweep runs land in predictable places and re-running a config overwrites its own results instead of accumulating clutter.
 
@@ -155,11 +155,11 @@ A Pydantic discriminated union and a Hydra config group are the same idea approa
 
 ## Testing
 
-The project includes 15 tests covering the three layers of the config stack:
+The project includes 18 tests covering the three layers of the config stack:
 
 - **Schema tests** - Discriminated union selects the right model class; constraint violations (`alpha <= 0`, `test_size >= 1`) are rejected; required fields are enforced
 - **Hydra integration tests** - Composition via the real config files, config-group overrides, named experiment configs, and both CLI failure modes (validation error, missing required value) using Hydra's compose API
-- **Pipeline roundtrip test** - Train produces model + metrics + snapshot; evaluate reconstructs the split from the snapshot and reproduces the training metrics exactly
+- **Pipeline roundtrip test** - Train produces model + metrics + snapshot + persisted split; evaluate recovers the exact test rows, verifies artifact integrity, and reproduces the training metrics exactly
 
 ```bash
 # Run all tests in Docker
@@ -189,7 +189,7 @@ config_driven_ml/
 │   ├── train.py                # Thin CLI entry: @config_command + run_training
 │   ├── evaluate.py             # Thin CLI entry: @config_command + run_evaluation
 │   └── main.py                 # Dict-registry command router
-├── tests/                      # 15 tests across the three layers
+├── tests/                      # 18 tests across the three layers
 ├── Dockerfile                  # Non-root container (host-owned outputs)
 ├── docker-compose.yml
 ├── Makefile                    # Command shortcuts
