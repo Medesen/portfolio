@@ -84,7 +84,7 @@ A forecasting system I built to compare classical and ML approaches the way time
 - Quantile forecasts with pinball loss and interval-coverage evaluation (0.778 vs 0.80 target)
 - PPML promo-lift estimation with SKU fixed effects and stated identification assumptions
 - Leakage tests that corrupt the future and assert forecasts don't move
-- 27 tests, ~5 minute setup, fully reproducible (`make reproduce` regenerates every README number)
+- 29 tests, ~5 minute setup, fully reproducible (`make reproduce` regenerates every README number)
 
 **[View Project →](demand_forecasting/)**
 
@@ -104,7 +104,7 @@ An experimentation-and-uplift study I built to work through the three questions 
 - ATEs with unpooled CIs, minimum-detectable-effect, and Holm/BH multiplicity control across the arm × outcome grid
 - CUPED + Lin (2013) regression adjustment, with the honest ~0–3% variance reduction this data allows — mechanism validated on synthetic data where reduction = ρ² exactly
 - S/T/X-learner uplift models evaluated by Qini on a held-out split, with a decile table and a top-k targeting simulation vs response-model and random targeting
-- 18 tests incl. estimator-recovery on known synthetic truth, ~5 minute setup, fully reproducible (`make reproduce` regenerates every number and the figure)
+- 22 tests incl. estimator-recovery on known synthetic truth, ~5 minute setup, fully reproducible (`make reproduce` regenerates every number and the figure)
 
 **[View Project →](causal_uplift/)**
 
@@ -153,9 +153,9 @@ portfolio/
 │   │   ├── generation/        # LLM integration
 │   │   ├── evaluation/        # Metrics & analysis
 │   │   └── utils/             # Config, logging
-│   ├── tests/                  # 103 unit tests
+│   ├── tests/                  # 111 unit tests
 │   ├── data/
-│   │   ├── corpus/            # Scikit-learn docs (420 files, tracked)
+│   │   ├── corpus/            # Scikit-learn docs (420 HTML documents, tracked)
 │   │   └── evaluation/        # Test set (35 Q&A pairs, tracked)
 │   ├── config/
 │   │   └── config.yaml        # YAML configuration
@@ -188,7 +188,7 @@ portfolio/
 │   │   ├── configs/           # Base + named experiment YAML configs
 │   │   ├── pipeline.py        # Train/evaluate logic
 │   │   └── main.py            # CLI router
-│   ├── tests/                  # 15 tests (schema, composition, roundtrip)
+│   ├── tests/                  # 18 tests (schema, composition, roundtrip)
 │   ├── Dockerfile              # Container definition
 │   ├── docker-compose.yml      # Single-service orchestration
 │   ├── Makefile               # Command shortcuts
@@ -202,7 +202,7 @@ portfolio/
 │   │   ├── models/            # Baselines, SARIMAX, global LightGBM + quantiles
 │   │   ├── analysis/          # PPML promo-lift, forecast plots
 │   │   └── main.py            # CLI: backtest / promo-lift / plot-forecast
-│   ├── tests/                  # 27 tests (leakage, estimator recovery, metrics)
+│   ├── tests/                  # 29 tests (leakage, estimator recovery, metrics)
 │   ├── data/raw/               # Bundled dataset (872 KB, CC BY) + provenance
 │   ├── assets/                 # Example forecast figure
 │   ├── Dockerfile              # Container definition
@@ -217,7 +217,7 @@ portfolio/
 │   │   ├── experiment/        # Balance (SMD), ATE inference, CUPED / adjustment
 │   │   ├── uplift/            # S/T/X-learners; Qini, deciles, targeting
 │   │   └── main.py            # CLI: balance / ate / cuped / uplift / all
-│   ├── tests/                  # 18 tests incl. estimator-recovery on known truth
+│   ├── tests/                  # 22 tests incl. estimator-recovery on known truth
 │   ├── data/raw/               # Bundled dataset (3.96 MB) + provenance
 │   ├── assets/                 # Qini curve figure
 │   ├── Dockerfile              # Container definition

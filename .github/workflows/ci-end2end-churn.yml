@@ -48,8 +48,9 @@ jobs:
       
       - name: Run flake8 (linting)
         run: |
-          # Check for syntax errors and undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=venv,mlruns,mlartifacts
+          # Check for syntax errors and the full pyflakes rule class
+          # (unused imports/variables, undefined names, f-string issues)
+          flake8 . --count --select=E9,F --show-source --statistics --exclude=venv,mlruns,mlartifacts
           # Check for complexity and style (allow longer lines for ML code)
           flake8 . --count --exit-zero --max-complexity=15 --max-line-length=120 --statistics --exclude=venv,mlruns,mlartifacts
       
@@ -63,7 +64,7 @@ jobs:
 
       - name: Type check with mypy (advisory, non-blocking)
         run: |
-          # Known debt: ~108 errors, mostly ML-library interface friction.
+          # Known debt: ~110 errors (src/config.py now included), mostly ML-library interface friction.
           # Advisory until burned down — the README states this honestly.
           mypy src/ serve.py train.py --config-file pyproject.toml || echo "Type checking issues found (advisory, non-blocking)"
 
@@ -258,8 +259,12 @@ jobs:
   # =============================================================================
   # Job 6: Container Security Scanning (Issue 7)
   # =============================================================================
+  # ADVISORY job: Trivy runs with exit-code 0 / `|| true`, so vulnerabilities
+  # are reported (logs + GitHub Security tab) but do not fail the workflow.
+  # Tightening to a blocking severity policy would mean setting exit-code: '1'
+  # on the scan steps and maintaining a .trivyignore allowlist.
   security-scan:
-    name: Container Security Scan
+    name: Container Security Scan (advisory)
     runs-on: ubuntu-latest
     needs: docker-test
     defaults:
@@ -311,10 +316,8 @@ jobs:
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy image --scanners secret churn-service:latest || true
       
-      - name: Check Python dependencies for known vulnerabilities
+      - name: Check Python dependencies for known vulnerabilities (advisory)
         run: |
-          docker run --rm churn-service:latest pip list --format=json > pip-packages.json || true
-          # Trivy can also scan pip packages
           docker run --rm -v $PWD:/scan aquasec/trivy fs --scanners vuln /scan/requirements.lock || true
 
   # =============================================================================
@@ -478,9 +481,12 @@ jobs:
             echo "❌ Load test failed - SLO violations detected"
             exit 1
           elif [ "${{ needs.security-scan.result }}" != "success" ]; then
-            echo "⚠️  Security scan had issues (non-blocking)"
+            echo "⚠️  Security scan job errored (advisory, non-blocking)"
             echo "✅ All functional tests passed!"
           else
-            echo "✅ All tests, load tests, and security scan passed!"
+            echo "✅ All tests and load tests passed."
+            echo "ℹ️  Security scan is ADVISORY: it ran and uploaded findings, but"
+            echo "    reported vulnerabilities do not fail this workflow — review"
+            echo "    the Security tab / scan logs."
           fi
 

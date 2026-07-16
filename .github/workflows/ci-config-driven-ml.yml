@@ -40,10 +40,10 @@ jobs:
           pip install -r requirements.lock
           pip install --no-deps .
 
-      - name: Lint (ruff — syntax errors and undefined names)
+      - name: Lint (ruff — syntax errors and the full F rule class)
         run: |
           pip install ruff
-          ruff check --select E9,F63,F7,F82 .
+          ruff check --select E9,F .
 
       - name: Run tests
         run: |
