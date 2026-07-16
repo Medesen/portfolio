@@ -82,9 +82,12 @@ def main() -> None:
 
     # Volume-tercile prose: "(low 0.64 / mid 0.66 / high 0.66)"
     m = re.search(r"low ([\d.]+) / mid ([\d.]+) / high ([\d.]+)", readme)
-    lgbm = scores("lgbm")
-    for group, value in zip(["low", "mid", "high"], m.groups()):
-        check(f"LightGBM MASE tercile ({group})", float(value), float(lgbm[group]["mase"]), 2)
+    if m is None:
+        failures.append("  MISSING tercile prose: 'low … / mid … / high …'")
+    else:
+        lgbm = scores("lgbm")
+        for group, value in zip(["low", "mid", "high"], m.groups()):
+            check(f"LightGBM MASE tercile ({group})", float(value), float(lgbm[group]["mase"]), 2)
 
     # --- README: 8-SKU subset comparison table ------------------------------
     check_score_row(readme, "SARIMAX (promo + holiday exog)", "sarimax_subset-sarimax")

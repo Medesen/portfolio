@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from demandcast.evaluation import make_folds, run_backtest
+from demandcast.models import sarimax as sarimax_mod
 from demandcast.models.sarimax import Sarimax, select_skus
 
 
@@ -36,3 +38,18 @@ def test_sarimax_smoke_backtest():
     assert (preds["y_pred"] >= 0).all()
     # sanity: forecasts are in the right ballpark, not degenerate
     assert 5 < preds["y_pred"].mean() < 60
+
+
+def test_order_selection_raises_when_every_candidate_fails(monkeypatch):
+    """Total order-selection failure must be loud, not a silent fallback to
+    the first (equally broken) candidate."""
+    long = _toy_long(skus=(("A_1", 20.0),))
+    monkeypatch.setattr(
+        sarimax_mod, "CANDIDATE_ORDERS", [((-1, 0, 0), (0, 0, 0, 0))]
+    )
+    model = Sarimax(promo_schedule=long)
+    ts = long.sort_values("date")
+    y = np.log1p(ts["qty"].to_numpy(dtype=float))
+    X = sarimax_mod._exog(ts)
+    with pytest.raises(RuntimeError, match="order selection failed"):
+        model._select_order("A_1", y, X)

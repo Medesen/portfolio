@@ -166,6 +166,13 @@ class LgbmForecaster:
             params = {**LGB_PARAMS, "objective": "quantile", "alpha": q}
             params.pop("tweedie_variance_power")
             out[f"y_q{int(q * 100)}"] = self._fit_one(params, X_tr, y_tr, X_val, y_val, X_te)
+        # Independently fitted quantile models can cross on individual rows
+        # (e.g. P10 > P50). Sorting each row is the standard rearrangement fix
+        # (Chernozhukov, Fernández-Val & Galichon 2010): it restores monotone
+        # quantiles without changing any single quantile's marginal distribution.
+        qcols = [f"y_q{int(q * 100)}" for q in sorted(self._quantiles)]
+        if len(qcols) > 1:
+            out[qcols] = np.sort(out[qcols].to_numpy(), axis=1)
         return out
 
     @staticmethod

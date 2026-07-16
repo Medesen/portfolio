@@ -45,6 +45,9 @@ def make_folds(
     With the defaults (12 × 28-day non-overlapping folds) the evaluation
     window covers roughly the final year of data.
     """
+    for name, value in (("n_folds", n_folds), ("horizon", horizon), ("stride", stride)):
+        if not (isinstance(value, int) and value >= 1):
+            raise ValueError(f"{name} must be a positive integer, got {value!r}")
     td = pd.DatetimeIndex(sorted(pd.unique(trading_days)))
     needed = horizon + (n_folds - 1) * stride
     # The oldest fold needs at least one training day before its test window,

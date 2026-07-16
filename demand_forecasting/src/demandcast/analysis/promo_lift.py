@@ -145,6 +145,11 @@ def estimate_promo_lift(long: pd.DataFrame) -> PromoLiftResult:
                 "ci_high_pct": hi,
                 "n_skus": est.n_skus,
                 "promo_share": float(bdf["promo"].mean()),
+                # Cluster-robust variance is asymptotic in the number of
+                # clusters and tends to under-cover below ~30, so intervals
+                # from few-cluster brands are flagged as approximate right in
+                # the emitted table, not only in prose.
+                "ci_approx_few_clusters": bool(est.n_skus < 30),
             }
         )
     by_brand = pd.DataFrame(brand_rows).set_index("brand")

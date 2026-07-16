@@ -1,7 +1,8 @@
 # Dataset: Hierarchical Sales Data (Italian pasta sales)
 
 Daily sales quantities and promotion flags for 118 pasta SKUs (4 brands) sold by
-an Italian grocery retailer, 2014-01-01 to 2018-12-31.
+an Italian grocery retailer, 2014-01-02 to 2018-12-31 (the store is closed on
+New Year's Day, so the panel starts on Jan 2).
 
 | | |
 |---|---|

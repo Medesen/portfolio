@@ -46,8 +46,12 @@ def test_lgbm_smoke_backtest_with_quantiles(toy_long):
     assert (preds["y_pred"] >= 0).all()
     for c in ["y_q10", "y_q50", "y_q90"]:
         assert c in preds.columns and preds[c].notna().all()
-    # quantiles ordered on average (individual crossings are possible)
+    # quantiles ordered on average
     assert preds["y_q10"].mean() < preds["y_q90"].mean()
+    # ... and row by row: the rearrangement step guarantees every individual
+    # prediction interval is monotone (no P10 > P50 or P50 > P90 crossings)
+    assert (preds["y_q10"] <= preds["y_q50"]).all()
+    assert (preds["y_q50"] <= preds["y_q90"]).all()
 
 
 def test_train_long_widens_pool_without_leaking_dates(toy_long):

@@ -136,10 +136,16 @@ def score(preds: pd.DataFrame, long: pd.DataFrame, m: int = SEASONAL_PERIOD) -> 
         rows.append(
             {
                 "segment": name,
-                "mase": s["mase"].mean(),  # NaN-skipping mean over series-folds
+                # NaN-skipping mean over series-folds; the two count columns
+                # make the exclusion visible: a MASE is NaN when the fold's
+                # train slice is too short or seasonally constant, and those
+                # series-folds simply drop out of the mean.
+                "mase": s["mase"].mean(),
                 "wape": wape(p["y_true"].to_numpy(), p["y_pred"].to_numpy()),
                 "rmse": rmse(p["y_true"].to_numpy(), p["y_pred"].to_numpy()),
                 "n_pairs": len(p),
+                "n_series_folds": len(s),
+                "n_mase_defined": int(s["mase"].notna().sum()),
             }
         )
     return pd.DataFrame(rows).set_index("segment")

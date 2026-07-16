@@ -16,18 +16,18 @@ The dataset is 5 years of daily sales for 118 pasta SKUs from an Italian retaile
 | seasonal-naive (m=7) | 1.002 | 1.027 | 8.75 |
 | **global LightGBM (Tweedie)** | **0.652** | **0.644** | **5.22** |
 
-The global model improves MASE by 35% over seasonal-naive, *uniformly across volume terciles* (low 0.64 / mid 0.66 / high 0.66) — it is not hiding poor slow-mover performance behind fast movers. Its P10–P90 quantile forecasts achieve 0.778 empirical coverage against a 0.80 target.
+The global model improves MASE by 35% over seasonal-naive, *uniformly across volume terciles* (low 0.64 / mid 0.66 / high 0.66) — it is not hiding poor slow-mover performance behind fast movers. Its P10–P90 quantile forecasts achieve 0.782 empirical coverage against a 0.80 target (rows rearranged so quantiles never cross).
 
 **On the 8 highest-volume SKUs, where classical assumptions hold (same folds):**
 
 | Model | MASE | WAPE | RMSE |
 |---|---|---|---|
-| **SARIMAX (promo + holiday exog)** | **0.659** | **0.513** | 11.33 |
+| **SARIMAX (promo + holiday exog)** | **0.659** | **0.513** | 11.29 |
 | LightGBM (trained on the 8-SKU subset) | 0.692 | 0.528 | 10.65 |
 | LightGBM (global training, evaluated on the subset) | 0.693 | 0.531 | 10.81 |
 | seasonal-naive | 1.043 | 0.835 | 18.01 |
 
-SARIMAX *wins* on this subset on MASE and WAPE — against LightGBM under **both** training scopes: trained on the 8 SKUs alone and trained globally on all 118 with cross-learning (`--train-scope global`), which lands within noise of the subset-trained run. LightGBM does keep the better RMSE (10.65/10.81 vs 11.33): the squared-error metric rewards its conservative behaviour on the largest spikes, while SARIMAX's exogenous promo/holiday terms win on the scale-free and volume-weighted views. That split is the honest headline of the comparison: a well-specified per-series classical model is hard to beat on long, regular, high-volume series, and cross-learning has nothing to add where each series already carries years of its own history. The global ML model earns its keep on *breadth* — the other 110 series, including the intermittent ones where a Gaussian state-space model has no business being fit.
+SARIMAX *wins* on this subset on MASE and WAPE — against LightGBM under **both** training scopes: trained on the 8 SKUs alone and trained globally on all 118 with cross-learning (`--train-scope global`), which lands within noise of the subset-trained run. LightGBM does keep the better RMSE (10.65/10.81 vs 11.29): the squared-error metric rewards its conservative behaviour on the largest spikes, while SARIMAX's exogenous promo/holiday terms win on the scale-free and volume-weighted views. That split is the honest headline of the comparison: a well-specified per-series classical model is hard to beat on long, regular, high-volume series, and cross-learning has nothing to add where each series already carries years of its own history. The global ML model earns its keep on *breadth* — the other 110 series, including the intermittent ones where a Gaussian state-space model has no business being fit.
 
 **Promotion lift (PPML, SKU + calendar fixed effects, SEs clustered by SKU, n = 212,164):**
 
@@ -96,7 +96,7 @@ demandcast backtest --model seasonal_naive
 
 ### Evaluation discipline
 
-- **Rolling-origin backtesting, never a random split.** Random splits leak future information into training; every number here comes from 12 expanding-window folds whose test windows tile the final year of data.
+- **Rolling-origin backtesting, never a random split.** Random splits leak future information into training; every number here comes from 12 expanding-window folds whose test windows tile roughly the final year of data.
 - **Baselines first.** Without the seasonal-naive reference there is no way to know whether any model adds value over "sell what you sold last week". Most forecasting write-ups skip this; the baseline rows in the tables above are the point of comparison for everything else.
 - **A true 28-day-ahead test for every day.** All LightGBM sales-history features are shifted ≥ 28 trading days, so no prediction quietly benefits from yesterday's sales. A dedicated test corrupts the future and asserts the forecasts don't move.
 - **Metrics chosen for the data, with reasons on record.** MASE (scale-free across 60× volume differences), WAPE, RMSE — and *not* sMAPE, which is undefined or explosive on zero-sales days. The reasoning lives in [DATA_NOTES.md](DATA_NOTES.md).
@@ -139,13 +139,13 @@ One inferential caveat on this table: SEs are clustered by SKU, and cluster-robu
 | naive | all 118 | last observed value, held flat |
 | seasonal-naive | all 118 | last observed value on the same weekday |
 | SARIMAX | 8 high-volume SKUs | per-series, log1p scale, AIC order selection among 3 candidates, exog: promo, open-holiday, holiday-eve |
-| global LightGBM | all 118 | one model, Tweedie objective (power 1.2), ~26 features: qty lags ≥ 28 trading days, rolling stats, promo schedule (incl. lead terms), calendar, SKU/brand categoricals; early stopping on the last 28 train days; 3 companion quantile models |
+| global LightGBM | all 118 | one model, Tweedie objective (power 1.2), ~26 features: qty lags ≥ 28 trading days, rolling stats, promo schedule (incl. lead terms), calendar, SKU/brand categoricals; early stopping on the last 28 train days; 3 companion quantile models (row-wise rearranged so P10 ≤ P50 ≤ P90 never cross) |
 
 Hyperparameters are sensible fixed values, deliberately not tuned: honest tuning (nested inside every fold) would dominate the project's runtime for marginal insight, and un-nested tuning would be leakage. Listed as future work.
 
 ## Testing
 
-27 tests, all runnable in Docker:
+29 tests, all runnable in Docker:
 
 ```bash
 make test
@@ -173,7 +173,7 @@ demand_forecasting/
 │   ├── models/                  # Baselines, SARIMAX, global LightGBM + quantiles
 │   ├── analysis/                # PPML promo-lift estimation; forecast plots
 │   └── main.py                  # CLI: backtest / promo-lift / plot-forecast
-├── tests/                       # 27 tests incl. leakage + estimator-recovery
+├── tests/                       # 29 tests incl. leakage + estimator-recovery
 ├── assets/                      # Example forecast figure
 ├── Dockerfile / docker-compose.yml / Makefile / setup.sh / setup.ps1
 └── outputs/                     # Backtest predictions & scores (gitignored)
@@ -183,7 +183,7 @@ demand_forecasting/
 
 - **No hyperparameter tuning.** LightGBM runs on fixed sensible values; nested-CV tuning is the correct next step and would likely close (some of) the SARIMAX gap on the subset.
 - **No deep learning column.** N-BEATS/TFT-class models are the natural third family, but a rushed, under-tuned DL comparison is worse than none; on 118 series the literature expects gradient boosting to remain competitive anyway.
-- **Interval calibration is good, not perfect.** 0.778 vs the 0.80 target overall, but 0.70 on the high-volume subset — conformal calibration on top of the quantile models is the obvious remedy.
+- **Interval calibration is good, not perfect.** 0.782 vs the 0.80 target overall, but 0.70 on the high-volume subset — conformal calibration on top of the quantile models is the obvious remedy.
 - **The lift estimate is an average.** A single promo coefficient hides heterogeneity (depth of discount is unobserved in this dataset; lift varies by brand as shown). With promo-depth data, an elasticity model would be the next step.
 - **Hierarchy is unused.** The SKUs belong to 4 brands; hierarchical reconciliation (brand/total coherence) is a natural extension — it is what the dataset's source paper (Mancuso et al. 2021) studies.
 

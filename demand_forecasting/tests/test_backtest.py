@@ -38,6 +38,19 @@ def test_make_folds_rejects_impossible_request(toy_long):
         make_folds(toy_long["date"], n_folds=10, horizon=28, stride=28)
 
 
+def test_make_folds_rejects_non_positive_arguments(toy_long):
+    for kwargs in (
+        {"n_folds": 0},
+        {"n_folds": -1},
+        {"horizon": 0},
+        {"stride": 0},
+        {"stride": -7},
+        {"horizon": 14.0},  # non-integer
+    ):
+        with pytest.raises(ValueError, match="positive integer"):
+            make_folds(toy_long["date"], **{"n_folds": 2, "horizon": 14, "stride": 14, **kwargs})
+
+
 def test_make_folds_accepts_minimal_panel():
     """Exactly one training day plus the requested test days is valid."""
     dates = pd.Series(pd.date_range("2020-01-01", periods=15, freq="D"))
@@ -61,7 +74,7 @@ def test_seasonal_naive_is_exact_on_pure_weekly_pattern(toy_long):
 def test_naive_holds_last_value_flat(toy_long):
     folds = make_folds(toy_long["date"], n_folds=1, horizon=7, stride=7)
     preds = run_backtest(toy_long, Naive(), folds)
-    last_train_day = folds[0].train_end
+    last_train_day = folds[0].train_end  # noqa: F841 — used via @-ref in df.query below
     for sku in ["A_1", "A_2"]:
         expected = toy_long.query("sku == @sku and date == @last_train_day")["qty"].iloc[0]
         assert (preds.query("sku == @sku")["y_pred"] == expected).all()

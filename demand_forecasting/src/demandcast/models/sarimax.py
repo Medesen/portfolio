@@ -17,11 +17,14 @@ history is only ever taken from the training slice.
 
 from __future__ import annotations
 
+import logging
 import warnings
 
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+logger = logging.getLogger(__name__)
 
 from demandcast.data.calendar import calendar_features
 from demandcast.evaluation.backtest import Fold
@@ -114,26 +117,46 @@ class Sarimax:
 
     def _select_order(self, sku: str, y: np.ndarray, X: np.ndarray) -> tuple:
         if sku not in self._order_cache:
-            best_aic, best = np.inf, CANDIDATE_ORDERS[0]
+            fits: list[tuple[float, bool, tuple]] = []  # (aic, converged, candidate)
+            failures: list[str] = []
             for order, seasonal_order in CANDIDATE_ORDERS:
                 try:
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
-                        aic = (
-                            SARIMAX(
-                                y,
-                                exog=X,
-                                order=order,
-                                seasonal_order=seasonal_order,
-                                enforce_stationarity=False,
-                                enforce_invertibility=False,
-                            )
-                            .fit(disp=False, maxiter=200)
-                            .aic
-                        )
-                except Exception:
+                        res = SARIMAX(
+                            y,
+                            exog=X,
+                            order=order,
+                            seasonal_order=seasonal_order,
+                            enforce_stationarity=False,
+                            enforce_invertibility=False,
+                        ).fit(disp=False, maxiter=200)
+                except Exception as exc:
+                    failures.append(f"{(order, seasonal_order)}: {exc}")
                     continue
-                if aic < best_aic:
-                    best_aic, best = aic, (order, seasonal_order)
-            self._order_cache[sku] = best
+                aic = float(res.aic)
+                if not np.isfinite(aic):
+                    failures.append(f"{(order, seasonal_order)}: non-finite AIC")
+                    continue
+                converged = bool(getattr(res, "mle_retvals", {}).get("converged", True))
+                fits.append((aic, converged, (order, seasonal_order)))
+            if failures:
+                logger.warning(
+                    "sku %s: %d of %d SARIMAX order candidates failed: %s",
+                    sku, len(failures), len(CANDIDATE_ORDERS), "; ".join(failures),
+                )
+            if not fits:
+                raise RuntimeError(
+                    f"SARIMAX order selection failed for sku {sku!r}: "
+                    f"every candidate raised or produced a non-finite AIC "
+                    f"({'; '.join(failures)})"
+                )
+            converged_fits = [f for f in fits if f[1]]
+            if not converged_fits:
+                logger.warning(
+                    "sku %s: no SARIMAX candidate converged; "
+                    "selecting best AIC among non-converged fits",
+                    sku,
+                )
+            self._order_cache[sku] = min(converged_fits or fits, key=lambda f: f[0])[2]
         return self._order_cache[sku]
