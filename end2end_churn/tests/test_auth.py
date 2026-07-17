@@ -24,12 +24,18 @@ from src.api.settings import service_config  # noqa: E402
 
 @pytest.fixture
 def auth_client(monkeypatch):
-    """Client against an app with a configured service token and empty model cache."""
+    """Client against an app with a configured service token.
+
+    The cache holds a sentinel (non-None) model so endpoints never lazy-load
+    from disk: with metadata absent, /drift/info answers a deterministic 503
+    whether or not a trained model exists in the environment (CI's unit job
+    has none; a developer machine usually does).
+    """
     monkeypatch.setattr(service_config, "service_token", "correct-token")
     app.state.model_cache = {
-        "model": None,
-        "version": None,
-        "features": None,
+        "model": object(),
+        "version": "test-sentinel",
+        "features": [],
         "threshold": 0.5,
         "metadata": None,
     }
@@ -53,11 +59,11 @@ def test_wrong_token_rejected(auth_client):
 
 @pytest.mark.unit
 def test_correct_token_reaches_endpoint(auth_client):
-    """A valid token must clear auth. The endpoint's own response is 200 or
-    503 depending on whether a model is on disk (the cache lazy-loads it);
-    either way, anything but 401 proves the request got past verify_token."""
+    """A valid token must clear auth: the 503 is the endpoint's own
+    no-metadata response, proving the request got past verify_token."""
     response = auth_client.get("/drift/info", headers={"Authorization": "Bearer correct-token"})
-    assert response.status_code != 401
+    assert response.status_code == 503
+    assert "metadata" in response.json()["detail"]
 
 
 @pytest.mark.unit
