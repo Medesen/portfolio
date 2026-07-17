@@ -51,5 +51,5 @@ add or rename pages. Re-run this same script to regenerate a consistent corpus.
 
 ## Provenance
 - Version: 1.7.2 
-- Processed at: 2025-10-16 18:34:45 UTC
-- Script: scripts/prepare_sklearn_corpus.py (deterministic rules as above)
+- Processed at: 2026-07-17 11:09:44 UTC
+- Script: scripts/prune_sklearn_corpus.py (deterministic rules as above)

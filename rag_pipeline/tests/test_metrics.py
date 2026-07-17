@@ -8,12 +8,11 @@ These tests verify that:
 - Edge cases are handled properly
 """
 
-from src.evaluation.metrics import RetrievalMetrics
+from src.evaluation import metrics
 
 
 def test_recall_at_k_perfect_retrieval():
     """Test Recall@k with perfect retrieval (all relevant docs found)."""
-    metrics = RetrievalMetrics()
     relevant_docs = ["doc1", "doc2", "doc3"]
     retrieved_docs = ["doc1", "doc2", "doc3", "doc4", "doc5"]
     
@@ -25,7 +24,6 @@ def test_recall_at_k_perfect_retrieval():
 
 def test_recall_at_k_partial_retrieval():
     """Test Recall@k with partial retrieval."""
-    metrics = RetrievalMetrics()
     relevant_docs = ["doc1", "doc2", "doc3"]
     retrieved_docs = ["doc1", "doc4", "doc2", "doc5", "doc6"]
     
@@ -37,7 +35,6 @@ def test_recall_at_k_partial_retrieval():
 
 def test_recall_at_k_no_relevant():
     """Test Recall@k when no relevant docs are found."""
-    metrics = RetrievalMetrics()
     relevant_docs = ["doc1", "doc2", "doc3"]
     retrieved_docs = ["doc4", "doc5", "doc6"]
     
@@ -49,7 +46,6 @@ def test_recall_at_k_no_relevant():
 
 def test_rr_first_position():
     """Test reciprocal rank when relevant doc is at first position."""
-    metrics = RetrievalMetrics()
     relevant_docs = ["doc1"]
     retrieved_docs = ["doc1", "doc2", "doc3"]
 
@@ -61,7 +57,6 @@ def test_rr_first_position():
 
 def test_rr_second_position():
     """Test reciprocal rank when relevant doc is at second position."""
-    metrics = RetrievalMetrics()
     relevant_docs = ["doc2"]
     retrieved_docs = ["doc1", "doc2", "doc3"]
 
@@ -73,7 +68,6 @@ def test_rr_second_position():
 
 def test_ndcg_perfect_ranking():
     """Test NDCG with perfect ranking (all relevant docs at top)."""
-    metrics = RetrievalMetrics()
     relevant_docs = ["doc1", "doc2"]
     retrieved_docs = ["doc1", "doc2", "doc3"]
 
@@ -85,7 +79,6 @@ def test_ndcg_perfect_ranking():
 
 def test_precision_at_k_counts_relevant_in_top_k():
     """Test Precision@k with more retrieved docs than k."""
-    metrics = RetrievalMetrics()
     relevant_docs = ["doc1", "doc2", "doc3"]
     retrieved_docs = ["doc1", "doc4", "doc2", "doc5", "doc6"]
 
@@ -102,7 +95,6 @@ def test_precision_at_k_divides_by_k_when_fewer_returned():
     results — with chunk→document deduplication, fewer than k documents is the
     common case, so this distinction directly affects reported numbers.
     """
-    metrics = RetrievalMetrics()
     relevant_docs = ["doc1", "doc2"]
     retrieved_docs = ["doc1", "doc2"]  # only 2 unique documents returned
 

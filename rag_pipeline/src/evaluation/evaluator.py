@@ -8,7 +8,8 @@ import json
 from datetime import datetime
 
 from .test_loader import TestLoader, TestQuestion
-from .metrics import RetrievalMetrics, extract_doc_ids_from_chunks
+from . import metrics as ir_metrics
+from .metrics import extract_doc_ids_from_chunks
 from .llm_judge import LLMJudge
 from ..retrieval.query_processor import QueryProcessor
 from ..retrieval.embedder import Embedder
@@ -58,7 +59,6 @@ class RAGEvaluator:
         
         # Initialize components
         self.test_loader = TestLoader(config)
-        self.metrics_calculator = RetrievalMetrics()
         
         # Query processor (with embedder and vector store)
         if query_processor is None:
@@ -288,14 +288,14 @@ class RAGEvaluator:
             retrieved_doc_ids = extract_doc_ids_from_chunks(retrieved_chunks)
             
             # 2. Calculate retrieval metrics
-            retrieval_metrics = self.metrics_calculator.calculate_all_metrics(
+            retrieval_metrics = ir_metrics.calculate_all_metrics(
                 retrieved_doc_ids,
                 question.relevant_doc_ids,
                 self.top_k_values
             )
             
             # Also calculate topic coverage
-            topic_coverage = self.metrics_calculator.topic_coverage(
+            topic_coverage = ir_metrics.topic_coverage(
                 retrieved_chunks,
                 question.expected_topics
             )
@@ -390,7 +390,7 @@ class RAGEvaluator:
                 retrieval_metrics_list.append(result["retrieval"]["metrics"])
         
         # Average retrieval metrics
-        avg_retrieval_metrics = self.metrics_calculator.average_metrics(retrieval_metrics_list)
+        avg_retrieval_metrics = ir_metrics.average_metrics(retrieval_metrics_list)
         
         # Extract judgment scores
         judgment_scores = []
@@ -440,7 +440,7 @@ class RAGEvaluator:
         # Average metrics for each group
         aggregated = {}
         for attr_value, metrics_list in grouped.items():
-            aggregated[attr_value] = self.metrics_calculator.average_metrics(metrics_list)
+            aggregated[attr_value] = ir_metrics.average_metrics(metrics_list)
         
         return aggregated
     

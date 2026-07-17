@@ -31,7 +31,8 @@ from src.retrieval.bm25_index import BM25Index
 from src.retrieval.hybrid_searcher import HybridSearcher
 from src.retrieval.reranker import CrossEncoderReranker
 from src.evaluation.test_loader import TestLoader
-from src.evaluation.metrics import RetrievalMetrics, extract_doc_ids_from_chunks
+from src.evaluation import metrics as retrieval_metrics
+from src.evaluation.metrics import extract_doc_ids_from_chunks
 
 
 logger = get_logger("benchmark_overfetch")
@@ -117,7 +118,6 @@ def run_benchmark(
     logger.info(f"Loaded {len(questions)} test questions")
     
     # Metrics calculator
-    metrics_calc = RetrievalMetrics()
     
     # Run benchmark for each overfetch value
     results_by_overfetch = {}
@@ -158,14 +158,14 @@ def run_benchmark(
                 
                 # Calculate metrics
                 k_values = [5, 10, final_top_k] if final_top_k not in [5, 10] else [5, 10]
-                metrics = metrics_calc.calculate_all_metrics(
+                metrics = retrieval_metrics.calculate_all_metrics(
                     retrieved_doc_ids,
                     question.relevant_doc_ids,
                     k_values
                 )
                 
                 # Topic coverage
-                topic_coverage = metrics_calc.topic_coverage(
+                topic_coverage = retrieval_metrics.topic_coverage(
                     retrieved_chunks,
                     question.expected_topics
                 )
@@ -191,7 +191,7 @@ def run_benchmark(
         
         if successful_results:
             # Average metrics
-            avg_metrics = metrics_calc.average_metrics(
+            avg_metrics = retrieval_metrics.average_metrics(
                 [r['metrics'] for r in successful_results]
             )
             

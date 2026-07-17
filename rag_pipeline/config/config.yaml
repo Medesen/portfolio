@@ -62,8 +62,12 @@ retrieval:
   overfetch_factor: 3  # Retrieve this many times top_k before fusion
 
 # Query Rewriting Configuration
+# Disabled by default since the 2026-07 retrieval ablation: rewriting
+# significantly hurt ranking on the 35-question benchmark (ΔMRR −0.27 vs the
+# hybrid+rerank path, 95% CI excludes zero) and added ~1s latency per query.
+# See scripts/ablation_eval.py and the README's ablation table.
 query_rewriting:
-  enabled: true  # Enable LLM-based query rewriting
+  enabled: false  # Enable LLM-based query rewriting (measured harmful on this corpus)
   temperature: 0.3  # Low temperature for deterministic rewrites
   max_tokens: 100  # Maximum tokens for rewritten query
   timeout: 30  # Timeout for rewrite LLM call (seconds)
