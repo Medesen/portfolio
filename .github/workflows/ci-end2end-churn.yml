@@ -45,7 +45,11 @@ jobs:
           pip install --upgrade pip
           pip install flake8 black isort mypy
           pip install pandas-stubs types-PyYAML types-requests
-      
+          # The blocking mypy step needs the real project dependencies:
+          # without fastapi/pydantic/starlette installed, every import in the
+          # typed packages is a missing-stub error.
+          pip install -r requirements.lock
+
       - name: Run flake8 (linting)
         run: |
           # Check for syntax errors and the full pyflakes rule class
