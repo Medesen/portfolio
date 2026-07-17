@@ -11,8 +11,8 @@ A RAG (Retrieval-Augmented Generation) system built to compare chunking strategi
 **Tech Stack:** ChromaDB, sentence-transformers, BM25, Ollama (Llama 3.2), Docker  
 **Setup Time:** Approximately 10 minutes for complete environment  
 **Search Modes:** Hybrid (BM25 + semantic), semantic-only, keyword-only  
-**Query Enhancement:** LLM-based query rewriting with caching  
-**Reranking:** Cross-encoder reranking for improved retrieval precision
+**Query Enhancement:** LLM-based query rewriting with caching (off by default — measured harmful in the ablation below)  
+**Reranking:** Cross-encoder reranking (enabled by default; gain within noise in the ablation below)
 
 **Evaluation Results:**
 | Strategy | Recall@10 | MRR | NDCG@10 |
@@ -21,9 +21,34 @@ A RAG (Retrieval-Augmented Generation) system built to compare chunking strategi
 | Semantic | 0.46 | 0.48 | 0.36 |
 | Hierarchical | 0.49 | 0.46 | 0.36 |
 
-**Evaluation scope (important):** these numbers isolate the *chunking strategies* under plain semantic retrieval — no hybrid BM25 fusion, no query rewriting, no cross-encoder reranking. The shipped default pipeline (`make query`) enables all three, so its end-to-end retrieval quality is not what this table measures. Holding the rest of the pipeline at its simplest configuration keeps the chunking comparison clean, but an end-to-end evaluation of the full default pipeline is future work. The differences between strategies are also small for a 35-question test set and should be read as directional, not definitive.
+**Evaluation scope:** these numbers isolate the *chunking strategies* under plain semantic retrieval — no hybrid BM25 fusion, no query rewriting, no cross-encoder reranking. Holding the rest of the pipeline at its simplest configuration keeps the chunking comparison clean. The differences between strategies are small for a 35-question test set and should be read as directional, not definitive. The pipeline's other components are evaluated separately in the ablation below.
 
 Based on this analysis, I recommend fixed chunking for technical documentation retrieval.
+
+### Pipeline ablation: what do the other components contribute?
+
+The default query path layers BM25 fusion, cross-encoder reranking, and (previously) LLM query rewriting on top of dense retrieval. I ablated each component stepwise on the same 35 questions (fixed chunking, retrieval depth 20, 95% CIs from 10,000 paired bootstrap resamples; `scripts/ablation_eval.py`, reproducible with `--seed 42`):
+
+| Configuration | Recall@10 | MRR | NDCG@10 | Median latency |
+|---|---|---|---|---|
+| Dense (semantic-only) | 0.538 [0.457, 0.624] | 0.514 [0.398, 0.632] | 0.407 [0.332, 0.483] | 0.01s |
+| + BM25 fusion (RRF) | 0.514 [0.433, 0.595] | 0.459 [0.353, 0.569] | 0.377 [0.308, 0.449] | 0.02s |
+| + cross-encoder reranking | 0.514 [0.419, 0.610] | 0.539 [0.406, 0.670] | 0.427 [0.336, 0.523] | 1.90s |
+| + LLM query rewriting (previous default) | 0.486 [0.395, 0.576] | 0.265 [0.189, 0.354] | 0.264 [0.210, 0.319] | 2.94s |
+
+Per-step marginal contributions (paired deltas):
+
+| Step | ΔRecall@10 | ΔMRR | ΔNDCG@10 |
+|---|---|---|---|
+| BM25 fusion | −0.024 [−0.062, +0.000] | −0.055 [−0.132, +0.011] | −0.030 [−0.084, +0.015] |
+| Cross-encoder reranking | +0.000 [−0.048, +0.048] | +0.080 [−0.025, +0.189] | +0.050 [−0.011, +0.117] |
+| LLM query rewriting | −0.029 [−0.105, +0.043] | **−0.274 [−0.419, −0.117]** | **−0.163 [−0.253, −0.068]** |
+
+**What the ablation showed, and what changed because of it:**
+
+- **LLM query rewriting significantly hurt ranking** (the only CI excluding zero) while adding ~1s per query: the 3B rewriter tends to paraphrase away the exact API names (`fit_transform`, `GridSearchCV`) that retrieval on technical docs depends on. **Query rewriting is now disabled by default** — the config change cites this measurement.
+- **BM25 fusion and reranking are within noise** on this benchmark. Reranking's point estimate is positive on MRR/NDCG at a real latency cost (~1.9s on CPU); both remain enabled by default, but on this evidence they are optional. A dense-only configuration is a defensible choice when latency matters.
+- Honest caveats: one 35-question benchmark, one corpus, doc-level relevance labels. The dense-arm numbers differ slightly from the chunking table above (0.54 vs 0.51 Recall@10) because the index was rebuilt for this run; the comparison *within* the ablation is paired and internally consistent.
 
 ---
 
@@ -39,31 +64,8 @@ Based on this analysis, I recommend fixed chunking for technical documentation r
 - RAM: 8 GB minimum (12 GB recommended for smoother first run)
 - Disk space: ~10 GB free (2GB model + data + images)
 
-### Platform-Specific Notes
-
-**Linux & macOS:** All commands work as shown. GNU Make is pre-installed.
-
-**Windows:** This README uses `make` commands (e.g., `make query`, `make test`) which are NOT available by default on Windows. You have three options:
-
-1. **Install Make** (recommended for best experience):
-   ```powershell
-   choco install make
-   ```
-   After installation, all `make` commands in this README work as shown.
-
-2. **Use PowerShell script for setup, then Docker commands**:
-   - Use `.\setup.ps1` for initial setup (works out of the box, no tools needed)
-   - For all other commands, see the Makefile for equivalent `docker compose` commands
-   - Example: Instead of `make query Q="..."`, use `docker compose run --rm rag-pipeline query "..."`
-
-3. **Use Git Bash or WSL2** (includes Make pre-installed):
-   - Use `make setup` for setup (just like Linux/macOS)
-   - All `make` commands work as shown
-   - Full compatibility with all commands
-
 ### One-Command Setup
 
-**For Linux/macOS:**
 ```bash
 # Clone the repository and navigate to project
 git clone https://github.com/Medesen/portfolio.git
@@ -73,27 +75,11 @@ cd portfolio/rag_pipeline
 make setup
 ```
 
-**For Windows:**
-
-Option 1 - PowerShell (Recommended):
-```powershell
-# Clone the repository and navigate to project
-git clone https://github.com/Medesen/portfolio.git
-cd portfolio\rag_pipeline
-
-# Run automated setup (builds containers, downloads model, processes data)
-.\setup.ps1
-```
-
-Option 2 - Git Bash / WSL2:
-```bash
-# Clone the repository and navigate to project
-git clone https://github.com/Medesen/portfolio.git
-cd portfolio/rag_pipeline
-
-# Run automated setup (builds containers, downloads model, processes data)
-make setup
-```
+**Windows:** `make` is not available by default. Either install it
+(`choco install make`), run `.\setup.ps1` for setup and use the Makefile's
+equivalent `docker compose` commands afterwards (e.g.
+`docker compose run --rm rag-pipeline query "..."` instead of
+`make query Q="..."`), or use Git Bash/WSL2 where `make` works as shown.
 
 **Setup process:**
 1. Builds Docker containers (~2-3 min)
@@ -146,7 +132,7 @@ The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. E
 
 **Hybrid search:** I implemented Reciprocal Rank Fusion (RRF) to combine BM25 keyword search with semantic embeddings. This addresses the weakness of pure semantic search on exact technical terms (e.g., "fit_transform", "GridSearchCV"). The alpha parameter (default 0.7) controls the balance: 70% semantic, 30% keyword. BM25 tokenization uses Porter stemming and stopword removal for better term matching.
 
-**Query rewriting:** Before retrieval, queries are rewritten by the LLM to improve search quality. The rewriter clarifies ambiguous phrases, expands abbreviations (e.g., "PCA" → "Principal Component Analysis PCA"), adds relevant sklearn synonyms, and removes conversational filler. Results are cached to avoid redundant LLM calls. If rewriting fails, the system gracefully falls back to the original query.
+**Query rewriting:** Before retrieval, queries can be rewritten by the LLM: the rewriter clarifies ambiguous phrases, expands abbreviations (e.g., "PCA" → "Principal Component Analysis PCA"), adds relevant sklearn synonyms, and removes conversational filler, with caching and graceful fallback to the original query. The theory sounded good; the measurement disagreed. The retrieval ablation (Summary section) showed rewriting significantly *hurting* ranking on this corpus — paraphrasing tends to dilute the exact API tokens retrieval depends on — so it now ships disabled by default (`query_rewriting.enabled: false`), kept in the codebase as a config option and as a worked example of measuring before shipping.
 
 **Cross-encoder reranking:** After initial retrieval, results are reranked using a cross-encoder model (ms-marco-MiniLM-L-6-v2). The system over-fetches ~50 candidates, then the cross-encoder jointly scores each query-document pair for more accurate relevance estimates. This improves precision at the cost of added latency (~100-200ms). The model is lazy-loaded on first use to avoid startup overhead.
 
@@ -174,9 +160,9 @@ The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. E
 
 ### Unit Tests
 
-The project includes 111 unit tests demonstrating testing patterns for core components: configuration loading, chunking strategies, evaluation metrics, embedder functionality, hybrid search (BM25, RRF fusion, alpha weighting), query rewriting (LLM integration, caching, fallback behavior), and cross-encoder reranking (score reordering, fallback behavior, timing metadata). The systematic evaluation framework (35 test questions with IR metrics) serves as the primary validation mechanism for end-to-end behavior.
+The project includes 113 unit tests demonstrating testing patterns for core components: configuration loading, chunking strategies, evaluation metrics, embedder functionality, hybrid search (BM25, RRF fusion, alpha weighting), query rewriting (LLM integration, caching, fallback behavior), and cross-encoder reranking (score reordering, fallback behavior, timing metadata). The systematic evaluation framework (35 test questions with IR metrics) serves as the primary validation mechanism for end-to-end behavior.
 
-**Test Results:** All 111 tests passing
+**Test Results:** All 113 tests passing
 
 **Production considerations:** This test suite demonstrates patterns but is not exhaustive. For production, I would add comprehensive edge case testing, integration tests, and performance tests. (The unit suite already runs in CI on every push via a path-filtered GitHub Actions workflow, installing from the pinned `requirements.lock`.)
 
@@ -389,9 +375,10 @@ retrieval:
   rrf_k: 60  # RRF dampening factor
   overfetch_factor: 3  # Fetch 3x candidates before fusion
 
-# Query rewriting (LLM-based query enhancement)
+# Query rewriting (LLM-based query enhancement; disabled by default after
+# the retrieval ablation measured it harmful on this corpus)
 query_rewriting:
-  enabled: true  # Enable query rewriting before retrieval
+  enabled: false  # Enable query rewriting before retrieval
   temperature: 0.3  # Low for deterministic rewrites
   max_tokens: 100  # Max tokens for rewritten query
   timeout: 30  # Timeout in seconds (falls back to original query on failure)
@@ -613,7 +600,7 @@ See detailed troubleshooting in:
 
 ### What about unit tests?
 
-See the [Testing](#testing) section above. The project includes 111 unit tests demonstrating patterns for core components, with the systematic evaluation framework (35 test questions with IR metrics) serving as the primary end-to-end validation.
+See the [Testing](#testing) section above. The project includes 113 unit tests demonstrating patterns for core components, with the systematic evaluation framework (35 test questions with IR metrics) serving as the primary end-to-end validation.
 
 ### What would you change for production?
 

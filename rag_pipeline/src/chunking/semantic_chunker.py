@@ -10,9 +10,18 @@ from .base_chunker import BaseChunker, Chunk
 class SemanticChunker(BaseChunker):
     """
     Chunks documents based on semantic boundaries (sentences/paragraphs).
-    
+
     Attempts to keep semantically related content together by splitting
     on natural boundaries and building chunks that don't exceed a maximum size.
+    A single unit longer than max_chunk_size is split at word boundaries so
+    no emitted chunk ever exceeds the limit.
+
+    Known limitation: sentence splitting is regex-based (punctuation followed
+    by whitespace and a capital letter), so abbreviations like "e.g. The" or
+    "Fig. 3" can produce false sentence boundaries. Acceptable here because
+    chunks are built from *groups* of sentences, so an occasional bad split
+    only moves a boundary by a few words; a proper tokenizer (spaCy/nltk)
+    would be the upgrade path if unit fidelity started to matter.
     """
     
     def __init__(self, config: Dict[str, Any] = None):
@@ -54,13 +63,18 @@ class SemanticChunker(BaseChunker):
         
         if not units:
             return []
-        
+
+        # A single unit longer than the limit (e.g. a huge paragraph, or a
+        # wall of text the sentence regex could not split) would previously
+        # become an oversized chunk; split such units at word boundaries first.
+        units = [piece for unit in units for piece in self._split_oversized_unit(unit)]
+
         # Group units into chunks that don't exceed max size
         chunks = []
         current_chunk_units = []
         current_word_count = 0
         chunk_index = 0
-        
+
         for unit in units:
             unit_words = len(unit.split())
             
@@ -114,6 +128,27 @@ class SemanticChunker(BaseChunker):
             metadata=base_metadata,
         )
     
+    def _split_oversized_unit(self, unit: str) -> List[str]:
+        """
+        Split a unit exceeding max_chunk_size into word-boundary pieces.
+
+        Units at or under the limit pass through unchanged (the common case).
+
+        Args:
+            unit: A single sentence or paragraph
+
+        Returns:
+            List of pieces, each at most max_chunk_size words
+        """
+        words = unit.split()
+        if len(words) <= self.max_chunk_size:
+            return [unit]
+
+        return [
+            " ".join(words[i : i + self.max_chunk_size])
+            for i in range(0, len(words), self.max_chunk_size)
+        ]
+
     def _split_sentences(self, text: str) -> List[str]:
         """
         Split text into sentences.

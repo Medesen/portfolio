@@ -2,7 +2,7 @@
 
 [![CI Pipeline](https://github.com/Medesen/portfolio/workflows/CI%20-%20End2End%20Churn%20Prediction/badge.svg)](https://github.com/Medesen/portfolio/actions/workflows/ci-end2end-churn.yml)
 
-A production-oriented ML service that predicts customer churn for a telecom dataset. I built this to demonstrate end-to-end ML engineering: from training with hyperparameter tuning to serving via REST API, with MLflow experiment tracking, drift detection, monitoring dashboards, and a full CI/CD pipeline. Everything runs in Docker with zero local setup required.
+A production-oriented ML service that predicts customer churn for a telecom dataset. I built this to demonstrate end-to-end ML engineering: from training with hyperparameter tuning to serving via REST API, with MLflow experiment tracking, drift detection, monitoring dashboards, and a CI/CD pipeline. Everything runs in Docker with zero local setup required.
 
 ## Summary
 
@@ -12,7 +12,7 @@ A production-oriented ML service that predicts customer churn for a telecom data
 **Best Performance:** ROC AUC 0.837 (held-out test set)  
 **Supported Models:** Random Forest, XGBoost, Logistic Regression  
 **Tech Stack:** FastAPI, MLflow, Prometheus/Grafana, Docker, Kubernetes  
-**Test Coverage:** 200+ tests, 91% coverage of src/ (full suite, measured in CI-equivalent Docker run; the serve.py and train.py entry points are exercised by the tests but outside the measured universe)
+**Test Coverage:** 212 tests, 91% full-suite coverage of src/ — the serving (`src/api`) and training (`src/training`) packages are inside the measured universe, and CI enforces the number with a full-suite coverage gate (floor 88%)
 
 **Model Performance (held-out test set, F1-tuned threshold ≈ 0.33):**
 - ROC AUC: 0.837
@@ -22,581 +22,112 @@ A production-oriented ML service that predicts customer churn for a telecom data
 
 At the default 0.5 threshold the model trades the other way — higher precision, much lower recall (67% / 48% on the validation set). Both are reported, clearly labeled, in [Performance Metrics](#performance-metrics).
 
-**Business Context:** In churn prediction, false negatives (missed churners) cost significantly more than false positives (unnecessary retention campaigns) due to lost customer lifetime value. Industry estimates commonly put this cost ratio at 10–50x. The model uses threshold tuning to balance these asymmetric costs, prioritizing recall while maintaining acceptable precision.
+**Business Context:** In churn prediction, false negatives (missed churners) cost significantly more than false positives (unnecessary retention campaigns) due to lost customer lifetime value — industry estimates commonly put the ratio at 10–50x. The model uses threshold tuning to balance these asymmetric costs, prioritizing recall while maintaining acceptable precision.
 
 ---
 
 ## Quick Start (5 Minutes)
 
-### Prerequisites
+**Prerequisites:** Docker Desktop with Compose V2 ([Get Docker](https://docs.docker.com/get-docker/)); 2 CPU cores, 4 GB RAM, ~2 GB disk. This project runs exclusively via Docker — no Python, pip, or conda needed.
 
-- Docker Desktop installed ([Get Docker](https://docs.docker.com/get-docker/))
-  - Includes Docker Compose (no separate install needed)
-  - Works on Linux, macOS, and Windows
-  - **Note:** Requires Docker Compose V2 (`docker compose` command). If you have an older Docker installation that only supports V1 (`docker-compose` with hyphen), you'll need to either upgrade Docker or manually replace `docker compose` with `docker-compose` in the setup script.
-- CPU: 2 cores minimum
-- RAM: 4 GB minimum
-- Disk space: ~2 GB
-
-### Docker-Only Execution
-
-This project runs exclusively via Docker using `make` commands. Manual Python setup is not supported.
-
-**Why Docker-only?**
-- Zero dependency issues for reviewers and hiring managers
-- Production parity - train in the same environment where models deploy
-- Reproducibility - identical execution across all platforms
-- No virtual environment management required
-
-Just install Docker and run `make setup`. No Python, pip, or conda needed.
-
-### Platform-Specific Notes
-
-**Linux & macOS:** All commands work as shown. GNU Make is pre-installed.
-
-**Windows:** This README uses `make` commands (e.g., `make up`, `make test`) which are NOT available by default on Windows. You have three options:
-
-1. **Install Make** (recommended for best experience):
-   ```powershell
-   choco install make
-   ```
-   After installation, all `make` commands in this README work as shown.
-
-2. **Use PowerShell script for setup, then Docker commands**:
-   - Use `.\setup.ps1` for initial setup (works out of the box, no tools needed)
-   - For all other commands, use [Direct Docker Commands](#direct-docker-commands) shown later in this README
-   - Example: Instead of `make up`, use `docker compose up -d api`
-
-3. **Use Git Bash or WSL2** (includes Make pre-installed):
-   - Use `make setup` for setup (just like Linux/macOS)
-   - All `make` commands work as shown
-   - Full compatibility with all commands
-
-### One-Command Setup
-
-**For Linux/macOS:**
 ```bash
-# Clone the repository and navigate to project
+# Clone and enter the project
 git clone https://github.com/Medesen/portfolio.git
 cd portfolio/end2end_churn
 
-# Run automated setup (builds containers, trains model)
+# Automated setup: builds containers (~2-3 min), trains a model (~1-2 min)
 make setup
+
+# Then:
+make up          # Start API service
+make test-api    # Test a prediction
+make down        # Stop service
+make help        # See all commands
 ```
 
-**For Windows:**
-
-Option 1 - PowerShell (Recommended):
-```powershell
-# Clone the repository and navigate to project
-git clone https://github.com/Medesen/portfolio.git
-cd portfolio\end2end_churn
-
-# Run automated setup (builds containers, trains model)
-.\setup.ps1
-```
-
-Option 2 - Git Bash / WSL2:
-```bash
-# Clone the repository and navigate to project
-git clone https://github.com/Medesen/portfolio.git
-cd portfolio/end2end_churn
-
-# Run automated setup (builds containers, trains model)
-make setup
-```
-
-**Setup process:**
-1. Builds Docker containers (~2-3 min)
-2. Trains initial model (Random Forest, ~1-2 min)
-
-### Try It Out
-
-After setup completes, you can immediately start using the service:
-
-```bash
-# Start API service
-make up
-
-# Test prediction
-make test-api
-
-# Stop service
-make down
-
-# See all commands
-make help
-```
-
-Run `make help` to see all available commands.
+**Windows:** `make` is not available by default — either `choco install make`, run `.\setup.ps1`, or use the direct Docker commands. All three options are described in [docs/OPERATIONS.md](docs/OPERATIONS.md#windows-setup-options).
 
 ---
 
 ## What This Project Demonstrates
 
-### Technical Skills
+The training pipeline handles three algorithms with automated hyperparameter tuning (grid search + cross-validation), logs every run to MLflow, and publishes versioned models with SHA256 integrity checksums and drift-detection reference statistics baked into the metadata.
 
-I built a complete ML service with training, serving, and monitoring. The training pipeline handles three algorithms (Random Forest, XGBoost, Logistic Regression) with automated hyperparameter tuning using grid search and cross-validation. Every training run logs to MLflow for experiment tracking, and the model registry manages version promotion through staging to production.
+The API layer is a decomposed FastAPI application (`src/api`): an app factory wires route modules (predict, health, drift, retrain), four middleware layers (request tracing, timeout protection, Prometheus metrics, streaming body-size enforcement), optional constant-time bearer-token auth, and sanitizing error handlers that log everything but leak nothing. Drift detection monitors numeric features (mean/std + KS test), categorical features (PSI), and prediction distributions; retraining triggers go through an atomic file-lock reservation so concurrent triggers can't launch duplicate runs.
 
-The API layer uses FastAPI with Pydantic for request validation, includes rate limiting per endpoint, and implements proper error handling with request tracing. I added drift detection that monitors numeric features (mean/std changes), categorical features (Population Stability Index), and prediction distributions. When drift crosses thresholds, the system can trigger automatic retraining.
-
-The monitoring stack uses Prometheus for metrics collection (latency histograms, request counts, drift events) and Grafana for visualization. I built three dashboards: API overview, latency/SLO tracking, and ML-specific metrics. The test suite has 200+ tests covering unit, integration, and end-to-end workflows, achieving 91% coverage of src/ across the full suite (coverage is scoped to src/ — the serve.py and train.py entry points are exercised but not measured); CI enforces a coverage floor on the unit-test job.
-
-Deployment is fully containerized—everything runs in Docker with no local Python setup required. The CI/CD pipeline on GitHub Actions runs linting, tests, security scanning, and load testing on every push. Kubernetes manifests include auto-scaling, health probes, resource limits, and ingress configuration.
+The monitoring stack uses Prometheus and Grafana with three dashboards (API overview, latency/SLO, ML metrics). Deployment is fully containerized, with Kubernetes manifests including auto-scaling, health probes, and resource limits.
 
 ### Key Technical Decisions
 
-**Docker-only execution:** Rather than support both local and containerized workflows, I made Docker mandatory. This eliminates "works on my machine" issues and ensures hiring managers can run the project with just `make setup`. It also enforces production parity—training happens in the same environment where models deploy.
+**Docker-only execution:** Rather than support both local and containerized workflows, I made Docker mandatory. This eliminates "works on my machine" issues — reviewers run the project with just `make setup` — and enforces production parity: training happens in the same environment where models deploy.
 
-**Threshold optimization:** The default 0.5 classification threshold ignores both class imbalance and business costs. For churn prediction, missing a churner (false negative) costs significantly more than an unnecessary retention campaign (false positive)—commonly estimated at 10–50x due to lost lifetime value. I implemented F1-optimized thresholds (≈0.33 for this dataset) and included alternative strategies like precision-constrained and cost-sensitive thresholds (the cost-sensitive example in training uses a 10x ratio).
+**Threshold optimization:** The default 0.5 classification threshold ignores both class imbalance and business costs. I implemented F1-optimized thresholds (≈0.33 for this dataset) plus precision-constrained, top-K, and cost-sensitive alternatives; all are computed at training time and stored in model metadata, and the API applies the tuned threshold automatically.
 
-**MLflow tracking as default:** I made experiment tracking mandatory rather than optional. This prevents lost experiments and adds minimal overhead (~100ms per run) while ensuring complete reproducibility. The model registry supports proper staging workflows, though local file loading remains the default for simplicity.
+**Entry points as thin shims:** `serve.py` and `train.py` only exist to keep deployment surfaces stable (`uvicorn serve:app`, `python train.py`). The logic lives in `src/api` and `src/training`, where it is imported, typed, and measured by coverage like everything else.
 
-**Drift detection trade-offs:** I implemented statistical drift detection (mean/std for numeric, PSI for categorical) rather than using model-based approaches. This is faster and interpretable but may miss subtle drifts that don't affect distributions. The thresholds are configurable since optimal values depend on business tolerance for false alarms vs missed drift.
+**Gradual typing boundary:** The serving and training packages are mypy-clean under a strict configuration and CI *blocks* on them staying clean. Older analytics modules (~70 remaining errors, mostly ML-library interface friction) run as an advisory burn-down list — the boundary moves as modules are cleaned, and the README doesn't claim more type safety than CI enforces.
 
----
-
-## Documentation
-
-- **[README.md](README.md)** (this file) - Quick start and overview
-- **[Makefile](Makefile)** - Command shortcuts (run `make help`)
-- **Project structure** - See [Project Structure](#project-structure) section below
-- **Development history** - See commit history for iteration details
+**Drift detection trade-offs:** Statistical drift detection (mean/std/KS for numeric, PSI for categorical) rather than model-based approaches — faster and interpretable, but may miss subtle drifts that don't affect distributions. Thresholds are configurable since optimal values depend on business tolerance for false alarms vs missed drift.
 
 ---
 
 ## Testing
 
-### Test Suite Overview
-
-The project includes 200+ tests (91% full-suite coverage of src/) demonstrating patterns for all major components: preprocessing, training pipeline, model factory, API endpoints, drift detection, threshold tuning, and monitoring integration.
-
-**Test Results:** 200+ tests passing | 91% full-suite code coverage of src/
-
-**Production considerations:** This test suite is comprehensive for a portfolio project but not exhaustive. For production, I would add property-based testing, chaos engineering tests, performance regression tests, and more extensive edge case coverage.
-
-### Running Tests
-
-All tests run inside Docker to ensure consistency with the deployment environment:
+212 tests across unit, integration, and end-to-end tiers cover preprocessing, the training pipeline, model factory, API endpoints (including auth 401 paths and lifespan startup/shutdown), drift detection, threshold tuning, retraining coordination, and monitoring integration. Full-suite coverage is 91% of `src/` — which since the entry-point decomposition includes all serving and training code — and the CI full-coverage job enforces a floor of 88%, so the headline number is verifiable from a green build alone.
 
 ```bash
-# Run all tests (displays test results and pass/fail status)
-make test
-
-# Run tests with coverage report (generates detailed coverage breakdown)
-make test-coverage
-
-# Run by category
-make test-unit              # Unit tests (fast)
-make test-integration       # API integration tests
-make test-e2e              # End-to-end workflows
-
-# Run specific features
-make test-schema           # Schema alignment tests
-make test-drift           # Drift detection tests
-make test-api             # API endpoint tests
+make test               # All tests
+make test-coverage      # With coverage report
+make test-unit          # Unit tests (fast)
+make test-integration   # API integration tests
+make test-e2e           # End-to-end workflows
 ```
 
-**Why Docker-only testing?** Running tests through Docker ensures consistent environment, all dependencies are present, same behavior as production deployment, and no need to set up local Python environment.
+Leakage-relevant hygiene: model selection uses the validation split; the held-out test set is evaluated once, at the tuned threshold, and headline numbers come from it. The e2e tests run the real CLI via subprocess (which still counts toward coverage — the subprocess runs under the same interpreter).
+
+**Production considerations:** comprehensive for a portfolio project but not exhaustive. For production I would add property-based testing, chaos tests, and performance regression tests.
 
 ---
 
 ## Dataset
 
-**Domain:** Telecom customer churn  
-**Source:** Kaggle Telco Customer Churn (IBM Sample Data)  
-**Size:** 7,043 customers, 19 features (4 numeric + 15 categorical; customerID and the Churn target are excluded)
-
-**Feature Categories:**
-- Demographics: gender, SeniorCitizen, Partner, Dependents
-- Services: PhoneService, MultipleLines, InternetService, OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, StreamingTV, StreamingMovies
-- Account: tenure, Contract, PaperlessBilling, PaymentMethod, MonthlyCharges, TotalCharges
-
-**Target:** Churn (Yes/No) - Binary classification
-
-**Class Distribution:** ~26.5% churn rate (imbalanced dataset)
+Kaggle Telco Customer Churn (IBM sample data): 7,043 customers, 19 features (4 numeric + 15 categorical; customerID and the Churn target excluded), ~26.5% churn rate. Feature groups: demographics (gender, SeniorCitizen, Partner, Dependents), services (phone/internet/streaming add-ons), account (tenure, Contract, PaperlessBilling, PaymentMethod, charges).
 
 ---
 
-## API Endpoints
+## API
 
-Available at http://localhost:8000:
+Available at http://localhost:8000 (`GET /docs` for interactive Swagger UI):
 
-- **GET /** - API information
-- **GET /health** - Detailed health check
-- **GET /healthz** - Liveness probe (Kubernetes)
-- **GET /readyz** - Readiness probe (Kubernetes)
-- **POST /predict** - Churn prediction
-- **POST /drift** - Analyze data drift
-- **GET /drift/info** - Drift configuration
-- **POST /retrain** - Trigger retraining
-- **GET /metrics** - Prometheus metrics
-- **GET /docs** - Swagger UI
+| Endpoint | Purpose |
+|---|---|
+| `POST /predict` | Churn prediction (rate-limited, optional bearer auth) |
+| `POST /drift`, `GET /drift/info` | Batch drift analysis and baseline inspection |
+| `POST /retrain` | Trigger retraining (atomic rate-limit reservation) |
+| `GET /health`, `/healthz`, `/readyz` | Detailed health, liveness, readiness probes |
+| `GET /metrics` | Prometheus metrics |
 
-### Making Predictions
-
-**Using curl:**
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
   -d @test_request.json
+# {"churn_probability": 0.56, "churn_prediction": "Yes", "risk_level": "Medium", ...}
 ```
-
-**Using Python:**
-```python
-import requests
-
-customer = {
-    "gender": "Female",
-    "SeniorCitizen": 0,
-    "Partner": "Yes",
-    "Dependents": "No",
-    "tenure": 12,
-    "Contract": "Month-to-month",
-    "PaperlessBilling": "Yes",
-    "PaymentMethod": "Electronic check",
-    "MonthlyCharges": 70.35,
-    "TotalCharges": 844.20,
-    "PhoneService": "Yes",
-    "MultipleLines": "No",
-    "InternetService": "Fiber optic",
-    "OnlineSecurity": "No",
-    "OnlineBackup": "Yes",
-    "DeviceProtection": "No",
-    "TechSupport": "No",
-    "StreamingTV": "Yes",
-    "StreamingMovies": "No"
-}
-
-response = requests.post("http://localhost:8000/predict", json=customer)
-print(response.json())
-# Output: {"churn_probability": 0.56, "churn_prediction": "Yes", "risk_level": "Medium", ...}
-```
-
-**Interactive Documentation:**
-1. Start service: `make up`
-2. Open http://localhost:8000/docs
-3. Try the API interactively
 
 ---
 
 ## Model Training
 
-All training runs via Docker:
-
 ```bash
-# Standard training (Random Forest)
-make train
-
-# Quick training (fast iteration)
-make train-quick
-
-# Production training (extensive search)
-make train-prod
-
-# Train specific models
-make train-rf          # Random Forest
-make train-xgboost     # XGBoost
-make train-logreg      # Logistic Regression
-
-# Compare all models
-make compare-models
-make compare-models-quick
-
-# Train and register in MLflow
-make train-register
-
-# View experiments
-make mlflow-ui         # Opens http://localhost:5000
+make train             # Random Forest, default config
+make train-quick       # Fast iteration
+make train-prod        # Extensive search
+make train-xgboost     # or train-rf / train-logreg
+make compare-models    # Compare all three
+make mlflow-ui         # View experiments at http://localhost:5000
 ```
 
-**Training process:**
-1. Loads data with preprocessing (scaling, one-hot encoding)
-2. Performs 3-way split (train/validation/test)
-3. Runs grid search with cross-validation
-4. Optimizes classification threshold for imbalanced data
-5. Logs everything to MLflow (parameters, metrics, artifacts)
-6. Saves model with metadata and checksums
-
----
-
-## Configuration
-
-### Environment Variables
-
-Create `.env` file (see `.env.example`):
-
-```bash
-# Service
-LOG_LEVEL=INFO
-SERVICE_TOKEN_FILE=/run/secrets/service_token  # Recommended
-SERVICE_TOKEN=your-token                        # Or direct env var
-MAX_BATCH_SIZE=1000
-MAX_REQUEST_SIZE_MB=10
-REQUEST_TIMEOUT_SECONDS=30
-
-# Rate Limiting
-RATE_LIMIT_ENABLED=true
-RATE_LIMIT_PREDICT=100/minute
-RATE_LIMIT_DRIFT=20/minute
-
-# Drift Detection
-DRIFT_THRESHOLD_NUMERIC=0.2
-DRIFT_THRESHOLD_CATEGORICAL=0.25
-DRIFT_THRESHOLD_PREDICTION=0.1
-AUTO_RETRAIN_ON_DRIFT=false
-MIN_RETRAIN_INTERVAL_HOURS=24
-
-# Model Registry
-MODEL_SOURCE=local              # or 'registry'
-MODEL_STAGE=Production
-MODEL_NAME=churn_prediction_model
-
-# Monitoring
-GRAFANA_PASSWORD=admin
-```
-
-### Config Profiles
-
-Training configurations in `config/`:
-
-- `train_config.yaml` - Default (balanced)
-- `train_config_quick.yaml` - Fast iteration
-- `prod.yaml` - Production (extensive search)
-
----
-
-## Monitoring Stack
-
-Start full monitoring (Prometheus + Grafana):
-
-```bash
-# Start all services
-make up-monitoring
-
-# Access dashboards
-make grafana-ui           # http://localhost:3000 (admin/admin)
-make prometheus-ui        # http://localhost:9090
-
-# Check metrics
-make metrics             # View raw Prometheus metrics
-make monitoring-status   # Health check all services
-
-# Stop monitoring
-make down-monitoring
-```
-
-**Grafana Dashboards:**
-- Churn API Overview (latency, throughput, errors)
-- Latency & SLO Monitoring (p50, p95, p99)
-- ML Metrics (drift, predictions, model age)
-
-**Prometheus Metrics:**
-- `churn_prediction_requests_total` - Request counts
-- `churn_prediction_request_duration_seconds` - Latency histogram
-- `churn_predictions_total` - Predictions by class
-- `churn_drift_detected_total` - Drift detection events
-- `churn_model_age_days` - Model age
-
----
-
-## Drift Detection
-
-Monitor data distribution changes:
-
-```bash
-# Test drift detection
-make test-drift
-
-# Check configuration
-make drift-info
-
-# Trigger retraining
-make retrain
-```
-
-**Drift Types:**
-- **Numeric**: Relative change in mean/std (threshold: 20%)
-- **Categorical**: Population Stability Index (threshold: 0.25)
-- **Prediction**: Change in prediction rate (threshold: 10%)
-
-**PSI Thresholds:**
-- < 0.1: No significant change
-- 0.1 - 0.25: Moderate change (monitor)
-- ≥ 0.25: Significant change (retrain)
-
-**Configuration:**
-```yaml
-# docker-compose.yml
-environment:
-  - DRIFT_THRESHOLD_NUMERIC=0.2
-  - DRIFT_THRESHOLD_CATEGORICAL=0.25
-  - DRIFT_THRESHOLD_PREDICTION=0.1
-  - AUTO_RETRAIN_ON_DRIFT=false
-  - MIN_RETRAIN_INTERVAL_HOURS=24
-```
-
----
-
-## MLflow Model Registry
-
-Manage model lifecycle:
-
-```bash
-# Register model
-make train-register
-
-# Promote to staging
-make registry-promote VERSION=3 STAGE=Staging
-
-# Promote to production
-make registry-promote VERSION=3 STAGE=Production
-
-# List models and versions
-make registry-list
-make registry-versions
-
-# Get model info
-make registry-info STAGE=Production
-make registry-info VERSION=3
-
-# Load from registry
-docker compose run --rm \
-  -e MODEL_SOURCE=registry \
-  -e MODEL_STAGE=Production \
-  -p 8000:8000 api
-```
-
-**Model Stages:** None → Staging → Production → Archived
-
----
-
-## Kubernetes Deployment
-
-Production deployment manifests in `k8s/`:
-
-```bash
-# Deploy to cluster
-kubectl apply -f k8s/
-
-# Check status
-kubectl get deployments
-kubectl get pods
-kubectl get services
-
-# View logs
-kubectl logs -l app=churn-prediction
-
-# Scale manually
-kubectl scale deployment churn-prediction --replicas=5
-```
-
-**Features:**
-- 3 replicas with auto-scaling (3-10 pods)
-- Resource limits (CPU: 250m-1000m, Memory: 512Mi-2Gi)
-- Health probes (liveness, readiness, startup)
-- ConfigMap for configuration
-- Ingress with TLS and rate limiting
-- PersistentVolumeClaim for models
-
-See `k8s/README.md` for detailed deployment guide.
-
----
-
-## Security
-
-### Secrets Management
-
-**File-based secrets (recommended for production):**
-```bash
-# Docker
-echo "your-token" > secrets/service_token.txt
-export SERVICE_TOKEN_FILE=/run/secrets/service_token
-
-# Kubernetes
-kubectl create secret generic churn-secrets \
-  --from-literal=service-token=YOUR_TOKEN
-```
-
-**Environment variable (development only):**
-```bash
-export SERVICE_TOKEN="dev-token"
-```
-
-### Container Security Scanning
-
-```bash
-# Scan for vulnerabilities
-make security-scan
-
-# Critical/high only
-make security-scan-critical
-```
-
-Results uploaded to GitHub Security tab in CI/CD.
-
-### Authentication
-
-Optional bearer token authentication:
-
-```bash
-# Test with auth
-export SERVICE_TOKEN="secret-token"
-curl -H "Authorization: Bearer secret-token" \
-  http://localhost:8000/predict -d @test_request.json
-```
-
----
-
-## Performance
-
-### Load Testing
-
-```bash
-# Start service
-make up
-
-# Run load test (50 users, 60s)
-make load-test
-
-# Interactive UI
-make load-test-ui         # http://localhost:8089
-```
-
-**SLO Targets (CI):**
-- p95 latency < 500ms
-- p99 latency < 1000ms
-- Error rate < 1%
-
-**Production SLOs:**
-- p95 < 200ms
-- p99 < 500ms
-- Error rate < 0.1%
-
-### Rate Limiting
-
-Configured per endpoint:
-- `/predict`: 100 requests/minute
-- `/drift`: 20 requests/minute
-
-Returns 429 (Too Many Requests) when exceeded.
-
----
-
-## CI/CD Pipeline
-
-GitHub Actions workflow runs on every PR/push:
-
-1. **Code Quality** - flake8, black, isort blocking; mypy advisory
-2. **Unit Tests** - with an enforced coverage floor
-3. **Integration Tests** - API endpoint validation
-4. **E2E Tests** - Full training workflows
-5. **Docker Build** - Production image validation
-6. **Security Scan** - Trivy vulnerability scanning
-7. **Load Testing** - SLO validation
-8. **Test Summary** - Aggregate results
-
-View results: [GitHub Actions](https://github.com/Medesen/portfolio/actions/workflows/ci-end2end-churn.yml)
+The pipeline (`src/training/pipeline.py`) loads and preprocesses the data, makes a 3-way split, grid-searches with cross-validation, evaluates on the validation set, tunes the classification threshold, evaluates the held-out test set once at that threshold, computes drift reference statistics, and publishes versioned artifacts — with every run tracked in MLflow (failed runs are marked FAILED, not silently FINISHED).
 
 ---
 
@@ -604,445 +135,91 @@ View results: [GitHub Actions](https://github.com/Medesen/portfolio/actions/work
 
 ```
 end2end_churn/
-├── src/                          # Source code
-│   ├── api/                      # FastAPI service
-│   ├── data/                     # Data loading & preprocessing
-│   ├── models/                   # Model pipelines & factory
-│   ├── training/                 # Training & tuning
+├── src/
+│   ├── api/                      # FastAPI service package
+│   │   ├── app.py                #   app factory + lifespan (model loading)
+│   │   ├── routes/               #   predict, health, drift, retrain, info
+│   │   ├── middleware.py         #   tracing, timeout, metrics, size limit
+│   │   ├── auth.py               #   constant-time bearer-token auth
+│   │   ├── retraining.py         #   atomic retrain reservation + task
+│   │   ├── errors.py             #   sanitizing exception handlers
+│   │   ├── settings.py           #   env-derived runtime config
+│   │   ├── service.py            #   model cache + prediction logic
+│   │   ├── schemas.py            #   Pydantic request/response models
+│   │   └── validation.py         #   schema alignment + Pandera checks
+│   ├── training/                 # Training pipeline package
+│   │   ├── pipeline.py           #   orchestration (main)
+│   │   ├── reporting.py          #   evaluation, thresholds, diagnostics
+│   │   ├── artifacts.py          #   model/metadata publication, ref stats
+│   │   └── mlflow_logging.py     #   MLflow model logging + registry
+│   ├── data/                     # Loading & preprocessing
+│   ├── models/                   # Pipelines & model factory
 │   ├── evaluation/               # Metrics & visualizations
-│   ├── config.py                 # Configuration management
-│   └── utils/                    # Logging, I/O, metrics, drift
-├── data/                         # Training data
-├── models/                       # Saved models
-├── diagnostics/                  # Plots and reports
-├── logs/                         # Application logs
-├── mlruns/                       # MLflow tracking
-├── config/                       # Config files
-├── k8s/                         # Kubernetes manifests
-├── grafana/                      # Grafana dashboards
-├── tests/                        # Test suite
-├── scripts/                      # Utility scripts
-├── train.py                      # Training orchestration
-├── serve.py                      # FastAPI service
-├── requirements.txt              # Dependencies
-├── Dockerfile                    # Container definition
-├── docker-compose.yml            # Orchestration
-├── Makefile                      # Command shortcuts
-└── README.md                     # This file
+│   ├── utils/                    # Logging, I/O, Prometheus, drift
+│   └── config.py                 # Training/service configuration
+├── serve.py                      # Thin shim: uvicorn serve:app
+├── train.py                      # Thin shim: CLI → src.training.pipeline
+├── tests/                        # 212 tests (unit/integration/e2e markers)
+├── config/ k8s/ grafana/         # Configs, K8s manifests, dashboards
+├── docs/                         # OPERATIONS.md (ops guide), SLO.md
+└── Dockerfile, docker-compose.yml, Makefile
 ```
 
 ---
 
-## All Available Commands
+## CI/CD Pipeline
 
-### Quick Reference
+GitHub Actions on every PR/push:
 
-```bash
-# See all available commands
-make help
+1. **Code Quality** — flake8 (pyflakes class) + black + isort blocking; mypy blocking on the serving/training packages, advisory on the legacy burn-down list
+2. **Unit Tests** — enforced coverage floor (unit-only, 50%)
+3. **Integration Tests** — API endpoint validation against a freshly trained model
+4. **Full-Suite Coverage Gate** — entire suite in one run, floor 88% (verifies the 91% headline)
+5. **E2E Tests** — full training workflows via the real CLI
+6. **Docker Build** — production image build and smoke test
+7. **Security Scan** — Trivy, *advisory*: findings reported to the Security tab but non-blocking (documented in the workflow, with the tightening path)
+8. **Load Testing** — Locust run with SLO validation (fails on violations)
 
-# Setup & Deployment
-make setup              # Build + train model
-make build              # Build Docker image
-make up                 # Start API
-make down               # Stop API
-make restart            # Restart after updates
-make up-monitoring      # Start with Prometheus/Grafana
-make down-monitoring    # Stop all services
-
-# Training
-make train              # Train model (default config)
-make train-quick        # Quick training
-make train-prod         # Production training
-make train-rf           # Random Forest
-make train-xgboost      # XGBoost
-make train-logreg       # Logistic Regression
-make compare-models     # Compare all models
-make train-register     # Train + register in MLflow
-
-# Testing
-make test               # All tests
-make test-unit          # Unit tests
-make test-integration   # Integration tests
-make test-e2e          # End-to-end tests
-make test-coverage     # With coverage
-make test-api          # Test prediction endpoint
-make test-drift        # Test drift detection
-make load-test         # Performance testing
-
-# Monitoring
-make logs              # View logs
-make health            # Check health
-make metrics           # View Prometheus metrics
-make grafana-ui        # Open Grafana
-make prometheus-ui     # Open Prometheus
-make mlflow-ui         # Open MLflow
-make docs              # Open API docs
-
-# Model Registry
-make registry-list              # List registered models
-make registry-versions          # List model versions
-make registry-promote           # Promote model stage
-make registry-info             # Get model details
-
-# Security
-make security-scan              # Full security scan
-make security-scan-critical     # Critical/high only
-
-# Utilities
-make shell             # Open bash in container
-make status            # Project status
-make clean             # Remove containers
-make clean-all         # Complete cleanup
-```
-
-### Direct Docker Commands
-
-For Windows users without Make, or if you prefer Docker commands directly:
-
-```bash
-# Core operations (these are what the Makefile runs internally)
-docker compose build                                    # Build image
-docker compose run --rm api python train.py            # Train model
-docker compose up -d api                               # Start API
-docker compose down                                    # Stop services
-
-# Training variations
-docker compose run --rm api python train.py --config config/train_config_quick.yaml  # Quick training
-docker compose run --rm api python scripts/compare_models.py  # Compare all 3 models
-
-# Testing (tests are organized by pytest markers, not directories)
-docker compose run --rm api pytest tests/ -v           # Run all tests
-docker compose run --rm api pytest -m unit -v          # Unit tests only
-
-# API testing (requires API to be running)
-curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @test_request.json
-
-# Monitoring
-docker compose up -d api prometheus grafana  # Start with monitoring
-docker compose logs api  # View logs
-
-# MLflow UI (run in separate terminal)
-docker compose run --rm -p 5000:5000 --entrypoint mlflow api ui --backend-store-uri ./mlruns --host 0.0.0.0 --port 5000
-# Then open http://localhost:5000 in browser
-
-# Cleanup
-docker compose down  # Stop services
-docker compose down -v  # Stop and remove volumes
-```
-
----
-
-## Key Technologies
-
-**ML/Data:**
-- scikit-learn (Random Forest, Logistic Regression)
-- XGBoost (gradient boosting)
-- pandas, numpy (data processing)
-- MLflow (experiment tracking, model registry)
-
-**API/Service:**
-- FastAPI (REST API)
-- Pydantic (validation)
-- Uvicorn (ASGI server)
-- slowapi (rate limiting)
-
-**Monitoring:**
-- Prometheus (metrics)
-- Grafana (dashboards)
-- Structured logging (request tracing)
-
-**DevOps:**
-- Docker & Docker Compose
-- Kubernetes
-- GitHub Actions (CI/CD)
-- Trivy (security scanning)
-- Locust (load testing)
-
-**Testing:**
-- pytest (test framework)
-- coverage (code coverage)
-- pytest-xdist (parallel execution)
-
----
-
-## Production Considerations
-
-### Security Hardening
-
-Before production deployment:
-
-- [ ] **Enable mandatory authentication** - Set `SERVICE_TOKEN` (currently optional)
-- [ ] **Use secrets manager** - Docker secrets or K8s Secrets (supported via `SERVICE_TOKEN_FILE`)
-- [ ] **Enable TLS/HTTPS** - At ingress/load balancer
-- [ ] **Restrict metrics endpoint** - Internal network only
-- [ ] **Disable API docs** - Or require authentication
-- [ ] **Network segmentation** - Private subnet with API gateway
-- [ ] **Review rate limits** - Tune based on capacity
-- [ ] **Validate inputs strictly** - Reject (not warn) on invalid data
-
-### Monitoring & Alerting
-
-- [ ] **Centralized logging** - ELK, Splunk, CloudWatch
-- [ ] **Prometheus scraping** - Configure scrape targets
-- [ ] **Critical alerts** - Drift, errors, latency, availability
-- [ ] **Grafana dashboards** - Customize for your metrics
-- [ ] **Distributed tracing** - OpenTelemetry + Jaeger (optional)
-
-### Infrastructure
-
-- [ ] **Cloud storage** - S3/GCS for models (not local files)
-- [ ] **Remote MLflow backend** - PostgreSQL + S3 artifacts
-- [ ] **Resource tuning** - Based on load testing
-- [ ] **Auto-scaling** - Configure HPA thresholds
-- [ ] **Backup strategy** - Models, data, MLflow DB
-
-### ML Operations
-
-- [ ] **Model promotion workflow** - Require approval for Production
-- [ ] **A/B testing** - Staging vs Production traffic split
-- [ ] **Rollback procedures** - Test and document
-- [ ] **Scheduled retraining** - Cron/Airflow based on drift
-- [ ] **Tune drift thresholds** - Reduce false positives
-- [ ] **Model governance** - Document assumptions, lineage
-
----
-
-## Advanced Features
-
-### Threshold Tuning
-
-The default 0.5 classification threshold is inappropriate for imbalanced data and ignores business costs. **In churn prediction, false negatives (missed churners) typically cost 10-50x more than false positives** (unnecessary retention campaigns) due to lost customer lifetime value.
-
-The model automatically optimizes thresholds using F1 maximization, which provides a reasonable balance for this cost asymmetry. For this dataset, the optimal threshold is ≈0.33 instead of 0.5, raising churn recall from 48% (validation set at the 0.5 default) to 74% on the held-out test set, at 53% precision.
-
-**Available Strategies:**
-- **F1 Maximization** (default) - Balances precision/recall for imbalanced data
-- **Precision-Constrained** - Maximize recall with minimum precision (e.g., "need ≥70% precision")
-- **Top-K Selection** - Flag exactly K highest-risk customers (budget constraints)
-- **Cost-Sensitive** - Minimize expected cost when specific business costs are known
-
-All strategies are computed during training and saved in metadata. The API automatically applies the tuned threshold.
-
-**View threshold analysis:** `diagnostics/threshold_analysis_*.png`
-
-### Type Safety
-
-- mypy configured strict in `pyproject.toml` (`disallow_untyped_defs = true`)
-- TypedDict for structured data; generic type annotations throughout
-- **Honest status:** mypy currently reports ~110 errors, mostly ML-library
-  interface friction, so it runs as an *advisory, non-blocking* CI step;
-  burning that debt down is future work. Formatting (black) and import order
-  (isort) *are* blocking CI gates.
-
-### Request Tracing
-
-Every request gets a unique correlation ID:
-- Appears in all logs: `[req-abc-123]`
-- Returned in response and `X-Request-ID` header
-- Client-provided IDs supported for distributed tracing
-
-```bash
-# Find all logs for a request
-grep "req-abc-123" logs/churn_service.log
-```
-
-### Async Concurrency
-
-CPU-bound operations (inference, drift) offloaded to thread pool using `run_in_threadpool()` - keeps event loop responsive under concurrent load.
-
-### Model Integrity
-
-SHA256 checksums validate model files:
-- Computed during training (a `.sha256` sidecar is written next to each model)
-- Verified during loading — the service **fails closed**: a checksum mismatch, or
-  a missing/unreadable sidecar, refuses to deserialize the model. Set
-  `ALLOW_UNVERIFIED_MODELS=true` only as an explicit, logged dev override.
-- Detects corruption and tampering before the joblib file is loaded
-- Comprehensive I/O and fail-closed load tests
+View results: [GitHub Actions](https://github.com/Medesen/portfolio/actions/workflows/ci-end2end-churn.yml)
 
 ---
 
 ## Performance Metrics
 
-**Model Performance (held-out test set, F1-tuned threshold ≈ 0.33):**
-- ROC AUC: 0.837
-- Precision (Churn): 53%
-- Recall (Churn): 74%
-- Accuracy: 76%
+**Model performance (held-out test set, F1-tuned threshold ≈ 0.33):**
+- ROC AUC: 0.837 | Precision (Churn): 53% | Recall (Churn): 74% | Accuracy: 76%
 
 **For comparison (validation set, default 0.5 threshold):**
-- ROC AUC: 0.831
-- Precision (Churn): 67%
-- Recall (Churn): 48%
-- Accuracy: 80%
+- ROC AUC: 0.831 | Precision (Churn): 67% | Recall (Churn): 48% | Accuracy: 80%
 
-Threshold tuning deliberately trades precision and raw accuracy for recall — the right direction when a missed churner costs far more than a wasted retention offer.
+Threshold tuning deliberately trades precision and raw accuracy for recall — the right direction when a missed churner costs far more than a wasted retention offer. The model catches 275 of 374 churners in the held-out test set.
 
-**Business Impact (Illustrative):**
-The model catches 74% of churners (275 out of 374 in the held-out test set) at 53% precision. In typical telecom scenarios, missing a churner costs significantly more than unnecessary retention efforts—commonly **estimated at 10–50x** due to lost lifetime value vs. relatively low-cost retention campaigns. 
+**Top predictive features:** tenure (13.9%), TotalCharges (11.9%), Contract_Month-to-month (11.4%), MonthlyCharges (7.9%), OnlineSecurity_No (6.1%)
 
-The model's threshold tuning (F1 maximization) balances these asymmetric costs, prioritizing recall while maintaining acceptable precision. The exact cost ratio varies by business context, customer segment, and retention strategy.
-
-**Top Predictive Features:**
-1. tenure (customer age) - 13.9%
-2. TotalCharges - 11.9%
-3. Contract_Month-to-month - 11.4%
-4. MonthlyCharges - 7.9%
-5. OnlineSecurity_No - 6.1%
-
-**Latency (typical):**
-- p50: < 50ms
-- p95: < 100ms  
-- p99: < 150ms
+**Serving latency (typical):** p50 < 50ms, p95 < 100ms, p99 < 150ms — SLO targets and error budgets in [docs/SLO.md](docs/SLO.md)
 
 ---
 
-## Troubleshooting
+## Operations
 
-### Docker Issues
+The full operational reference lives in **[docs/OPERATIONS.md](docs/OPERATIONS.md)**: configuration and environment variables, the monitoring stack, drift detection internals, MLflow registry workflows, Kubernetes deployment, security and secrets management, load testing, the complete command reference, and troubleshooting (including the harmless multiprocessing warnings during training).
 
-**API fails health check:**
-```bash
-# Check if model loaded successfully
-docker compose logs api
-```
-
-**Port already in use:**
-```yaml
-# Edit docker-compose.yml to change host port
-ports:
-  - "8001:8000"  # Use different host port
-```
-
-**Prometheus shows no targets:**
-```bash
-# Verify API is healthy
-docker compose ps
-```
-
-**Cannot connect to the Docker daemon:**
-- Start Docker Desktop
-- Verify Docker is running: `docker ps`
-
-**Out of disk space:**
-```bash
-# Clean up old images and containers
-docker system prune -a
-```
-
-**"Docker Compose is configured to build using Bake, but buildx isn't installed":**
-- Harmless warning from Docker Compose V2
-- Builds work identically - Docker automatically falls back to standard builder
-- To eliminate: Update Docker Desktop to the latest version or install buildx
-- Safe to ignore - no impact on functionality
-
-### Application Issues
-
-**Multiprocessing Cleanup Warnings:** During training (`make train` or `make setup`), you may see `ChildProcessError: [Errno 10] No child processes` warnings after the model finishes training. These are **harmless** multiprocessing cleanup warnings and do not affect model quality.
-
-**What's happening:** The training process uses parallel processing (`GridSearchCV` with `n_jobs=-1`) to speed up hyperparameter search by testing multiple parameter combinations simultaneously. When the Docker container shuts down after training completes, Python's ResourceTracker attempts to clean up worker processes that have already terminated, resulting in these warning messages.
-
-**Why this occurs in Docker:** Short-lived containers exit quickly after the main process completes, creating a race condition where child processes terminate before Python's cleanup code runs. This is a known behavior in scikit-learn's parallel processing (see [Python issue #38119](https://bugs.python.org/issue38119)).
-
-**Verification:** Check for the "Training workflow complete!" message and verify model files were created:
-```bash
-ls models/  # Should show churn_model_latest.joblib
-```
-
-**To eliminate warnings (optional):** Set `n_jobs: 1` in your training config. This disables parallel processing, making training slower but removing the warnings.
-
-**Model not found:**
-```bash
-# Train model first
-make train
-
-# Verify files exist
-ls models/
-```
-
-**Tests fail:**
-```bash
-# Use the correct test command
-make test
-
-# Check Docker is running
-docker ps
-```
-
-### More Help
-
-See detailed information in:
-- [Makefile](Makefile) - Run `make help` for all commands
-- [GitHub Actions](../.github/workflows/ci-end2end-churn.yml) - CI/CD pipeline details
+**Production hardening checklist (abridged):** mandatory auth + TLS, secrets manager, cloud model storage (S3/GCS), remote MLflow backend, centralized logging and alerting, model promotion approvals, A/B rollout and rollback procedures. The full checklist with rationale is in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ---
 
-## Frequently Asked Questions
+## FAQ
 
-### Why Docker-only execution?
+**Why Docker-only execution?** Reproducibility (anyone can run it with `make setup`), production parity (train where you deploy), and zero dependency debugging for reviewers.
 
-Three reasons:
-1. **Reproducibility** - Anyone can run it with just `make setup`
-2. **Production parity** - Train in the same environment where models deploy
-3. **Zero dependency issues** - No virtual environment conflicts
+**How did you validate model performance?** 3-way split: hyperparameters and threshold selected on the validation set; the held-out test set evaluated once at the tuned threshold for the headline numbers. Validation-set numbers appear only for labeled comparison.
 
-For a portfolio, it's critical that hiring managers can easily run the project without debugging pip conflicts.
-
-### What would you change for production?
-
-Several things:
-- Replace local file loading with cloud storage (S3/GCS)
-- Use remote MLflow backend (PostgreSQL + S3 artifacts)
-- Enable mandatory authentication (currently optional)
-- Add comprehensive alerting for drift and errors
-- Implement A/B testing for model promotion
-- Add distributed tracing (OpenTelemetry)
-- More extensive test coverage for edge cases
-
-See [Production Considerations](#production-considerations) section for full checklist.
-
-### How did you validate the model performance?
-
-I used standard classification metrics (ROC AUC, precision, recall, F1) on a held-out test set with 3-way data splitting (train/validation/test). The validation set is used for hyperparameter tuning and threshold selection; the test set provides final unbiased performance estimates. Cross-validation during grid search provides additional validation. The headline numbers in this README are the held-out test set evaluated at the tuned threshold; validation-set numbers appear only for comparison and are labeled as such.
-
-### Why F1-optimized threshold instead of default 0.5?
-
-The default 0.5 threshold assumes balanced classes and equal costs for false positives vs false negatives. In churn prediction, this is wrong on both counts:
-- Classes are imbalanced (~26.5% churn rate)
-- False negatives (missed churners) cost far more than false positives — commonly estimated at 10–50x — due to lost lifetime value
-
-F1 optimization provides a reasonable balance. For production, I'd recommend cost-sensitive thresholds once actual business costs are quantified.
-
-### Does this work on Mac/Windows/Linux?
-
-Yes. Docker Desktop works on all three platforms:
-- **Linux:** Native Docker support + Make pre-installed
-- **macOS:** Docker Desktop includes everything needed + Make pre-installed
-- **Windows:** Docker Desktop with WSL2 backend. Make not included by default.
-
-**Windows users:** See [Platform-Specific Notes](#platform-specific-notes) at the top for three setup options. The short version: either install Make via `choco install make`, use the provided PowerShell setup script (`.\setup.ps1`), or use the [Direct Docker Commands](#direct-docker-commands) instead of `make` commands.
-
-### How much does it cost to run?
-
-Zero dollars for local execution. Everything runs on your machine using open-source tools. For production cloud deployment, costs would depend on instance sizes, traffic volume, and cloud provider (AWS, GCP, Azure).
+**Why an F1-optimized threshold instead of 0.5?** The default assumes balanced classes and symmetric costs — wrong on both counts here (~26.5% churn rate; false negatives cost 10–50x more). For production I'd move to cost-sensitive thresholds once actual business costs are quantified.
 
 ---
 
 ## License
 
-MIT — see the repository [LICENSE](../LICENSE). The bundled Telco Customer
-Churn dataset is IBM sample data (via Kaggle) and carries its own terms.
+MIT — see the repository [LICENSE](../LICENSE). The bundled Telco Customer Churn dataset is IBM sample data (via Kaggle) and carries its own terms.
 
----
-
-## Related Links
-
-- **Dataset Source:** [Kaggle Telco Customer Churn](https://www.kaggle.com/blastchar/telco-customer-churn)
-- **Part of ML Portfolio:** [portfolio](../)
-
----
-
-**Last Updated:** July 2026  
-**Docker Support:** Linux, macOS, Windows  
-**Total Setup Time:** ~5 minutes
+**Dataset source:** [Kaggle Telco Customer Churn](https://www.kaggle.com/blastchar/telco-customer-churn) | **Part of:** [ML Portfolio](../)

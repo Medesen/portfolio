@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.4.0] - 2026-07-17 (Retrieval ablation; query rewriting off by default)
+
+### Added
+
+- `scripts/ablation_eval.py`: stepwise ablation of the default query path
+  (dense → +BM25 fusion → +cross-encoder reranking → +LLM query rewriting) on
+  the 35-question benchmark, fixed chunking, retrieval depth 20, with paired
+  bootstrap 95% CIs (10,000 resamples, seed 42). Results and tables saved to
+  `data/evaluation/results/ablation_2026-07-17.json` / `.md` and published in
+  the README summary. This closes the evaluation-scope gap disclosed in 1.3.0:
+  the shipped pipeline's components are now measured, not just the chunking.
+
+### Fixed
+
+- `SemanticChunker`: a single unit longer than `max_chunk_size` (a huge
+  paragraph, or a wall of text the sentence regex could not split) previously
+  became an oversized chunk. Such units are now split at word boundaries
+  first; no emitted chunk can exceed the limit. On this corpus 3 of 741
+  semantic chunks were affected (longest 2,892 words vs the 1,000-word
+  limit). Re-evaluated on a rebuilt index: semantic-strategy retrieval is
+  unchanged at the published precision (Recall@10 0.457 / MRR 0.477 /
+  NDCG@10 0.358 → rounds to the published 0.46 / 0.48 / 0.36), and fixed
+  chunking still wins every metric. The regex sentence splitter's
+  abbreviation weakness ("e.g. The") is now documented in the class
+  docstring with the upgrade path.
+
+### Changed
+
+- **Query rewriting is disabled by default** (`query_rewriting.enabled:
+  false`). The ablation measured it significantly harmful on this corpus
+  (ΔMRR −0.274 [−0.419, −0.117] and ΔNDCG@10 −0.163 [−0.253, −0.068] on top
+  of hybrid+rerank; the full previous default was significantly worse than
+  plain dense retrieval on MRR) while adding ~1s latency per query. The 3B
+  rewriter paraphrases away exact API tokens ("fit_transform",
+  "GridSearchCV") that retrieval on technical documentation depends on. The
+  component stays available via config; the code is unchanged.
+- BM25 fusion and reranking remain enabled by default: both are within noise
+  on this benchmark (reranking's point estimate positive on MRR/NDCG at
+  ~1.9s CPU latency); the README documents that a dense-only configuration
+  is defensible when latency matters.
+
+---
+
 ## [1.3.0] - 2026-07-16 (Review fixes: correctness and claim hygiene)
 
 ### Fixed

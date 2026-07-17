@@ -68,6 +68,43 @@ def test_semantic_chunker_creates_chunks(sample_document):
     assert chunker.get_strategy_name() == "semantic"
 
 
+def test_semantic_chunker_splits_oversized_unit():
+    """A single unit longer than max_chunk_size must not become an oversized chunk."""
+    config = {"max_chunk_size": 50, "method": "paragraph"}
+    chunker = SemanticChunker(config)
+
+    # One 130-word paragraph with no sentence/paragraph boundaries
+    document = {
+        "doc_id": "oversized_doc",
+        "content": " ".join(f"word{i}" for i in range(130)),
+    }
+
+    chunks = chunker.chunk_document(document)
+
+    assert len(chunks) == 3  # 50 + 50 + 30 words
+    for chunk in chunks:
+        assert chunk.metadata["word_count"] <= 50
+    # No content lost: every word survives, in order
+    rejoined = " ".join(c.content for c in chunks)
+    assert rejoined == document["content"]
+
+
+def test_semantic_chunker_unit_at_limit_passes_through():
+    """A unit exactly at max_chunk_size is kept whole."""
+    config = {"max_chunk_size": 50, "method": "paragraph"}
+    chunker = SemanticChunker(config)
+
+    document = {
+        "doc_id": "at_limit_doc",
+        "content": " ".join(f"word{i}" for i in range(50)),
+    }
+
+    chunks = chunker.chunk_document(document)
+
+    assert len(chunks) == 1
+    assert chunks[0].metadata["word_count"] == 50
+
+
 def test_chunk_id_generation(sample_document):
     """Test that chunk IDs are generated correctly."""
     config = {"chunk_size": 512, "overlap": 50}

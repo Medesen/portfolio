@@ -10,14 +10,14 @@ NB: This is a work in progress. Projects will be added gradually, but probably n
 
 **Status:** Complete  
 **Domain:** Technical documentation Q&A  
-**Key Finding:** Fixed chunking achieved the highest retrieval performance (Recall@10: 0.51, MRR: 0.51)  
+**Key Findings:** Fixed chunking achieved the highest retrieval performance (Recall@10: 0.51, MRR: 0.51); a stepwise ablation of the query pipeline with bootstrap CIs showed LLM query rewriting significantly *hurt* ranking — so it now ships disabled by default  
 **Tech Stack:** ChromaDB, sentence-transformers, Ollama (Llama 3.2), Docker
 
-A retrieval-augmented generation system I built to compare chunking strategies for technical documentation Q&A. I implemented and evaluated three chunking approaches (fixed, semantic, hierarchical) using standard IR metrics across 35 test questions. Everything runs locally in Docker with no API keys required.
+A retrieval-augmented generation system I built to compare chunking strategies for technical documentation Q&A. I implemented and evaluated three chunking approaches (fixed, semantic, hierarchical) using standard IR metrics across 35 test questions, then ablated the retrieval pipeline's components (BM25 fusion, cross-encoder reranking, LLM query rewriting) one step at a time with paired bootstrap confidence intervals. Everything runs locally in Docker with no API keys required.
 
 **Highlights:**
 - Systematic evaluation comparing three chunking strategies
-- Complete Docker deployment with automated setup
+- Component ablation with 95% bootstrap CIs — including an honest negative result that changed the shipped default
 - 35-question test set with IR metrics (Recall@k, MRR, NDCG)
 - Runs entirely locally using Ollama for LLM generation
 - ~10 minute setup time, fully reproducible
@@ -40,7 +40,7 @@ A production-oriented ML service I built to predict customer churn with complete
 - Three algorithms with automated hyperparameter tuning
 - MLflow experiment tracking and model registry
 - Drift detection with automatic retraining triggers
-- 200+ tests with 91% coverage, full CI/CD pipeline
+- 212 tests with 91% full-suite coverage, enforced by a CI coverage gate; CI/CD with blocking lint/format/type gates and advisory security scanning
 - Kubernetes deployment manifests with auto-scaling
 - ~5 minute setup time, fully reproducible
 
@@ -153,7 +153,7 @@ portfolio/
 │   │   ├── generation/        # LLM integration
 │   │   ├── evaluation/        # Metrics & analysis
 │   │   └── utils/             # Config, logging
-│   ├── tests/                  # 111 unit tests
+│   ├── tests/                  # 113 unit tests
 │   ├── data/
 │   │   ├── corpus/            # Scikit-learn docs (420 HTML documents, tracked)
 │   │   └── evaluation/        # Test set (35 Q&A pairs, tracked)
@@ -172,7 +172,7 @@ portfolio/
 │   │   ├── training/          # Training & tuning
 │   │   ├── evaluation/        # Metrics & visualizations
 │   │   └── utils/             # Logging, I/O, metrics, drift
-│   ├── tests/                  # 200+ tests (91% coverage)
+│   ├── tests/                  # 212 tests (91% coverage, CI-enforced)
 │   ├── k8s/                   # Kubernetes manifests
 │   ├── grafana/               # Grafana dashboards
 │   ├── config/                # Training configurations
