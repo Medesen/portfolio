@@ -1,6 +1,7 @@
 """Schema alignment and data validation utilities."""
 
 import warnings
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -8,7 +9,9 @@ import pandera as pa
 from pandera import Check, Column
 
 
-def align_schema(df: pd.DataFrame, expected_columns: list[str]) -> tuple[pd.DataFrame, dict]:
+def align_schema(
+    df: pd.DataFrame, expected_columns: list[str]
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     """
     Align DataFrame to expected schema.
 
@@ -25,6 +28,11 @@ def align_schema(df: pd.DataFrame, expected_columns: list[str]) -> tuple[pd.Data
         Tuple of (aligned DataFrame, alignment_info dict)
     """
     alignment_info = {"missing_columns": [], "extra_columns": [], "reordered": False}
+
+    # Work on a copy: the missing-column branch assigns new columns, which
+    # would otherwise mutate the caller's DataFrame (the drop/reorder branches
+    # already return new frames, so behavior was asymmetric).
+    df = df.copy()
 
     incoming_columns = set(df.columns)
     expected_columns_set = set(expected_columns)
@@ -129,7 +137,7 @@ def validate_data(df: pd.DataFrame, enable_validation: bool = True) -> tuple[boo
         return False, [f"Validation error: {str(e)}"]
 
 
-def generate_alignment_warnings(alignment_info: dict) -> list[str]:
+def generate_alignment_warnings(alignment_info: dict[str, Any]) -> list[str]:
     """
     Generate user-friendly warning messages from alignment info.
 

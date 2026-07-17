@@ -9,6 +9,7 @@ Comprehensive Testing
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,7 @@ import pytest
 def test_train_script_completes_with_quick_config():
     """Test training script runs successfully with quick config."""
     result = subprocess.run(
-        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
+        [sys.executable, "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,  # 5 minutes timeout
@@ -44,7 +45,7 @@ def test_train_script_creates_model_artifacts():
     """Test training script creates all expected artifacts."""
     # Run training
     result = subprocess.run(
-        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
+        [sys.executable, "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,
@@ -71,7 +72,7 @@ def test_train_script_creates_metadata():
     """Test training script creates metadata file."""
     # Run quick training
     result = subprocess.run(
-        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
+        [sys.executable, "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,
@@ -103,7 +104,7 @@ def test_train_script_creates_metadata():
 def test_train_script_creates_diagnostics():
     """Test training script creates diagnostic visualizations."""
     result = subprocess.run(
-        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
+        [sys.executable, "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,
@@ -131,7 +132,7 @@ def test_config_saved_is_loadable():
     """Test saved config can be reloaded and used."""
     # Run training (creates config file)
     result = subprocess.run(
-        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
+        [sys.executable, "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,
@@ -166,7 +167,7 @@ def test_train_with_default_config():
     # that cannot afford this test should deselect it (-m "not e2e") explicitly.
     try:
         result = subprocess.run(
-            ["python", "train.py"],
+            [sys.executable, "train.py"],
             capture_output=True,
             text=True,
             timeout=600,  # Longer timeout for default config (more hyperparameters)
@@ -197,7 +198,7 @@ def test_train_script_logs_to_mlflow():
 
     # Run training
     result = subprocess.run(
-        ["python", "train.py", "--config", "config/train_config_quick.yaml"],
+        [sys.executable, "train.py", "--config", "config/train_config_quick.yaml"],
         capture_output=True,
         text=True,
         timeout=300,
@@ -231,7 +232,7 @@ def test_train_script_handles_invalid_config():
             f.write("data:\n  test_size: 1.5\n")  # Invalid (> 1)
 
         result = subprocess.run(
-            ["python", "train.py", "--config", str(invalid_config)],
+            [sys.executable, "train.py", "--config", str(invalid_config)],
             capture_output=True,
             text=True,
             timeout=30,
@@ -269,7 +270,7 @@ model:
 """)
 
         result = subprocess.run(
-            ["python", "train.py", "--config", str(bad_config)],
+            [sys.executable, "train.py", "--config", str(bad_config)],
             capture_output=True,
             text=True,
             timeout=30,
