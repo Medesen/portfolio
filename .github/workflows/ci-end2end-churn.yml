@@ -62,10 +62,19 @@ jobs:
         run: |
           isort --check-only --diff .
 
-      - name: Type check with mypy (advisory, non-blocking)
+      - name: Type check with mypy — serving + training packages (blocking)
         run: |
-          # Known debt: ~110 errors (src/config.py now included), mostly ML-library interface friction.
-          # Advisory until burned down — the README states this honestly.
+          # Gradual strictness boundary: the serving and training packages
+          # (src/api, src/training, and both entry-point shims) are typed clean
+          # under the strict config and must stay that way. New modules go here.
+          mypy serve.py train.py src/api/ src/training/ --config-file pyproject.toml --follow-imports=silent
+
+      - name: Type check with mypy — full tree (advisory, non-blocking)
+        run: |
+          # Burn-down list: ~70 remaining errors, concentrated in src/config.py,
+          # src/utils/drift.py, src/utils/io.py, src/evaluation/ and
+          # src/models/model_factory.py — mostly ML-library interface friction.
+          # Modules move to the blocking step above as they are cleaned.
           mypy src/ serve.py train.py --config-file pyproject.toml || echo "Type checking issues found (advisory, non-blocking)"
 
   # =============================================================================
@@ -96,9 +105,12 @@ jobs:
       
       - name: Run unit tests
         run: |
-          # Coverage floor: unit-only coverage measured at 58% (2026-07-12);
-          # floor set just below so real regressions fail while noise doesn't.
-          pytest -v -m unit --cov=src --cov-fail-under=55 --cov-report=xml --cov-report=term
+          # Coverage floor: unit-only coverage measured at 53.9% (2026-07-17,
+          # after the serve.py/train.py decomposition moved all serving and
+          # training code into the measured src/ universe); floor set just
+          # below so real regressions fail while noise doesn't. The full-suite
+          # number is enforced separately by the full-coverage job.
+          pytest -v -m unit --cov=src --cov-fail-under=50 --cov-report=xml --cov-report=term
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
@@ -149,6 +161,56 @@ jobs:
           files: ./end2end_churn/coverage.xml
           flags: integration
           name: integration-tests
+          fail_ci_if_error: false
+
+  # =============================================================================
+  # Job 3b: Full-Suite Coverage Gate
+  # =============================================================================
+  # Runs the ENTIRE suite (unit + integration + e2e) in one pytest invocation
+  # and enforces the README's headline coverage claim. Full-suite coverage
+  # measured at 91.0% (2026-07-17); floor set just below so the advertised
+  # number is CI-verifiable while noise doesn't break the build. The e2e
+  # training subprocesses count toward coverage because they run under the
+  # same interpreter (pytest-cov's subprocess hook).
+  full-coverage:
+    name: Full-Suite Coverage Gate
+    runs-on: ubuntu-latest
+    needs: lint
+    defaults:
+      run:
+        working-directory: end2end_churn
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.lock
+
+      - name: Train a quick model (integration tests need one on disk)
+        run: |
+          python train.py --config config/train_config_quick.yaml
+        timeout-minutes: 10
+
+      - name: Run full suite with coverage floor
+        run: |
+          pytest -v --cov=src --cov-fail-under=88 --cov-report=xml --cov-report=term
+        timeout-minutes: 25
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: ./end2end_churn/coverage.xml
+          flags: full-suite
+          name: full-coverage
           fail_ci_if_error: false
 
   # =============================================================================

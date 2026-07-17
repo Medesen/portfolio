@@ -1,5 +1,7 @@
 """Model training and evaluation utilities."""
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
@@ -9,7 +11,7 @@ from ..evaluation.metrics import compute_metrics
 
 def evaluate_model(
     model: Pipeline, X_val: pd.DataFrame, y_val: pd.Series
-) -> tuple[dict, np.ndarray, np.ndarray]:
+) -> "tuple[dict[str, Any], np.ndarray[Any, Any], np.ndarray[Any, Any]]":
     """
     Evaluate model on validation set.
 

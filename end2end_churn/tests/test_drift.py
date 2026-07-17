@@ -297,7 +297,7 @@ def test_compute_reference_statistics_includes_prediction_baseline():
     Regression test for the drift baseline comparing label prevalence to the
     mean of default-threshold predictions.
     """
-    from train import compute_reference_statistics
+    from src.training.artifacts import compute_reference_statistics
 
     rng = np.random.default_rng(0)
     n = 500
@@ -506,13 +506,13 @@ def test_detect_numeric_drift_negative_reference_mean():
 
 @pytest.mark.unit
 def test_production_reference_stats_activate_ks_test():
-    """The stats produced by train.compute_reference_statistics must switch on
+    """The stats produced by compute_reference_statistics must switch on
     the KS branch of detect_numeric_drift (it is skipped without 'samples').
 
     Regression test: the KS path was dead code in production because the
     training pipeline never stored reference samples in the metadata.
     """
-    from train import compute_reference_statistics
+    from src.training.artifacts import compute_reference_statistics
 
     rng = np.random.default_rng(0)
     X = pd.DataFrame(

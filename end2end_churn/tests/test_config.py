@@ -149,7 +149,7 @@ def test_quick_config_yields_single_combination():
 @pytest.mark.unit
 def test_resolve_param_grid_uses_config_for_random_forest():
     """Random Forest training must use the config grid, not the factory grid."""
-    from train import resolve_param_grid
+    from src.training.pipeline import resolve_param_grid
 
     config = TrainingConfig.from_yaml(str(CONFIG_DIR / "train_config_quick.yaml"))
     param_grid, source = resolve_param_grid(config)
@@ -163,7 +163,7 @@ def test_resolve_param_grid_uses_config_for_random_forest():
 def test_resolve_param_grid_uses_factory_for_non_random_forest():
     """XGBoost/LogReg have no config grid fields, so they use the factory grid."""
     from src.models.model_factory import get_param_grid
-    from train import resolve_param_grid
+    from src.training.pipeline import resolve_param_grid
 
     config = TrainingConfig()
     config.model.model_type = "xgboost"

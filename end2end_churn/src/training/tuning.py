@@ -21,12 +21,12 @@ def perform_grid_search(
     y_train: pd.Series,
     preprocessor: ColumnTransformer,
     model: Optional[Any] = None,
-    param_grid: Optional[dict] = None,
+    param_grid: Optional[dict[str, Any]] = None,
     cv_folds: int = 5,
     scoring: str = "roc_auc",
     random_state: int = 42,
     n_jobs: int = -1,
-) -> tuple[GridSearchCV, dict, float]:
+) -> tuple[GridSearchCV, dict[str, Any], float]:
     """
     Perform grid search with cross-validation to find best hyperparameters.
 

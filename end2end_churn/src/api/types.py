@@ -6,7 +6,7 @@ across the API layer, replacing raw dicts with properly typed structures.
 Type Safety Implementation
 """
 
-from typing import Optional, TypedDict
+from typing import Any, Optional, TypedDict
 
 from sklearn.pipeline import Pipeline
 
@@ -36,7 +36,7 @@ class ModelCache(TypedDict):
     version: Optional[str]
     features: Optional[list[str]]
     threshold: float
-    metadata: Optional[dict]
+    metadata: Optional[dict[str, Any]]
 
 
 class DriftMetrics(TypedDict, total=False):

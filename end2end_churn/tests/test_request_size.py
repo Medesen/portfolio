@@ -16,7 +16,7 @@ os.environ.pop("SERVICE_TOKEN_FILE", None)
 os.environ.pop("SERVICE_TOKEN", None)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from serve import LimitRequestSizeMiddleware  # noqa: E402
+from src.api.middleware import LimitRequestSizeMiddleware  # noqa: E402
 
 
 def _run(middleware, scope, messages):

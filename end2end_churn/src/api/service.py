@@ -4,7 +4,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Literal, Optional
 
 import joblib
 import pandas as pd
@@ -44,7 +44,7 @@ except ImportError:
 
 def load_model_from_registry(
     model_name: str = "churn_prediction_model", stage: str = "Production"
-) -> tuple[Pipeline, str, list, float, Optional[dict]]:
+) -> tuple[Pipeline, str, list[str], float, Optional[dict[str, Any]]]:
     """
     Load model from MLflow Registry by stage.
 
@@ -182,7 +182,9 @@ def find_latest_metadata_file() -> Optional[Path]:
     return None
 
 
-def load_model(model_path: str = None) -> tuple[Pipeline, str, list, float, Optional[dict]]:
+def load_model(
+    model_path: Optional[str] = None,
+) -> tuple[Pipeline, str, list[str], float, Optional[dict[str, Any]]]:
     """
     Load the trained model pipeline together with its metadata.
 
@@ -312,7 +314,9 @@ def load_model(model_path: str = None) -> tuple[Pipeline, str, list, float, Opti
     return model, version, expected_features, threshold, metadata
 
 
-def get_model_from_cache(model_cache: ModelCache) -> tuple[Pipeline, str, list, float]:
+def get_model_from_cache(
+    model_cache: ModelCache,
+) -> tuple[Optional[Pipeline], Optional[str], Optional[list[str]], float]:
     """
     Get cached model or load it if not yet loaded.
 
@@ -350,7 +354,7 @@ def get_model_from_cache(model_cache: ModelCache) -> tuple[Pipeline, str, list, 
     )
 
 
-def get_metadata_from_cache(model_cache: ModelCache) -> Optional[dict]:
+def get_metadata_from_cache(model_cache: ModelCache) -> Optional[dict[str, Any]]:
     """
     Get the metadata dict belonging to the cached (serving) model.
 
@@ -388,6 +392,12 @@ def predict(
     """
     # Get model, expected features, and tuned threshold
     model, version, expected_features, threshold = get_model_from_cache(model_cache)
+    # Callers (the /predict route) pre-check this; guard here too so the typed
+    # contract holds even for direct callers. RuntimeError (not ValueError):
+    # the route maps ValueError to 422 data-validation, and a missing model
+    # is a 5xx condition, not a client error.
+    if model is None or version is None:
+        raise RuntimeError("Model not loaded")
 
     # Convert request to DataFrame (model expects DataFrame input)
     features = {
@@ -475,7 +485,7 @@ def predict(
             model.predict_proba(df_aligned)[0, 1]
         )  # Probability of class 1 (churn)
         # Use tuned threshold from metadata
-        churn_prediction = "Yes" if churn_probability >= threshold else "No"
+        churn_prediction: Literal["Yes", "No"] = "Yes" if churn_probability >= threshold else "No"
         logger.debug(f"Applied threshold {threshold:.4f} for prediction")
     finally:
         pred_duration = time.time() - pred_start_time
@@ -486,6 +496,7 @@ def predict(
     # churn_prediction == "Yes" always implies at least Medium risk. High stays
     # an absolute 0.7 band unless the tuned threshold exceeds it.
     high_cut = max(0.7, threshold)
+    risk_level: Literal["Low", "Medium", "High"]
     if churn_probability >= high_cut:
         risk_level = "High"
     elif churn_probability >= threshold:
@@ -520,7 +531,6 @@ def reset_model_cache(model_cache: ModelCache) -> None:
         model_cache: Model cache dictionary from app.state
     """
     logger.debug("Resetting model cache")
-    model_cache.clear()
     model_cache.update(
         {"model": None, "version": None, "features": None, "threshold": 0.5, "metadata": None}
     )

@@ -1,6 +1,6 @@
 """Pydantic schemas for API request/response validation."""
 
-from typing import Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -129,3 +129,49 @@ class PredictionResponse(BaseModel):
             ]
         }
     }
+
+
+class DriftAnalysisRequest(BaseModel):
+    """Request body for drift analysis."""
+
+    customers: list[dict[str, Any]]
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "customers": [
+                    {
+                        "gender": "Female",
+                        "SeniorCitizen": 0,
+                        "Partner": "Yes",
+                        "Dependents": "No",
+                        "tenure": 12,
+                        "Contract": "Month-to-month",
+                        "PaperlessBilling": "Yes",
+                        "PaymentMethod": "Electronic check",
+                        "MonthlyCharges": 70.35,
+                        "TotalCharges": 844.20,
+                        "PhoneService": "Yes",
+                        "MultipleLines": "No",
+                        "InternetService": "Fiber optic",
+                        "OnlineSecurity": "No",
+                        "OnlineBackup": "Yes",
+                        "DeviceProtection": "No",
+                        "TechSupport": "No",
+                        "StreamingTV": "Yes",
+                        "StreamingMovies": "No",
+                    }
+                ]
+            }
+        }
+    }
+
+
+class DriftAnalysisResponse(BaseModel):
+    """Response body for drift analysis."""
+
+    overall_drift_detected: bool
+    n_features_drifted: int
+    drifted_features: list[str]
+    prediction_drift_detected: bool
+    detailed_report: Optional[dict[str, Any]] = None
