@@ -1,8 +1,10 @@
 # Recommender Systems — Two-Stage Retrieval & Ranking, and What the Evaluation Protocol Hides
 
-**Stage 1 of 3.** An honest evaluation study of classical session-based recommenders
-on real e-commerce data — built to show that, with recommenders, *how you measure
-changes the answer more than what you build*.
+**Stages 1 & 2 of 3 complete.** An honest evaluation study of session-based
+recommenders on real e-commerce data — classical baselines *and* neural retrieval —
+built to show that, with recommenders, *how you measure changes the answer more than
+what you build*, and that **the model that wins on ranking is not the one that wins on
+retrieval**.
 
 ## Summary
 
@@ -109,13 +111,103 @@ dense 13,754² matrix and ItemKNN does not. That is the project's scalability th
 showing up on a dimension it had not planned to measure, and it is what Stage 3's
 catalogue-scaling sweep is built to make explicit.
 
+## Stage 2 — Neural Retrieval, Sequential Models, and Cold Start
+
+Stage 2 adds the modern neural half — a **two-tower** dual-encoder retriever and
+**SASRec** (a causally-masked sequential transformer) — and the analysis that turns a
+model bake-off into a *systems* study. All neural models are CPU-trainable (the whole
+Stage 2 pipeline runs in ~15 minutes on a laptop); PyTorch is the only new dependency.
+
+### The Stage 2 headline: ranking skill and retrieval skill are different skills
+
+On the honest full-catalogue metric, the two-tower **loses** — it ranks the target in
+the top 20 less well than the tuned classical models:
+
+| Model | NDCG@20 | HitRate@20 |
+|---|---|---|
+| ItemKNN (classical) | **0.319** | 0.562 |
+| EASE (classical) | 0.318 | 0.557 |
+| ALS (classical) | 0.264 | 0.525 |
+| **Two-tower** | 0.260 | 0.510 |
+| SASRec (full-softmax) | 0.127 | 0.266 |
+| SASRec (sampled-BCE) | 0.020 | 0.050 |
+
+You could stop there and conclude the neural models simply lost. But **NDCG@20 is a
+*ranking* metric, and retrieval is a different job.** A two-stage system's first stage
+does not need to rank the target first — it needs to get it *somewhere* in a candidate
+set of a few hundred to a couple of thousand, which a downstream ranker then reorders.
+Measured that way — Recall@N, "is the target retrievable at all" — the order **flips**:
+
+| Retriever | R@50 | R@100 | R@500 | R@1000 | **R@2000** |
+|---|---|---|---|---|---|
+| ItemKNN | 0.654 | 0.702 | 0.761 | 0.772 | 0.792 |
+| EASE | 0.645 | 0.691 | 0.756 | 0.768 | 0.775 |
+| ALS | 0.696 | 0.794 | 0.883 | 0.899 | 0.914 |
+| **Two-tower** | 0.642 | 0.727 | 0.864 | 0.900 | **0.929** |
+| SASRec | 0.379 | 0.482 | 0.726 | 0.812 | 0.881 |
+
+![Retrieval ceiling](assets/retrieval_ceiling.png)
+
+**The models that win on ranking (ItemKNN, EASE) are the *worst* retrievers.** They
+peak early and saturate — ItemKNN finds 65% of targets in its top 50 but only 79% even
+by 2000, because sparse co-occurrence has nothing to say about items a session has no
+direct neighbour link to. The two-tower, third-worst on NDCG@20, is the **best
+retriever** at depth (93% by 2000): its dense embedding space keeps finding relevant
+items as the net widens. *This is precisely why industry builds two-stage systems* — a
+high-recall embedding retriever to cast the net, then an expensive ranker to sort it.
+The gap between "found it" (retrieval) and "ranked it first" (NDCG@10) is the room
+Stage 3's reranker is built to work in.
+
+Blending retrievers helps only modestly (the union of all five reaches 0.928 at a
+500-item budget each, vs 0.914 for the best single retriever) — their misses are
+correlated, which is itself worth knowing for Stage 3.
+
+### Three ablations, three findings
+
+| Ablation | Result |
+|---|---|
+| **Item tower: content path** | id+content **0.260** > id-only 0.230 > content-only 0.134 — the content features earn their place, adding ~13% NDCG over IDs alone |
+| **logQ correction** | on **0.260** vs off 0.228: the correction *helps* accuracy (+14%) but concentrates recommendations on popular items (popularity percentile 0.55 → 0.70, coverage 0.97 → 0.94) — a real trade-off, and the *opposite* direction from a naive guess (it removes the in-batch sampler's incidental suppression of popular items) |
+| **SASRec loss** | full-softmax **0.127** vs sampled-BCE 0.020 — a **6× gap** from the loss function alone, reproducing Klenitskiy & Vasilev (2023): the loss mattered far more than the architecture, and a line of published SASRec-vs-BERT4Rec comparisons was confounded by it |
+
+SASRec underperforms here in absolute terms (0.127) — RetailRocket sessions average
+~3 items, so a sequential model has little order to exploit, exactly the regime where
+Ludewig & Jannach (2018) found simple methods win. It is also lightly trained (8
+epochs, CPU budget). The robust finding is the *loss ablation*, which holds regardless
+of the model's absolute level.
+
+### Cold start: a real capability, still beaten by a simple heuristic
+
+The classical models **cannot score an item with no training interactions** — the
+recommendation is structurally impossible, so their cold-start recall is exactly 0.
+The two-tower *can*, from an item's content (category, parent category, availability).
+On the strictly-cold slice (targets with zero pre-cutoff interactions), ranking among
+cold candidates:
+
+| Model | Cold-start Recall@20 |
+|---|---|
+| category-popularity heuristic | **0.229** |
+| Two-tower (content) | 0.157 |
+| ItemKNN / EASE / ALS | 0.000 (structural) |
+
+The two-tower breaks the structural barrier the classical models hit — but a simple
+*most-popular-new-item-in-the-session's-category* heuristic still beats it. And this is
+all on a **3.7% slice**: only 3.7% of evaluable test targets are genuinely new items
+(9.8% have fewer than 5 prior interactions). So the neural cold-start capability is
+real and the classical models genuinely lack it — but on this dataset its commercial
+value is bounded by both the margin (a heuristic wins) and the slice size. Reporting
+the advantage next to the 3.7% denominator is the honest framing; an advantage on a
+slice few sessions reach is a small advantage.
+
 ## Quick Start (~5 minutes)
 
 ### Prerequisites
 
 - **Docker Desktop** with Docker Compose V2 (`docker compose`, not `docker-compose`)
-- ~4 GB free disk space; **~4 GB RAM** free (EASE inverts a dense item×item matrix)
+- ~6 GB free disk space (the image includes CPU-only PyTorch); **~4 GB RAM** free
+  (EASE inverts a dense item×item matrix)
 - No API keys, no accounts, no data downloads — the dataset is bundled
+- No GPU required or used — every neural number is generated on CPU by design
 
 ### One-Command Setup
 
@@ -130,13 +222,22 @@ make setup        # Linux/macOS/WSL2/Git Bash
 ### Try It Out
 
 ```bash
+# Stage 1 — classical models & evaluation protocols
 make eda          # dataset summary + the filter-threshold grid
-make evaluate     # full-catalogue evaluation, all four models (~4 min)
+make evaluate     # full-catalogue evaluation, all four classical models (~4 min)
 make sampled      # sampled-negative evaluation + the disagreement table (~4 min)
 make beyond       # coverage / Gini / popularity-bias metrics
 make protocols    # temporal vs leave-one-out
 make tune         # re-run the validation-window grid search (regenerates TUNED_PARAMS)
-make reproduce    # every number in this README, end to end (~15 min)
+
+# Stage 2 — neural retrieval, ablations, ceiling, cold start
+make features     # item content-feature coverage (as-of cutoff)
+make neural       # train + evaluate the two-tower and SASRec (~14 min, CPU)
+make ablations    # logQ on/off, id vs content, full vs sampled loss
+make ceiling      # retrieval-ceiling analysis + blending + figure
+make cold-start   # cold-item evaluation vs the category-popularity baseline
+
+make reproduce    # every number in this README, end to end (~30 min)
 make check-readme # verify the README's headline numbers against outputs/
 ```
 
@@ -182,6 +283,16 @@ reclab evaluate
   fold-in for unseen sessions is implemented directly (Hu et al. eq. 4), keeping ALS
   behind the same "score an unseen session from its history" contract as every other
   model — the constraint the single-visit data forces.
+- **Neural models from scratch, CPU-only.** The two-tower (history-pooling user tower,
+  no user-ID embeddings; item tower = ID + content; in-batch sampled softmax with logQ
+  correction) and SASRec (causally-masked transformer, full-softmax vs sampled-BCE
+  loss) are written in PyTorch and plug into the *unchanged* Stage 1 evaluation harness
+  via a `HistoryBatch` that carries ordered sequences alongside the binary bag — the
+  abstraction generalised, not special-cased.
+- **Retrieval framed as a first-class, separate skill from ranking.** The
+  retrieval-ceiling analysis measures Recall@N up to 2000 candidates, which is what
+  exposes that the ranking winners are the retrieval losers — the finding that makes
+  this a two-stage *systems* project rather than a leaderboard.
 
 ### Data judgment
 
@@ -194,7 +305,7 @@ reclab evaluate
 
 ## Testing
 
-79 tests, all runnable in Docker:
+100 tests, all runnable in Docker:
 
 ```bash
 make test
@@ -206,16 +317,24 @@ The ones worth a reviewer's eye:
   model ordering, full-catalogue evaluation recovers it and sampled evaluation
   **reverses** it — the paper's result turned into a property that fails if the
   effect ever stops reproducing (`test_sampled_bias.py`).
+- **SASRec causal masking.** Perturb the item at a later sequence position and assert
+  every earlier output is bit-identical — a causal-masking bug would let the model
+  see the future it is predicting, and this is the transformer-shaped analogue of the
+  temporal-leakage test (`test_sasrec.py`).
+- **The two-tower's cold-start claim, as a property.** The content path lets a cold
+  item find its cluster; the `id_only` ablation demonstrably cannot — the
+  architectural claim asserted, not just asserted about (`test_two_tower.py`).
+- **Neural sanity.** On a trivially learnable clustered world both neural models must
+  reach near-perfect recall — catching the silent failure of a model that trains
+  cleanly but learns nothing (`test_neural_sanity.py`).
 - **EASE against a brute-force solve.** The closed form is checked against an
   independent, column-wise ridge regression — the same optimisation attacked a
   different way (`test_models.py`).
 - **Temporal leakage.** Corrupt every post-cutoff interaction and assert the trained
   matrix is bit-identical; straddling sessions are dropped, not truncated
   (`test_splitting.py`).
-- **Seen-item masking is central, not per-model.** A model that forgets to exclude a
-  session's own history scores spectacularly for nothing; the exclusion lives in the
-  evaluation loop and a test asserts it holds for every model.
-- **k-core reaches a genuine fixed point** — a second application is a no-op.
+- **Seen-item masking is central, not per-model**, and **k-core reaches a genuine
+  fixed point** — a second application is a no-op.
 
 ## Project Structure
 
@@ -233,12 +352,16 @@ recsys_two_stage/
 │   └── prepare_item_properties.py # Distillation script (documented, not run in CI)
 ├── src/reclab/
 │   ├── data/                     # Loading, sessionization, iterative k-core
-│   ├── splitting/                # Temporal + leave-one-out protocols
-│   ├── models/                   # Popularity, ItemKNN, EASE, ALS
-│   ├── evaluation/               # Metrics, full-catalogue, sampled, beyond-accuracy
+│   ├── splitting/                # Temporal + leave-one-out protocols (carry sequences)
+│   ├── features/                 # Item content features, snapshotted as-of cutoff
+│   ├── models/                   # Popularity, ItemKNN, EASE, ALS, TwoTower, SASRec
+│   ├── evaluation/               # Metrics, full-catalogue, sampled, beyond-accuracy,
+│   │                             #   retrieval-ceiling, cold-start
 │   ├── tuning/                   # Nested temporal-validation grid search
-│   └── main.py                   # CLI: eda / tune / evaluate / sampled / protocols / beyond / all
-├── tests/                        # 79 tests
+│   ├── stage2.py                 # Stage 2 orchestration (neural, ablations, ceiling, cold)
+│   └── main.py                   # CLI: eda/evaluate/sampled/…/features/neural/ceiling/cold-start/all
+├── tests/                        # 100 tests
+├── assets/retrieval_ceiling.png  # Committed retrieval-ceiling figure
 ├── scripts/check_readme.py       # Verifies README numbers against outputs/
 ├── Dockerfile / docker-compose.yml / Makefile / setup.sh / setup.ps1
 └── outputs/                      # Result tables (gitignored)
@@ -246,30 +369,32 @@ recsys_two_stage/
 
 ## Honest Limitations & Future Work
 
-### Stage 2 & 3 roadmap
+### Stage 3 roadmap
 
-This is Stage 1 — a complete evaluation study of classical models. The next stages
-close the argument the headline sets up:
+Stages 1 and 2 are complete. Stage 3 closes the argument they set up:
 
-- **Stage 2** — a **two-tower** neural retriever and **SASRec** (sequential
-  transformer), the retrieval-ceiling analysis, and a **cold-start** evaluation using
-  the bundled item content features (6–7% of test interactions involve items with no
-  training history). The expectation, consistent with the literature: the neural
-  models may *lose* this full-catalogue benchmark and still be what industry deploys.
-- **Stage 3** — a **LightGBM reranker** (the second stage), an **approximate
-  nearest-neighbour** index with a measured recall-vs-latency curve, a minimal
-  `/recommend` endpoint with per-stage latency, and the **catalogue-scaling sweep**
-  that turns EASE's memory wall from arithmetic into a measured curve.
+- **Stage 3** — a **LightGBM reranker** (the second stage) working over the candidates
+  the retrieval-ceiling analysis measured, an **approximate nearest-neighbour** index
+  with a measured recall-vs-latency curve (which applies only to the embedding
+  retrievers — ALS and the two-tower — another compounding disadvantage for EASE), a
+  minimal `/recommend` endpoint with per-stage latency, and the **catalogue-scaling
+  sweep** that turns EASE's memory wall from arithmetic into a measured curve.
 
-### Known limitations of this stage
+### Known limitations of these stages
 
 - **Single held-out target per session**, so Recall@k collapses to HitRate@k; the
   metric set is HitRate / NDCG / MRR by design, stated rather than papered over.
-- **ALS is capped at 128 factors** to stay CPU-trainable; it improves with more, but
-  the qualitative result (third on the honest metric) is robust across the grid.
-- **`make reproduce` refits each model per subcommand**, so it runs ~15 min rather
-  than the ~5 the models themselves need; kept this way so each subcommand is
-  independently runnable.
+- **ALS is capped at 128 factors** to stay CPU-trainable; the neural models are
+  likewise CPU-sized — SASRec in particular is lightly trained (8 epochs). Their
+  *ranking* level would rise with more compute, but the qualitative findings (the
+  two-tower's high retrieval recall, the loss ablation) are robust to it.
+- **SASRec is weak in absolute NDCG** because RetailRocket sessions are ~3 items — a
+  short-session regime where sequential order carries little, exactly where the
+  literature expects simple methods to win. It is included to *make* that point and to
+  carry the loss ablation, not because it was expected to top the table.
+- **`make reproduce` refits models across subcommands** where a fully shared cache
+  would not, so it runs ~30 min; the `stage2` and `all` paths already fit each unique
+  neural model once, which is where the cost lives.
 
 ### Deliberately not built (and why)
 

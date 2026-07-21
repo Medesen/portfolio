@@ -168,3 +168,34 @@ Stated plainly, because it bounds what the project can claim:
   language to encode — which rules out pretrained text encoders in Stage 2.
 - **One retailer, one 4.5-month window.** No seasonality beyond the window, no
   cross-market generalisation.
+
+## 10. Item content features and the cold-start slice (Stage 2)
+
+Stage 2 uses the distilled `item_properties.csv.gz` for content features, snapshotted
+as-of the training cutoff (most recent value with `timestamp <= cutoff`, so no future
+category leaks into the item tower). Coverage on the 13,754 training items is good:
+
+| Feature | Coverage as-of cutoff |
+|---|---|
+| category known | 96.5% |
+| parent category known | 96.5% |
+| availability known | 100% |
+| distinct categories | 586 (median size 9; top-10 cover 21.5%) |
+
+So the content path has real signal to work with — the cold-start story is not
+undercut by missing categories.
+
+**The cold-start slice is real but modest, and the denominator is stated up front.**
+A *strictly cold* item is one with **zero** pre-cutoff interactions — genuinely new,
+not merely filtered out of the warm k-core (that distinction matters: counting
+filtered-but-pre-existing items as cold inflates the share to ~31%, which would be
+dishonest). By the strict definition:
+
+- **3.7%** of evaluable test-session targets are strictly-cold items;
+- **9.8%** are near-cold (fewer than 5 pre-cutoff interactions);
+- 808 evaluable cold sessions over 3,901 cold candidate items.
+
+3.7% is a marginal-to-moderate slice. The two-tower's cold-start advantage is
+therefore real but bounded in commercial value on this dataset, and the README
+reports the advantage *next to* this share rather than in isolation — an advantage on
+a slice few sessions reach is a small advantage, and saying so is the honest framing.

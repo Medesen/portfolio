@@ -15,9 +15,13 @@ WORKDIR /app
 
 # Dependencies come from requirements.lock (pip-compile of pyproject.toml, incl.
 # the dev extra) so rebuilds are reproducible; installed before the source copy
-# so code changes don't invalidate the dependency layer.
+# so code changes don't invalidate the dependency layer. The PyTorch CPU wheel
+# index keeps the image from pulling ~2 GB of unused CUDA libraries — the neural
+# models (Stage 2) are CPU-only by design.
 COPY requirements.lock ./
-RUN pip install --no-cache-dir -r requirements.lock
+RUN pip install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements.lock
 
 COPY pyproject.toml README.md ./
 COPY src ./src

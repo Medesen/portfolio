@@ -111,12 +111,56 @@ def main() -> None:
         check(f"{model} LOO NDCG@20", loo,
               num(protocols[("leave_one_out", model)]["ndcg@20"]), 3)
 
+    _check_stage2(README)
+
     print(f"check-readme: {passes} numbers verified against outputs/")
     if failures:
         print(f"\n{len(failures)} MISMATCH(ES):")
         print("\n".join(failures))
         sys.exit(1)
     print("All README headline numbers match the generated outputs. ✓")
+
+
+def _check_stage2(readme: str) -> None:
+    """Verify the Stage 2 headline numbers if their outputs are present."""
+    if not (OUTPUTS / "metrics_neural.csv").exists():
+        return  # Stage 2 not run; Stage 1 checks stand alone
+
+    neural = {(r["model"], r["metric"], int(r["k"])): r for r in read_csv("metrics_neural.csv")}
+    ceiling = {(r["model"], int(r["n"])): r for r in read_csv("retrieval_ceiling.csv")}
+    cold = {(r["model"], int(r["k"])): r for r in read_csv("metrics_cold.csv")}
+
+    # Stage 2 headline table: | **Two-tower** | 0.260 | 0.510 |
+    for label, model in [("Two-tower", "two_tower"),
+                         ("SASRec (full-softmax)", "sasrec_full"),
+                         ("SASRec (sampled-BCE)", "sasrec_sampled")]:
+        row = re.search(rf"\|\s*\*{{0,2}}{re.escape(label)}\*{{0,2}}\s*\|\s*"
+                        rf"([\d.]+)\s*\|\s*([\d.]+)\s*\|", readme)
+        if row:
+            check(f"{model} NDCG@20 (neural table)", num(row.group(1)),
+                  num(neural[(model, "ndcg", 20)]["value"]), 3)
+            check(f"{model} HR@20 (neural table)", num(row.group(2)),
+                  num(neural[(model, "hit_rate", 20)]["value"]), 3)
+        else:
+            failures.append(f"  NOT FOUND: neural table row for {label}")
+
+    # Retrieval-ceiling table's R@2000 column (last cell): | **Two-tower** | … | **0.929** |
+    for label, model in [("ItemKNN", "itemknn"), ("EASE", "ease"), ("ALS", "als"),
+                         ("Two-tower", "two_tower"), ("SASRec", "sasrec")]:
+        row = re.search(rf"\|\s*\*{{0,2}}{re.escape(label)}\*{{0,2}}\s*\|"
+                        rf"(?:\s*\*{{0,2}}[\d.]+\*{{0,2}}\s*\|){{4}}\s*\*{{0,2}}([\d.]+)\*{{0,2}}\s*\|",
+                        readme)
+        if row:
+            check(f"{model} Recall@2000", num(row.group(1)),
+                  num(ceiling[(model, 2000)]["recall"]), 3)
+
+    # Cold-start table: | Two-tower (content) | 0.157 |
+    for label, model in [("category-popularity heuristic", "category_popularity"),
+                         ("Two-tower (content)", "two_tower")]:
+        row = re.search(rf"\|\s*{re.escape(label)}\s*\|\s*\*{{0,2}}([\d.]+)\*{{0,2}}\s*\|", readme)
+        if row:
+            check(f"{model} cold Recall@20", num(row.group(1)),
+                  num(cold[(model, 20)]["recall"]), 3)
 
 
 if __name__ == "__main__":

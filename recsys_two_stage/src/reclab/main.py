@@ -283,7 +283,14 @@ def main() -> None:
         ("sampled", "sampled-negative evaluation + disagreement table"),
         ("protocols", "temporal vs leave-one-out comparison"),
         ("beyond", "coverage / Gini / popularity-bias metrics"),
+        # Stage 2
+        ("features", "item content-feature coverage (as-of cutoff)"),
+        ("neural", "train + evaluate the two-tower and SASRec models"),
+        ("ablations", "logQ on/off, id vs content, full vs sampled loss"),
+        ("ceiling", "retrieval-ceiling analysis + blending + figure"),
+        ("cold-start", "cold-item evaluation vs the category-popularity baseline"),
         ("all", "run the whole pipeline (reproduce the README)"),
+        ("stage2", "run only the Stage 2 pipeline (neural, ablations, ceiling, cold-start)"),
     ]:
         p = sub.add_parser(name, help=help_text)
         p.add_argument("--out", type=Path, default=Path("outputs"))
@@ -304,13 +311,61 @@ def main() -> None:
         run_protocols(pairs, args.out)
     elif args.command == "beyond":
         run_beyond(pairs, args.out)
+    elif args.command == "features":
+        import reclab.stage2 as s2
+        s2.run_features(build_split(pairs), args.out)
+    elif args.command == "neural":
+        import reclab.stage2 as s2
+        s2.run_neural(build_split(pairs), args.out)
+    elif args.command == "ablations":
+        import reclab.stage2 as s2
+        s2.run_ablations(build_split(pairs), args.out)
+    elif args.command == "ceiling":
+        run_ceiling_standalone(pairs, args.out)
+    elif args.command == "cold-start":
+        import reclab.stage2 as s2
+        s2.run_cold_start(pairs, build_split(pairs), args.out)
+    elif args.command == "stage2":
+        run_stage2(pairs, args.out)
     elif args.command == "all":
         run_eda(pairs, args.out)
         run_evaluate(pairs, args.out)
         run_sampled(pairs, args.out)
         run_protocols(pairs, args.out)
         run_beyond(pairs, args.out)
+        run_stage2(pairs, args.out)
         print("\n=== reproduce complete ===")
+
+
+def run_ceiling_standalone(pairs: pd.DataFrame, out: Path) -> None:
+    """Refit the retrievers, then compute the ceiling (slow; `all` reuses fits)."""
+    import reclab.stage2 as s2
+
+    split = build_split(pairs)
+    features = s2.build_features(split)
+    classical = {name: build_model(name).fit(split.train)
+                 for name in ("itemknn", "ease", "als")}
+    models = s2.fit_stage2_models(split, features)
+    s2.run_ceiling(split, out, classical, models)
+
+
+def run_stage2(pairs: pd.DataFrame, out: Path) -> None:
+    """Full Stage 2 pipeline, fitting each model once and reusing the fits."""
+    import reclab.stage2 as s2
+
+    split = build_split(pairs)
+    features = s2.build_features(split)
+    print("\n[stage2] fitting neural models (each unique model once)...")
+    models = s2.fit_stage2_models(split, features)
+    print("[stage2] fitting classical retrievers for the ceiling...")
+    classical = {name: build_model(name).fit(split.train)
+                 for name in ("itemknn", "ease", "als")}
+
+    s2.run_features(split, out, features=features)
+    s2.run_neural(split, out, features=features, models=models)
+    s2.run_ablations(split, out, features=features, models=models)
+    s2.run_ceiling(split, out, classical, models)
+    s2.run_cold_start(pairs, split, out, two_tower=models["two_tower"], features=features)
 
 
 if __name__ == "__main__":

@@ -46,7 +46,8 @@ class ColdStartEval:
 
 
 def build_cold_start_eval(
-    session_items: pd.DataFrame, warm_split, min_cold_support: int = 2
+    session_items: pd.DataFrame, warm_split, warm_features: ItemFeatures,
+    min_cold_support: int = 2,
 ) -> ColdStartEval:
     """Assemble the cold-start track from the raw sessions and a warm split.
 
@@ -54,18 +55,31 @@ def build_cold_start_eval(
     ``min_cold_support`` post-cutoff occurrences (so it is evaluable, not a
     singleton). An evaluable cold session has a cold *target* (its last item) and at
     least one *warm* prefix item to encode a history from.
+
+    ``warm_features`` supplies the category vocabulary. Cold items must be encoded in
+    the *same* vocabulary the two-tower trained on, or ``embed_cold_items`` would
+    index the wrong rows of the category-embedding table — so the cold features reuse
+    the warm vocabulary rather than fitting a fresh one.
     """
     cutoff = warm_split.cutoff
     warm_ids = set(int(i) for i in warm_split.item_ids)
     warm_to_col = {int(i): c for c, i in enumerate(warm_split.item_ids)}
+    n_warm = len(warm_split.item_ids)
+
+    # "Strictly cold" = zero interactions before the cutoff (genuinely new items),
+    # not merely absent from the k-core-filtered warm vocabulary. An item that
+    # existed pre-cutoff but was filtered out for low support is warm-but-dropped,
+    # a different thing, and counting it as cold would badly inflate the share.
+    pre_cutoff_items = set(session_items.loc[session_items["ts"] < cutoff, "itemid"].unique())
 
     post = session_items[session_items["ts"] >= cutoff].sort_values(
         ["session", "ts"], kind="mergesort"
     )
-    # Cold items: post-cutoff, not warm, with enough support to be evaluable.
-    post_cold_counts = (
-        post[~post["itemid"].isin(warm_ids)]["itemid"].value_counts()
-    )
+    is_warm = post["itemid"].isin(warm_ids)
+    is_cold_item = ~post["itemid"].isin(pre_cutoff_items)
+
+    # Cold candidates: strictly-new items with enough post-cutoff support to evaluate.
+    post_cold_counts = post.loc[is_cold_item, "itemid"].value_counts()
     cold_ids = np.sort(post_cold_counts.index[post_cold_counts >= min_cold_support].to_numpy())
     cold_to_idx = {int(i): k for k, i in enumerate(cold_ids)}
 
@@ -74,46 +88,38 @@ def build_cold_start_eval(
     targets = post[is_last]
     prefixes = post[~is_last]
 
-    # Share of evaluable test targets that are cold (need a warm prefix to encode).
-    warm_prefix_sessions = set(
-        prefixes[prefixes["itemid"].isin(warm_ids)]["session"].unique()
-    )
-    evaluable = targets[targets["session"].isin(warm_prefix_sessions)]
-    is_cold_target = ~evaluable["itemid"].isin(warm_ids)
-    cold_share = float(is_cold_target.mean())
+    # Warm prefix items, mapped to columns once (vectorised — no per-session scan).
+    warm_prefix_pairs = prefixes[prefixes["itemid"].isin(warm_ids)].copy()
+    warm_prefix_pairs["col"] = warm_prefix_pairs["itemid"].map(warm_to_col).astype(int)
+    sessions_with_warm = set(warm_prefix_pairs["session"].unique())
 
-    # Near-cold: targets whose item has fewer than 5 training interactions.
-    train_counts = np.asarray(warm_split.train.sum(axis=0)).ravel()
-    near_cold = 0
-    for item in evaluable["itemid"]:
-        if int(item) in warm_to_col and train_counts[warm_to_col[int(item)]] < 5:
-            near_cold += 1
-    near_cold_share = near_cold / max(len(evaluable), 1)
+    # Share statistics over all evaluable targets (those with a warm prefix).
+    evaluable = targets[targets["session"].isin(sessions_with_warm)]
+    cold_share = float((~evaluable["itemid"].isin(pre_cutoff_items)).mean())
+    # Near-cold: target items with fewer than 5 pre-cutoff interactions (0 for the
+    # strictly-cold). The cliff is rarely sharp, and where it sits is informative.
+    pre_counts = session_items.loc[session_items["ts"] < cutoff, "itemid"].value_counts()
+    item_pre_counts = evaluable["itemid"].map(pre_counts).fillna(0.0)
+    near_cold_share = float((item_pre_counts < 5).mean())
 
-    # Keep only sessions with a cold target that clears min support and a warm prefix.
-    rows, cols, tgt_idx, keep_sessions = [], [], [], []
-    row = 0
-    for session, target_item in zip(targets["session"], targets["itemid"]):
-        if int(target_item) not in cold_to_idx:
-            continue
-        warm_hist = prefixes[(prefixes["session"] == session)
-                             & (prefixes["itemid"].isin(warm_ids))]["itemid"]
-        if warm_hist.empty:
-            continue
-        for it in warm_hist:
-            rows.append(row)
-            cols.append(warm_to_col[int(it)])
-        tgt_idx.append(cold_to_idx[int(target_item)])
-        keep_sessions.append(session)
-        row += 1
+    # Evaluable cold sessions: a cold target that clears min support and a warm prefix.
+    cold_targets = evaluable[evaluable["itemid"].isin(cold_to_idx)].copy()
+    keep_sessions = cold_targets["session"].to_numpy()
+    row_of_session = {int(s): i for i, s in enumerate(keep_sessions)}
+
+    kept_prefix = warm_prefix_pairs[warm_prefix_pairs["session"].isin(set(keep_sessions))]
+    rows = kept_prefix["session"].map(row_of_session).to_numpy()
+    cols = kept_prefix["col"].to_numpy()
+    tgt_idx = cold_targets["itemid"].map(cold_to_idx).to_numpy()
 
     warm_prefix = sp.csr_matrix(
         (np.ones(len(rows), dtype=np.float32), (rows, cols)),
-        shape=(len(tgt_idx), len(warm_split.item_ids)),
+        shape=(len(tgt_idx), n_warm),
     )
     cold_features = build_item_features(
         cutoff, cold_ids,
-        category_vocab=None, parent_vocab=None,  # fit fresh; unseen cats -> unknown
+        category_vocab=warm_features.category_vocab,  # SAME vocab the two-tower trained on
+        parent_vocab=warm_features.parent_vocab,
     )
     return ColdStartEval(
         warm_prefix=warm_prefix,
@@ -127,27 +133,26 @@ def build_cold_start_eval(
 
 
 def evaluate_two_tower_cold(model, cold: ColdStartEval, ks=(10, 20, 50)) -> pd.DataFrame:
-    """Rank each cold target within the full warm+cold candidate universe.
+    """Rank each cold target among the **cold candidates only** (the plan's
+    "restricted to cold items").
 
-    The two-tower embeds warm items from training and cold items from content, so a
-    new item competes head-to-head with the whole catalogue — the honest test.
+    This is the fair test against the category-popularity baseline, which also ranks
+    among cold items: given that a *new* item is to be recommended, does the model's
+    content-based score rank the right one? Ranking cold items inside the full warm
+    catalogue instead would just measure that a content-only embedding cannot out-
+    score established items' ID embeddings — true, but a different and less useful
+    question (noted in the README).
     """
-    warm_emb = model.item_emb_  # (n_warm, d)
     cold_emb = model.embed_cold_items(cold.cold_features)  # (n_cold, d)
-    all_emb = np.vstack([warm_emb, cold_emb])
-    n_warm = warm_emb.shape[0]
+    user_emb = model._user_embeddings(cold.warm_prefix)    # (n_sessions, d)
+    scores = user_emb @ cold_emb.T                         # (n_sessions, n_cold)
 
-    user_emb = model._user_embeddings(cold.warm_prefix)  # (n_sessions, d)
     rows = []
     for k in ks:
         hits, ndcgs = [], []
         for s in range(cold.n_sessions):
-            scores = user_emb[s] @ all_emb.T
-            # Mask warm history so it can't crowd the top; cold items compete freely.
-            seen = cold.warm_prefix[s].indices
-            scores[seen] = -np.inf
-            ranked = np.argsort(-scores)[:k]
-            target = n_warm + int(cold.cold_target_idx[s])  # cold items sit after warm
+            ranked = np.argsort(-scores[s])[:k]
+            target = int(cold.cold_target_idx[s])
             hits.append(hit_rate_at_k(ranked, {target}, k))
             ndcgs.append(ndcg_at_k(ranked, {target}, k))
         rows.append({"model": model.name, "k": k, "recall": float(np.mean(hits)),
@@ -156,19 +161,18 @@ def evaluate_two_tower_cold(model, cold: ColdStartEval, ks=(10, 20, 50)) -> pd.D
 
 
 def evaluate_category_popularity_cold(
-    cold: ColdStartEval, session_items: pd.DataFrame, warm_split, ks=(10, 20, 50)
+    cold: ColdStartEval, session_items: pd.DataFrame, warm_split,
+    warm_features: ItemFeatures, ks=(10, 20, 50),
 ) -> pd.DataFrame:
     """Baseline: recommend the most popular cold items in the session's category.
 
     The category of a session is the most common category among its warm prefix
     items (as-of cutoff); cold candidates in that category are ranked by their
     post-cutoff frequency. This is what a sensible engineer ships without a model —
-    the bar the two-tower must clear, not zero.
+    the bar the two-tower must clear, not zero. Warm and cold categories share the
+    one vocabulary, so matching a session's category to a cold item's is meaningful.
     """
-    warm_feats = build_item_features(warm_split.cutoff, warm_split.item_ids,
-                                     category_vocab=cold.cold_features.category_vocab,
-                                     parent_vocab=cold.cold_features.parent_vocab)
-    warm_cat = warm_feats.category_ids  # (n_warm,)
+    warm_cat = warm_features.category_ids  # (n_warm,)
     cold_cat = cold.cold_features.category_ids  # (n_cold,)
 
     post = session_items[session_items["ts"] >= warm_split.cutoff]

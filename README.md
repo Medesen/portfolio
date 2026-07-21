@@ -112,19 +112,20 @@ An experimentation-and-uplift study I built to work through the three questions 
 
 ### 6. Recommender Systems - Two-Stage Retrieval & Ranking, and What the Evaluation Protocol Hides
 
-**Status:** Stage 1 of 3 complete  
+**Status:** Stages 1 & 2 of 3 complete  
 **Domain:** Session-based recommendation on real e-commerce data  
-**Key Findings:** On the honest full-catalogue metric the simplest models win (ItemKNN/EASE NDCG@20 ≈ 0.319, tuned; ALS third at 0.264); switch to the sampled-negative shortcut most papers used and **ALS jumps from last to first** (rank correlation 0.2) — and ALS is also the most popularity-biased of the three. The evaluation protocol changes which model you'd ship  
-**Tech Stack:** NumPy/SciPy (EASE closed form, ItemKNN), implicit (ALS), pandas, Docker
+**Key Findings:** On the honest full-catalogue metric the simplest models win (ItemKNN/EASE NDCG@20 ≈ 0.319; ALS third at 0.264); the sampled-negative shortcut most papers used flips the order and **ALS jumps from last to first**. And the deeper Stage-2 finding: the two-tower **loses** on ranking (NDCG@20 0.260) but is the **best retriever** (Recall@2000 0.93 vs ItemKNN's 0.79) — the ranking winners are the retrieval losers, which is *why* two-stage systems exist  
+**Tech Stack:** NumPy/SciPy (EASE closed form, ItemKNN), implicit (ALS), PyTorch (two-tower, SASRec — CPU-only), pandas, Docker
 
-An honest evaluation study of classical recommenders built on the field's reproducibility literature (Dacrema et al. 2019; Krichene & Rendle 2020; Ludewig & Jannach 2018). Four tuned models are scored three ways — full-catalogue, sampled-negative, and leave-one-out — and made to disagree on which one wins, on RetailRocket's real click/cart/buy log (CC BY-NC-SA 4.0, bundled). The thesis: a recommender's reported quality depends more on the evaluation protocol than on the model. Stage 1 is the classical baseline layer and the evaluation harness; Stages 2–3 add neural retrieval (two-tower, SASRec), a reranker, and the scalability trade-offs that explain why industry deploys the models that lose this benchmark.
+An honest evaluation study built on the field's reproducibility literature (Dacrema et al. 2019; Krichene & Rendle 2020; Ludewig & Jannach 2018). Classical and neural models are scored three ways — full-catalogue, sampled-negative, and leave-one-out — and made to disagree on which one wins, on RetailRocket's real click/cart/buy log (CC BY-NC-SA 4.0, bundled). The thesis: a recommender's reported quality depends more on the evaluation protocol than on the model. Stage 1 is the classical baseline layer and evaluation harness; Stage 2 adds neural retrieval (two-tower, SASRec) plus the retrieval-ceiling analysis that separates retrieval skill from ranking skill; Stage 3 adds a reranker and the scalability trade-offs that explain why industry deploys the models that lose the benchmark.
 
 **Highlights:**
 - Full-catalogue evaluation as the headline, with the sampled-negative shortcut computed *specifically to show it disagrees* — the Krichene-Rendle reversal reproduced on real data, and again as a synthetic-truth unit test
-- Global temporal split with the k-core filter fit on the training window only (the leaky global variant available for comparison); a documented pivot from user-based to session-based after EDA (79.6% of visitors appear once)
-- Baselines genuinely tuned on a nested temporal validation window (not stubbed) — the entire point of the Dacrema result; EASE's closed form validated against a brute-force ridge solve
-- Beyond-accuracy metrics (coverage, Gini, popularity bias) and bootstrap CIs on every headline number; a pre-registered viability bar cleared at 37×
-- 79 tests incl. temporal-leakage and the sampled-metric reversal; fully reproducible (`make reproduce` + `make check-readme` verifies every README number)
+- Retrieval-ceiling analysis (Recall@N to 2000 candidates) showing the ranking winners are the retrieval losers — the two-stage systems insight, with a committed figure
+- Two-tower (history-pooling, no user-ID embeddings; logQ correction) and SASRec (causal-masking test is the critical one) written from scratch in PyTorch, CPU-only, plugged into the *unchanged* Stage 1 harness; three ablations incl. the full-softmax-vs-sampled-BCE loss finding (Klenitskiy & Vasilev 2023)
+- Cold-start reported honestly: the two-tower breaks the classical models' structural 0.0, but a category-popularity heuristic still beats it, on a stated 3.7% slice
+- A documented pivot from user-based to session-based after EDA (79.6% of visitors appear once); baselines genuinely tuned; a pre-registered viability bar cleared at 37×
+- 100 tests incl. temporal-leakage, SASRec causal-masking, and the sampled-metric reversal; fully reproducible (`make reproduce` + `make check-readme` verifies every README number)
 
 **[View Project →](recsys_two_stage/)**
 
@@ -452,6 +453,6 @@ I built these projects to demonstrate end-to-end capability - from problem defin
 ---
 
 **Last Updated:** July 2026  
-**Current Projects:** 5 complete + 1 in progress (recommender systems, Stage 1 of 3), more coming soon  
+**Current Projects:** 5 complete + 1 in progress (recommender systems, Stages 1 & 2 of 3), more coming soon  
 **License:** MIT — see [LICENSE](LICENSE). Bundled datasets carry their own terms, noted in each project's data documentation.
 

@@ -8,6 +8,11 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.11",
     "implicit>=0.7",
+    # Stage 2 neural models. CPU-only build is pulled from the PyTorch CPU wheel
+    # index at install time (see Dockerfile / requirements.lock header) so the
+    # image does not balloon with CUDA libraries.
+    "torch>=2.2",
+    "matplotlib>=3.8",
 ]
 
 [project.optional-dependencies]

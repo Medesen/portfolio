@@ -32,7 +32,22 @@ protocols: outputs ## Temporal vs leave-one-out comparison
 beyond: outputs ## Coverage / Gini / popularity-bias metrics
 	docker compose run --rm reclab beyond
 
-reproduce: outputs ## Reproduce every number in the README (eda + evaluate + sampled + protocols + beyond)
+features: outputs ## Item content-feature coverage (as-of cutoff)
+	docker compose run --rm reclab features
+
+neural: outputs ## Train + evaluate the two-tower and SASRec models (~14 min, CPU)
+	docker compose run --rm reclab neural
+
+ablations: outputs ## logQ on/off, id vs content, full vs sampled loss
+	docker compose run --rm reclab ablations
+
+ceiling: outputs ## Retrieval-ceiling analysis + blending + figure
+	docker compose run --rm reclab ceiling
+
+cold-start: outputs ## Cold-item evaluation vs the category-popularity baseline
+	docker compose run --rm reclab cold-start
+
+reproduce: outputs ## Reproduce every number in the README (Stage 1 + Stage 2, ~30 min)
 	docker compose run --rm reclab all
 
 check-readme: ## Verify README headline numbers against outputs/ (run after reproduce)

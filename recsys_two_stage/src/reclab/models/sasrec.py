@@ -138,16 +138,22 @@ class SASRec:
         rng = np.random.default_rng(self.seed)
         n = len(train)
 
+        # Pre-pad every sequence once, up front, rather than in the batch loop —
+        # the per-batch Python padding was a large share of CPU training time.
+        all_inputs = torch.as_tensor(
+            np.stack([self._pad_right(s[:-1])[0] for s in train]), device=self.device
+        )
+        all_targets = torch.as_tensor(
+            np.stack([self._pad_right(s[1:])[0] for s in train]), device=self.device
+        )
+
         for _ in range(self.epochs):
             order = rng.permutation(n)
             net.train()
             for start in range(0, n, self.batch_size):
                 batch_idx = order[start : start + self.batch_size]
-                # Input = sequence[:-1], target = sequence[1:] (next-item at each pos).
-                inputs = np.stack([self._pad_right(train[i][:-1])[0] for i in batch_idx])
-                targets = np.stack([self._pad_right(train[i][1:])[0] for i in batch_idx])
-                inp = torch.as_tensor(inputs, device=self.device)
-                tgt = torch.as_tensor(targets, device=self.device)
+                inp = all_inputs[batch_idx]
+                tgt = all_targets[batch_idx]
 
                 hidden = net(inp)  # (B, L, d)
                 mask = tgt != PAD  # positions with a real next-item

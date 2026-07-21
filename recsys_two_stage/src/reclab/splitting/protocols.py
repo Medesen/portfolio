@@ -102,14 +102,26 @@ def _build_sequences(
     matrix throws away. Empty sequences (a session whose items were all filtered)
     come back as empty arrays, never dropped, so row alignment with the matrix
     holds exactly.
+
+    Vectorised: map items to columns once, sort by (session, ts), then slice the
+    column array at session boundaries with ``np.split`` — rather than iterating a
+    pandas groupby in Python, which is minutes-slow across 100k+ sessions.
     """
+    if len(pairs) == 0:
+        empty = np.empty(0, dtype=np.int64)
+        return [empty for _ in session_order]
+
     ordered = pairs.sort_values(["session", "ts"], kind="mergesort")
-    grouped = {
-        session: group["itemid"].map(item_to_col).to_numpy(dtype=np.int64)
-        for session, group in ordered.groupby("session", sort=False)
-    }
+    cols = ordered["itemid"].map(item_to_col).to_numpy(dtype=np.int64)
+    sessions = ordered["session"].to_numpy()
+
+    boundaries = np.flatnonzero(sessions[1:] != sessions[:-1]) + 1
+    groups = np.split(cols, boundaries)
+    starts = np.concatenate([[0], boundaries])
+    by_session = dict(zip(sessions[starts], groups))
+
     empty = np.empty(0, dtype=np.int64)
-    return [grouped.get(session, empty) for session in session_order]
+    return [by_session.get(session, empty) for session in session_order]
 
 
 def temporal_split(
