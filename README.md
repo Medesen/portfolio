@@ -110,6 +110,26 @@ An experimentation-and-uplift study I built to work through the three questions 
 
 ---
 
+### 6. Recommender Systems - Two-Stage Retrieval & Ranking, and What the Evaluation Protocol Hides
+
+**Status:** Stage 1 of 3 complete  
+**Domain:** Session-based recommendation on real e-commerce data  
+**Key Findings:** On the honest full-catalogue metric the simplest models win (ItemKNN/EASE NDCG@20 ≈ 0.319, tuned; ALS third at 0.264); switch to the sampled-negative shortcut most papers used and **ALS jumps from last to first** (rank correlation 0.2) — and ALS is also the most popularity-biased of the three. The evaluation protocol changes which model you'd ship  
+**Tech Stack:** NumPy/SciPy (EASE closed form, ItemKNN), implicit (ALS), pandas, Docker
+
+An honest evaluation study of classical recommenders built on the field's reproducibility literature (Dacrema et al. 2019; Krichene & Rendle 2020; Ludewig & Jannach 2018). Four tuned models are scored three ways — full-catalogue, sampled-negative, and leave-one-out — and made to disagree on which one wins, on RetailRocket's real click/cart/buy log (CC BY-NC-SA 4.0, bundled). The thesis: a recommender's reported quality depends more on the evaluation protocol than on the model. Stage 1 is the classical baseline layer and the evaluation harness; Stages 2–3 add neural retrieval (two-tower, SASRec), a reranker, and the scalability trade-offs that explain why industry deploys the models that lose this benchmark.
+
+**Highlights:**
+- Full-catalogue evaluation as the headline, with the sampled-negative shortcut computed *specifically to show it disagrees* — the Krichene-Rendle reversal reproduced on real data, and again as a synthetic-truth unit test
+- Global temporal split with the k-core filter fit on the training window only (the leaky global variant available for comparison); a documented pivot from user-based to session-based after EDA (79.6% of visitors appear once)
+- Baselines genuinely tuned on a nested temporal validation window (not stubbed) — the entire point of the Dacrema result; EASE's closed form validated against a brute-force ridge solve
+- Beyond-accuracy metrics (coverage, Gini, popularity bias) and bootstrap CIs on every headline number; a pre-registered viability bar cleared at 37×
+- 79 tests incl. temporal-leakage and the sampled-metric reversal; fully reproducible (`make reproduce` + `make check-readme` verifies every README number)
+
+**[View Project →](recsys_two_stage/)**
+
+---
+
 ## What This Portfolio Demonstrates
 
 ### Engineering Practices
@@ -224,6 +244,23 @@ portfolio/
 │   ├── docker-compose.yml      # Single-service orchestration
 │   ├── Makefile               # Command shortcuts incl. `make reproduce`
 │   └── setup.sh / setup.ps1   # Automated setup scripts
+├── recsys_two_stage/           # Project 6: Two-stage recommenders (Stage 1 of 3)
+│   ├── README.md               # Complete documentation
+│   ├── DATA_NOTES.md           # EDA findings → design decisions
+│   ├── PLAN_STAGE1/2/3.md      # Full three-stage build plan
+│   ├── src/reclab/             # Source code
+│   │   ├── data/              # Loading, sessionization, iterative k-core
+│   │   ├── splitting/         # Temporal + leave-one-out protocols
+│   │   ├── models/            # Popularity, ItemKNN, EASE, ALS
+│   │   ├── evaluation/        # Metrics, full-catalogue, sampled, beyond-accuracy
+│   │   ├── tuning/            # Nested temporal-validation grid search
+│   │   └── main.py            # CLI: eda / tune / evaluate / sampled / protocols / beyond / all
+│   ├── tests/                  # 79 tests incl. temporal-leakage + the sampled-metric reversal
+│   ├── data/raw/               # Bundled dataset (~40 MB, CC BY-NC-SA 4.0) + provenance
+│   ├── Dockerfile              # Container definition
+│   ├── docker-compose.yml      # Single-service orchestration
+│   ├── Makefile               # Command shortcuts incl. `make reproduce`
+│   └── setup.sh / setup.ps1   # Automated setup scripts
 └── [future projects...]        # More projects coming soon
 ```
 
@@ -249,7 +286,6 @@ This portfolio is actively expanding. Planned additions include:
 
 **Classic ML:**
 - **Tabular ML** - Feature engineering, experiment tracking, SHAP, model cards
-- **Recommender system** - Two-tower retrieval + ranking, offline metrics
 - **Data pipeline orchestration** - Airflow/Prefect, data quality, versioning
 - **Analytics & storytelling** - SQL, interactive viz, insights reports
 
@@ -357,6 +393,7 @@ Based on the completed projects, I've demonstrated proficiency with:
 - Sentence-transformers (embedding models)
 - ChromaDB (vector database)
 - Ollama (local LLM inference)
+- implicit (ALS), plus from-scratch EASE / ItemKNN (recommender systems)
 - PyTorch (underlying framework)
 
 **Python Ecosystem:**
@@ -387,6 +424,7 @@ Based on the completed projects, I've demonstrated proficiency with:
 **Evaluation & Metrics:**
 - Classification metrics (ROC AUC, precision, recall, F1)
 - Information Retrieval metrics (Recall@k, MRR, NDCG)
+- Recommender ranking metrics (HitRate@k, NDCG@k, MRR@k) with full-catalogue vs sampled-negative protocol comparison and beyond-accuracy metrics (coverage, Gini, popularity bias)
 - Forecasting metrics (MASE, WAPE, pinball loss, interval coverage) with rolling-origin backtesting
 - Econometric inference (fixed-effects panel regression, cluster-robust SEs)
 - Causal inference & experimentation (randomized ATE, CUPED variance reduction, uplift/Qini, Holm/BH multiplicity control)
@@ -414,6 +452,6 @@ I built these projects to demonstrate end-to-end capability - from problem defin
 ---
 
 **Last Updated:** July 2026  
-**Current Projects:** 5 complete, more coming soon  
+**Current Projects:** 5 complete + 1 in progress (recommender systems, Stage 1 of 3), more coming soon  
 **License:** MIT — see [LICENSE](LICENSE). Bundled datasets carry their own terms, noted in each project's data documentation.
 

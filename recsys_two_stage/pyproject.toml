@@ -1,0 +1,26 @@
+[project]
+name = "recsys-two-stage"
+version = "0.1.0"
+description = "Two-stage recommender systems on RetailRocket: honest evaluation protocols, tuned classical baselines, neural retrieval, and the scalability trade-offs a benchmark does not show"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "implicit>=0.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+reclab = "reclab.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reclab"]
