@@ -1,4 +1,5 @@
-"""Evaluation: ranking metrics, full-catalogue and sampled protocols."""
+"""Evaluation: ranking metrics, full-catalogue / sampled / beyond-accuracy protocols,
+plus the Stage 2 retrieval-ceiling and cold-start tracks."""
 
 from reclab.evaluation.metrics import (
     evaluate_rankings,

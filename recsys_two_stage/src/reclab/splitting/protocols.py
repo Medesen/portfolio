@@ -47,6 +47,12 @@ class SessionSplit:
     filter_scope: str
     filter_report: FilterReport
     n_straddling_dropped: int = 0
+    # First-touch-ordered item-index sequences, aligned row-for-row to the
+    # matrices above. The binary matrices discard order; sequential models
+    # (SASRec) need it, so it is carried alongside rather than reconstructed —
+    # a bag cannot be un-shuffled. Classical models ignore these.
+    train_sequences: list[np.ndarray] | None = None
+    test_prefix_sequences: list[np.ndarray] | None = None
 
     @property
     def n_items(self) -> int:
@@ -85,6 +91,25 @@ def _build_matrix(
     return sp.csr_matrix(
         (data, (rows, cols)), shape=(len(session_order), len(item_to_col))
     )
+
+
+def _build_sequences(
+    pairs: pd.DataFrame, item_to_col: dict[int, int], session_order: np.ndarray
+) -> list[np.ndarray]:
+    """First-touch-ordered item-index sequence per session, aligned to session_order.
+
+    The order carried here is what sequential models consume and what the binary
+    matrix throws away. Empty sequences (a session whose items were all filtered)
+    come back as empty arrays, never dropped, so row alignment with the matrix
+    holds exactly.
+    """
+    ordered = pairs.sort_values(["session", "ts"], kind="mergesort")
+    grouped = {
+        session: group["itemid"].map(item_to_col).to_numpy(dtype=np.int64)
+        for session, group in ordered.groupby("session", sort=False)
+    }
+    empty = np.empty(0, dtype=np.int64)
+    return [grouped.get(session, empty) for session in session_order]
 
 
 def temporal_split(
@@ -147,7 +172,8 @@ def temporal_split(
     test_pairs = test_pairs[test_pairs["session"].isin(set(keep_test))]
 
     train = _build_matrix(train_pairs, item_to_col, train_order)
-    prefix, target = _prefix_target(test_pairs, item_to_col)
+    train_sequences = _build_sequences(train_pairs, item_to_col, train_order)
+    prefix, target, prefix_sequences = _prefix_target(test_pairs, item_to_col)
 
     return SessionSplit(
         train=train,
@@ -159,12 +185,14 @@ def temporal_split(
         filter_scope=filter_scope,
         filter_report=report,
         n_straddling_dropped=n_straddling,
+        train_sequences=train_sequences,
+        test_prefix_sequences=prefix_sequences,
     )
 
 
 def _prefix_target(
     test_pairs: pd.DataFrame, item_to_col: dict[int, int]
-) -> tuple[sp.csr_matrix, np.ndarray]:
+) -> tuple[sp.csr_matrix, np.ndarray, list[np.ndarray]]:
     """Split each test session into (all items but the last, the last item).
 
     Order is first-touch time within the session. Predicting the final item from
@@ -179,8 +207,9 @@ def _prefix_target(
 
     session_order = targets_df["session"].to_numpy()
     prefix = _build_matrix(prefix_df, item_to_col, session_order)
+    prefix_sequences = _build_sequences(prefix_df, item_to_col, session_order)
     target = targets_df["itemid"].map(item_to_col).to_numpy()
-    return prefix, target
+    return prefix, target, prefix_sequences
 
 
 def leave_one_out_split(
@@ -213,13 +242,12 @@ def leave_one_out_split(
 
     session_order = np.sort(train_pairs["session"].unique())
     train = _build_matrix(train_pairs, item_to_col, session_order)
+    train_sequences = _build_sequences(train_pairs, item_to_col, session_order)
 
     eval_sessions = held_out["session"].to_numpy()
-    prefix = _build_matrix(
-        train_pairs[train_pairs["session"].isin(set(eval_sessions))],
-        item_to_col,
-        eval_sessions,
-    )
+    eval_pairs = train_pairs[train_pairs["session"].isin(set(eval_sessions))]
+    prefix = _build_matrix(eval_pairs, item_to_col, eval_sessions)
+    prefix_sequences = _build_sequences(eval_pairs, item_to_col, eval_sessions)
     target = held_out["itemid"].map(item_to_col).to_numpy()
     _ = rng  # seeding is via sample(random_state=seed); kept for signature clarity
 
@@ -232,4 +260,6 @@ def leave_one_out_split(
         protocol="leave_one_out",
         filter_scope="global",
         filter_report=report,
+        train_sequences=train_sequences,
+        test_prefix_sequences=prefix_sequences,
     )

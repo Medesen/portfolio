@@ -108,11 +108,13 @@ def evaluate_sampled(
     per: dict[tuple[str, int], list[float]] = {
         (m, k): [] for m in METRICS for k in ks
     }
+    from reclab.evaluation.full_catalogue import history_chunk
+
     for start in range(0, split.n_test_sessions, chunk_size):
         stop = min(start + chunk_size, split.n_test_sessions)
-        histories = split.test_prefix[start:stop]
-        scores = model.score(histories)
-        seen = histories.toarray() > 0
+        history = history_chunk(split, start, stop)
+        scores = model.score(history)
+        seen = history.matrix.toarray() > 0
         chunk = sampled_metrics_from_scores(
             scores,
             split.test_target[start:stop],

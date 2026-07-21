@@ -32,7 +32,7 @@ import os
 import numpy as np
 import scipy.sparse as sp
 
-from reclab.models.base import check_fitted
+from reclab.models.base import as_matrix, check_fitted
 
 # implicit spawns a thread pool and prints a progress bar; keep both quiet and
 # deterministic. Threads default to 1 so results are reproducible; callers can
@@ -93,11 +93,11 @@ class ALS:
         self._YtY = self.item_factors_.T @ self.item_factors_
         return self
 
-    def score(self, histories: sp.csr_matrix) -> np.ndarray:
+    def score(self, history) -> np.ndarray:
         check_fitted(self, "item_factors_")
         Y = self.item_factors_
         reg_eye = self.regularization * np.eye(self.factors)
-        histories = histories.tocsr()
+        histories = as_matrix(history).tocsr()
 
         session_factors = np.empty((histories.shape[0], self.factors), dtype=np.float64)
         for row in range(histories.shape[0]):

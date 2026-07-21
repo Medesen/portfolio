@@ -22,7 +22,7 @@ from __future__ import annotations
 import numpy as np
 import scipy.sparse as sp
 
-from reclab.models.base import check_fitted
+from reclab.models.base import as_matrix, check_fitted
 
 
 def _top_k_per_row(matrix: sp.csr_matrix, k: int) -> sp.csr_matrix:
@@ -85,6 +85,7 @@ class ItemKNN:
         self.similarity_ = _top_k_per_row(similarity, self.k)
         return self
 
-    def score(self, histories: sp.csr_matrix) -> np.ndarray:
+    def score(self, history) -> np.ndarray:
         check_fitted(self, "similarity_")
+        histories = as_matrix(history)
         return np.asarray((histories @ self.similarity_).todense(), dtype=np.float64)

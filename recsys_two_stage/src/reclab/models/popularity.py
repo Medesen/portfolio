@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 import scipy.sparse as sp
 
-from reclab.models.base import check_fitted
+from reclab.models.base import as_matrix, check_fitted
 
 
 class Popularity:
@@ -28,6 +28,6 @@ class Popularity:
         self.counts_ = np.asarray(X.sum(axis=0)).ravel().astype(np.float64)
         return self
 
-    def score(self, histories: sp.csr_matrix) -> np.ndarray:
+    def score(self, history) -> np.ndarray:
         check_fitted(self, "counts_")
-        return np.tile(self.counts_, (histories.shape[0], 1))
+        return np.tile(self.counts_, (as_matrix(history).shape[0], 1))

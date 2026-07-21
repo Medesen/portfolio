@@ -86,15 +86,16 @@ def evaluate_beyond_accuracy(
     chunk_size: int = 2048,
 ) -> pd.DataFrame:
     """Beyond-accuracy metrics for one model over all test sessions."""
+    from reclab.evaluation.full_catalogue import history_chunk
     from reclab.evaluation.metrics import top_k_from_scores
 
     max_k = max(ks)
     collected = []
     for start in range(0, split.n_test_sessions, chunk_size):
         stop = min(start + chunk_size, split.n_test_sessions)
-        histories = split.test_prefix[start:stop]
-        scores = model.score(histories)
-        seen = histories.toarray() > 0
+        history = history_chunk(split, start, stop)
+        scores = model.score(history)
+        seen = history.matrix.toarray() > 0
         collected.append(top_k_from_scores(scores, max_k, mask=seen))
     top_k = np.vstack(collected)
 

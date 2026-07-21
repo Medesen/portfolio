@@ -33,7 +33,7 @@ from __future__ import annotations
 import numpy as np
 import scipy.sparse as sp
 
-from reclab.models.base import check_fitted
+from reclab.models.base import as_matrix, check_fitted
 
 
 def estimate_memory_gb(n_items: int) -> float:
@@ -79,6 +79,6 @@ class EASE:
         self.B_ = B
         return self
 
-    def score(self, histories: sp.csr_matrix) -> np.ndarray:
+    def score(self, history) -> np.ndarray:
         check_fitted(self, "B_")
-        return np.asarray(histories @ self.B_, dtype=np.float64)
+        return np.asarray(as_matrix(history) @ self.B_, dtype=np.float64)

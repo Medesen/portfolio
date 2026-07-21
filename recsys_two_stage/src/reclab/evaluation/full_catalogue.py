@@ -23,7 +23,17 @@ from reclab.evaluation.metrics import (
     reciprocal_rank,
     top_k_from_scores,
 )
+from reclab.models.base import HistoryBatch
 from reclab.splitting.protocols import SessionSplit
+
+
+def history_chunk(split: SessionSplit, start: int, stop: int) -> HistoryBatch:
+    """Build a HistoryBatch for test rows [start, stop): the binary slice plus,
+    when the split carries them, the matching ordered sequences."""
+    sequences = None
+    if split.test_prefix_sequences is not None:
+        sequences = split.test_prefix_sequences[start:stop]
+    return HistoryBatch(matrix=split.test_prefix[start:stop], sequences=sequences)
 
 METRICS = ("hit_rate", "ndcg", "mrr")
 
@@ -91,13 +101,13 @@ def evaluate(
 
     for start in range(0, split.n_test_sessions, chunk_size):
         stop = min(start + chunk_size, split.n_test_sessions)
-        histories = split.test_prefix[start:stop]
+        history = history_chunk(split, start, stop)
 
-        scores = model.score(histories)
+        scores = model.score(history)
         # Items already seen in the session are not predictions. Masking is done
         # here, once, for every model — a model that forgets scores its own
         # input back and looks spectacular for no reason.
-        seen = histories.toarray() > 0
+        seen = history.matrix.toarray() > 0
         ranked = top_k_from_scores(scores, max_k, mask=seen)
 
         for offset, row in enumerate(ranked):
