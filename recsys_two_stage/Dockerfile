@@ -19,9 +19,17 @@ WORKDIR /app
 # index keeps the image from pulling ~2 GB of unused CUDA libraries — the neural
 # models (Stage 2) are CPU-only by design.
 COPY requirements.lock ./
-RUN pip install --no-cache-dir \
-    --extra-index-url https://download.pytorch.org/whl/cpu \
-    -r requirements.lock
+# hnswlib ships as a C++ extension with no wheel for this Python, so it compiles
+# from source. Install the toolchain, build, and purge it in the same layer so the
+# runtime image does not carry a compiler.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential python3-dev \
+    && pip install --no-cache-dir \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        -r requirements.lock \
+    && apt-get purge -y build-essential python3-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./
 COPY src ./src
