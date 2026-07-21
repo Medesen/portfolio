@@ -112,6 +112,7 @@ def main() -> None:
               num(protocols[("leave_one_out", model)]["ndcg@20"]), 3)
 
     _check_stage2(README)
+    _check_stage3(README)
 
     print(f"check-readme: {passes} numbers verified against outputs/")
     if failures:
@@ -161,6 +162,31 @@ def _check_stage2(readme: str) -> None:
         if row:
             check(f"{model} cold Recall@20", num(row.group(1)),
                   num(cold[(model, 20)]["recall"]), 3)
+
+
+def _check_stage3(readme: str) -> None:
+    """Verify the reproducible Stage 3 numbers (end-to-end accuracy).
+
+    Scaling times and serving latency are machine-dependent single-run
+    measurements, presented as illustrative in the README and deliberately not
+    checked here."""
+    if not (OUTPUTS / "metrics_e2e.csv").exists():
+        return
+    e2e = {(r["model"], r["metric"], int(r["k"])): r for r in read_csv("metrics_e2e.csv")}
+
+    # End-to-end table: | Retrieval only (ALS order) | 0.264 | 0.525 | — |
+    for label, model in [("Retrieval only (ALS order)", "retrieval_only"),
+                         ("Two-stage (LambdaMART rerank)", "two_stage_lambdarank"),
+                         ("Two-stage (pointwise rerank)", "two_stage_binary")]:
+        row = re.search(rf"\|\s*\*{{0,2}}{re.escape(label)}\*{{0,2}}\s*\|\s*"
+                        rf"\*{{0,2}}([\d.]+)\*{{0,2}}\s*\|\s*([\d.]+)\s*\|", readme)
+        if row:
+            check(f"{model} e2e NDCG@20", num(row.group(1)),
+                  num(e2e[(model, "ndcg", 20)]["value"]), 3)
+            check(f"{model} e2e HR@20", num(row.group(2)),
+                  num(e2e[(model, "hit_rate", 20)]["value"]), 3)
+        else:
+            failures.append(f"  NOT FOUND: e2e row for {label}")
 
 
 if __name__ == "__main__":

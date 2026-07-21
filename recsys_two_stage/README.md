@@ -1,10 +1,12 @@
 # Recommender Systems — Two-Stage Retrieval & Ranking, and What the Evaluation Protocol Hides
 
-**Stages 1 & 2 of 3 complete.** An honest evaluation study of session-based
-recommenders on real e-commerce data — classical baselines *and* neural retrieval —
-built to show that, with recommenders, *how you measure changes the answer more than
-what you build*, and that **the model that wins on ranking is not the one that wins on
-retrieval**.
+**All three stages complete.** An end-to-end study of session-based recommenders on
+real e-commerce data — classical baselines, neural retrieval, and a two-stage
+retrieve-and-rank system with serving — built to show that, with recommenders, *how
+you measure changes the answer more than what you build*, that **the model that wins
+on ranking is not the one that wins on retrieval**, and that the two-stage
+architecture industry deploys is a *scalability* device whose benefit this catalogue
+is too small to show.
 
 ## Summary
 
@@ -199,6 +201,116 @@ value is bounded by both the margin (a heuristic wins) and the slice size. Repor
 the advantage next to the 3.7% denominator is the honest framing; an advantage on a
 slice few sessions reach is a small advantage.
 
+## Stage 3 — Ranking, Approximate Search, and Serving
+
+Stage 3 builds the second half of the actual architecture: a **LightGBM reranker**
+over retrieved candidates, an **HNSW** approximate-nearest-neighbour index, a minimal
+**FastAPI `/recommend`** endpoint with per-stage timing, and the **catalogue-scaling
+sweep** that turns EASE's memory wall from arithmetic into a measured curve.
+
+### The nested-window training design (the subtle part)
+
+A reranker trains on *candidates a retriever produced*, labelled by what the user did
+next. The quiet failure: if that retriever was fit on the very interactions used as
+labels, its scores are in-sample during training and out-of-sample at serving — the
+ranker learns to trust a signal that will be weaker in production, and nothing
+crashes. The fix is a nested temporal split — fit the candidate-generating retriever
+on period **A**, label on **B**, and keep the Stage 1/2 test window **C** untouched
+(retrieval refit on `[start, T2)` for the final pass). The
+[`test_ranker_data.py`](tests/test_ranker_data.py) feature-leakage test — permute the
+labels, assert every feature is bit-identical — was written *before* the ranker
+existed.
+
+### Does the reranker help? Yes, over its retriever — but not past a good single model
+
+The candidate generator is ALS (the best single retriever at N=500, Recall@500 ≈
+0.88, which caps the two-stage system). Reranking its 500 candidates:
+
+| System | NDCG@20 | HitRate@20 | Coverage@20 |
+|---|---|---|---|
+| Retrieval only (ALS order) | 0.264 | 0.525 | — |
+| **Two-stage (LambdaMART rerank)** | **0.298** | 0.575 | 0.78 |
+| Two-stage (pointwise rerank) | 0.293 | 0.569 | — |
+| *Reference: best single-stage (ItemKNN)* | *0.319* | *0.562* | — |
+
+The reranker **lifts its retriever by +13%** (0.264 → 0.298) and does not collapse
+catalogue coverage (0.78). LambdaMART edges the pointwise objective slightly (0.298 vs
+0.293) — the listwise objective earns a little. But the two-stage system **does not
+beat the best single-stage model** (ItemKNN 0.319). The feature importance says why:
+the ranker's gain is dominated by the retrieval score itself, because RetailRocket has
+no prices, no text, and hashed properties — the feature set is genuinely thin.
+
+That is the honest — and expected — result, and it is the third instance of the
+portfolio's recurring finding (after the RAG project's query rewriting and the uplift
+project's CUPED):
+
+> Two-stage architecture exists so a catalogue too large to score exhaustively can be
+> served in milliseconds. This catalogue is **not** too large — 13,754 items are
+> scored exactly in single-digit milliseconds — so the architecture is being asked to
+> pay for a problem the data does not have. Its cost is measurable here; its benefit
+> only appears at catalogue sizes this dataset cannot demonstrate.
+
+### The scaling wall, measured
+
+Which is the whole point of the closing argument, and the scaling sweep makes it
+concrete. EASE's dense item×item solve is ~O(K³); ALS's embedding factorisation is
+roughly linear. Fit time on the real matrix, restricted to the top-K popular items:
+
+| Catalogue K | EASE fit | ALS fit | EASE ÷ ALS |
+|---|---|---|---|
+| 2,000 | 0.14 s | 1.57 s | 0.09× |
+| 5,000 | 1.98 s | 2.53 s | 0.78× |
+| 8,000 | 7.51 s | 3.32 s | 2.3× |
+| 13,754 | 34.0 s | 4.38 s | **7.8×** |
+
+![Scaling](assets/scaling_fit_time.png)
+
+EASE is *faster* than ALS on a small catalogue and **7.8× slower** by the full 13,754
+items, growing as ~K^2.7 while ALS stays flat. Extrapolating the memory side (stated
+as arithmetic, not measured): EASE's dense matrix is 3.2 GB at 20k items, 80 GB at
+100k, and **442 GB at the full 235k-item catalogue** — the model that wins the
+benchmark cannot be trained on the catalogue. The measured time curve plus the stated
+memory arithmetic is the honest whole.
+
+### Approximate nearest neighbours — measured, and honestly unnecessary here
+
+ANN applies only to the **embedding** retrievers (ALS, two-tower); EASE and ItemKNN
+produce item-item similarity, not a metric space, so fast vector search does not apply
+to them — EASE's disadvantages compound (quadratic memory, no cold start, *and* no ANN
+serving path). HNSW over the ALS embeddings:
+
+![ANN recall vs latency](assets/ann_recall_latency.png)
+
+HNSW recovers **92–93% of the exact top-200 at ~3× the query speed** (p95 ≈ 0.15 ms vs
+exact 0.42 ms). But at 13,754 items **exact search is already sub-millisecond, so ANN
+is unnecessary** — it is built and measured for the *shape* of the trade-off, whose
+crossover is a property of catalogue size, not of this dataset. Overselling it would
+undercut a project whose premise is not overselling things.
+
+### Where the milliseconds go
+
+The `/recommend` endpoint composes the whole system, timed per stage (single-threaded,
+in Docker — a shape, not a production SLA):
+
+| Stage | p50 (ms) | Share |
+|---|---|---|
+| user embedding (fold-in) | 0.20 | 4% |
+| retrieval (ANN) | 0.46 | 9% |
+| **feature assembly** | 2.55 | **51%** |
+| **ranking** | 1.74 | **35%** |
+| filter + top-k | 0.06 | 1% |
+| total | 5.01 | 100% |
+
+**Feature assembly and ranking dominate; retrieval is 9%.** That is exactly why
+production systems retrieve cheaply and wide, then rank expensively and narrow — the
+two-stage split made visible in a latency budget.
+
+**What production would change** (documented, not built): features from a feature
+store rather than in-memory assembly (the 51% above); the ANN index rebuilt on a
+schedule with atomic swap; model artifacts in a registry; the ranker retrained on a
+different cadence from retrieval; and request-level logging of served candidates,
+which is the prerequisite for the off-policy evaluation this project declines to fake.
+
 ## Quick Start (~5 minutes)
 
 ### Prerequisites
@@ -237,7 +349,15 @@ make ablations    # logQ on/off, id vs content, full vs sampled loss
 make ceiling      # retrieval-ceiling analysis + blending + figure
 make cold-start   # cold-item evaluation vs the category-popularity baseline
 
-make reproduce    # every number in this README, end to end (~30 min)
+# Stage 3 — reranker, ANN, scaling, serving
+make evaluate-e2e   # end-to-end two-stage reranker evaluation
+make ann-sweep      # HNSW recall/latency sweep + Pareto figure
+make scaling        # catalogue-scaling sweep (EASE's wall, measured)
+make build-service  # fit + persist the serving artifacts
+make serve          # launch the FastAPI recommender (POST /recommend, GET /health)
+make latency        # per-stage serving latency harness
+
+make reproduce    # every number in this README, end to end (~45 min)
 make check-readme # verify the README's headline numbers against outputs/
 ```
 
@@ -305,7 +425,7 @@ reclab evaluate
 
 ## Testing
 
-100 tests, all runnable in Docker:
+128 tests, all runnable in Docker:
 
 ```bash
 make test
@@ -324,6 +444,12 @@ The ones worth a reviewer's eye:
 - **The two-tower's cold-start claim, as a property.** The content path lets a cold
   item find its cluster; the `id_only` ablation demonstrably cannot — the
   architectural claim asserted, not just asserted about (`test_two_tower.py`).
+- **Ranker feature leakage, written before the ranker.** Permute the held-out labels
+  and assert every ranker feature is bit-identical — a feature that peeked at the
+  target would fail (`test_ranker_data.py`); plus the nested-window A ≺ B ≺ C ordering.
+- **The `/recommend` contract, structure not wall-clock.** Per-stage timings exist and
+  sum to the reported total; bad `k` returns 422 not 500; seen items never appear in
+  the output. Timing *values* are never asserted — those are flaky (`test_api.py`).
 - **Neural sanity.** On a trivially learnable clustered world both neural models must
   reach near-perfect recall — catching the silent failure of a model that trains
   cleanly but learns nothing (`test_neural_sanity.py`).
@@ -358,29 +484,21 @@ recsys_two_stage/
 │   ├── evaluation/               # Metrics, full-catalogue, sampled, beyond-accuracy,
 │   │                             #   retrieval-ceiling, cold-start
 │   ├── tuning/                   # Nested temporal-validation grid search
-│   ├── stage2.py                 # Stage 2 orchestration (neural, ablations, ceiling, cold)
-│   └── main.py                   # CLI: eda/evaluate/sampled/…/features/neural/ceiling/cold-start/all
-├── tests/                        # 100 tests
-├── assets/retrieval_ceiling.png  # Committed retrieval-ceiling figure
+│   ├── ranking/                  # Nested-window ranker data + LightGBM reranker
+│   ├── serving/                  # HNSW ANN index + FastAPI app + timed pipeline
+│   ├── scaling.py                # Catalogue-scaling sweep (EASE's wall)
+│   ├── stage2.py / stage3.py     # Stage orchestration
+│   └── main.py                   # CLI: eda/…/neural/ceiling/evaluate-e2e/ann-sweep/scaling/serve/all
+├── tests/                        # 128 tests
+├── assets/                       # Committed figures: retrieval ceiling, ANN, scaling
 ├── scripts/check_readme.py       # Verifies README numbers against outputs/
 ├── Dockerfile / docker-compose.yml / Makefile / setup.sh / setup.ps1
-└── outputs/                      # Result tables (gitignored)
+└── outputs/                      # Result tables + serving artifacts (gitignored)
 ```
 
 ## Honest Limitations & Future Work
 
-### Stage 3 roadmap
-
-Stages 1 and 2 are complete. Stage 3 closes the argument they set up:
-
-- **Stage 3** — a **LightGBM reranker** (the second stage) working over the candidates
-  the retrieval-ceiling analysis measured, an **approximate nearest-neighbour** index
-  with a measured recall-vs-latency curve (which applies only to the embedding
-  retrievers — ALS and the two-tower — another compounding disadvantage for EASE), a
-  minimal `/recommend` endpoint with per-stage latency, and the **catalogue-scaling
-  sweep** that turns EASE's memory wall from arithmetic into a measured curve.
-
-### Known limitations of these stages
+### Known limitations of the project
 
 - **Single held-out target per session**, so Recall@k collapses to HitRate@k; the
   metric set is HitRate / NDCG / MRR by design, stated rather than papered over.
@@ -392,9 +510,18 @@ Stages 1 and 2 are complete. Stage 3 closes the argument they set up:
   short-session regime where sequential order carries little, exactly where the
   literature expects simple methods to win. It is included to *make* that point and to
   carry the loss ablation, not because it was expected to top the table.
+- **The reranker uses a thin feature set** — no prices, no text, hashed properties —
+  so it leans heavily on the retrieval score and does not beat the best single-stage
+  model. This is a property of the data, and the point of the two-stage story: the
+  architecture is a scalability device this catalogue is too small to reward.
+- **The scaling wall is measured in *time*, extrapolated in *memory*.** EASE fits
+  comfortably at 13,754 items, so the sweep shows super-linear fit-time growth on real
+  subsets; the 442 GB at the full catalogue is arithmetic, stated as arithmetic.
+- **Latency is a single-threaded laptop measurement in Docker** — the informative part
+  is the per-stage *share*, not the absolute milliseconds.
 - **`make reproduce` refits models across subcommands** where a fully shared cache
-  would not, so it runs ~30 min; the `stage2` and `all` paths already fit each unique
-  neural model once, which is where the cost lives.
+  would not, so it runs ~45 min; the `stageN` and `all` paths already fit each unique
+  model once, which is where the cost lives.
 
 ### Deliberately not built (and why)
 
@@ -405,9 +532,11 @@ Stages 1 and 2 are complete. Stage 3 closes the argument they set up:
   fiction.
 - **Graph neural networks (LightGCN etc.)** — already covered by the "tuned baselines
   win" literature this project builds on; adding one would restate the finding.
-- **A Kubernetes / monitoring stack** — already demonstrated in the sibling
-  [`end2end_churn`](../end2end_churn/) project; repeating it would add volume, not
-  evidence.
+- **A Kubernetes / monitoring stack, and a feature store** — the churn work in the
+  sibling [`end2end_churn`](../end2end_churn/) project already demonstrates serving,
+  metrics, and deployment; the `/recommend` endpoint here is a *latency-measurement
+  instrument*, not a second product. What production would change is documented above,
+  not built.
 
 ## License, Dataset License & Citation
 

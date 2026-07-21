@@ -47,7 +47,25 @@ ceiling: outputs ## Retrieval-ceiling analysis + blending + figure
 cold-start: outputs ## Cold-item evaluation vs the category-popularity baseline
 	docker compose run --rm reclab cold-start
 
-reproduce: outputs ## Reproduce every number in the README (Stage 1 + Stage 2, ~30 min)
+evaluate-e2e: outputs ## End-to-end two-stage reranker evaluation
+	docker compose run --rm reclab evaluate-e2e
+
+ann-sweep: outputs ## HNSW recall/latency sweep + Pareto figure
+	docker compose run --rm reclab ann-sweep
+
+scaling: outputs ## Catalogue-scaling sweep (EASE's memory/time wall, measured)
+	docker compose run --rm reclab scaling
+
+build-service: outputs ## Fit + persist the serving artifacts to outputs/serving
+	docker compose run --rm reclab build-service
+
+serve: outputs ## Launch the FastAPI recommender on port 8000
+	docker compose run --rm --service-ports reclab serve
+
+latency: outputs ## Per-stage serving latency harness
+	docker compose run --rm reclab latency
+
+reproduce: outputs ## Reproduce every number in the README (all three stages, ~45 min)
 	docker compose run --rm reclab all
 
 check-readme: ## Verify README headline numbers against outputs/ (run after reproduce)

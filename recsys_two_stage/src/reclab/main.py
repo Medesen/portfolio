@@ -289,6 +289,14 @@ def main() -> None:
         ("ablations", "logQ on/off, id vs content, full vs sampled loss"),
         ("ceiling", "retrieval-ceiling analysis + blending + figure"),
         ("cold-start", "cold-item evaluation vs the category-popularity baseline"),
+        # Stage 3
+        ("evaluate-e2e", "end-to-end two-stage reranker evaluation"),
+        ("ann-sweep", "HNSW recall/latency sweep + Pareto figure"),
+        ("scaling", "catalogue-scaling sweep (EASE's memory/time wall, measured)"),
+        ("build-service", "fit + persist the serving artifacts to outputs/serving"),
+        ("serve", "launch the FastAPI recommender (uvicorn)"),
+        ("latency", "per-stage serving latency harness"),
+        ("stage3", "run only the Stage 3 pipeline (reranker, ANN, scaling, serving)"),
         ("all", "run the whole pipeline (reproduce the README)"),
         ("stage2", "run only the Stage 2 pipeline (neural, ablations, ceiling, cold-start)"),
     ]:
@@ -296,6 +304,14 @@ def main() -> None:
         p.add_argument("--out", type=Path, default=Path("outputs"))
 
     args = parser.parse_args()
+
+    if args.command == "serve":
+        import uvicorn
+        print("Serving on http://0.0.0.0:8000 (POST /recommend, GET /health). "
+              "Run `reclab build-service` first if artifacts are missing.")
+        uvicorn.run("reclab.serving.app:app", host="0.0.0.0", port=8000)
+        return
+
     print(f"[reclab {args.command}] loading data...")
     pairs = load_pairs()
 
@@ -327,6 +343,23 @@ def main() -> None:
         s2.run_cold_start(pairs, build_split(pairs), args.out)
     elif args.command == "stage2":
         run_stage2(pairs, args.out)
+    elif args.command in ("evaluate-e2e", "ann-sweep", "scaling", "build-service",
+                          "latency", "stage3"):
+        import reclab.stage3 as s3
+        fit = s3.fit_stage3(pairs)
+        if args.command == "evaluate-e2e":
+            s3.run_evaluate_e2e(fit, args.out)
+        elif args.command == "ann-sweep":
+            s3.run_ann_sweep(fit, args.out)
+        elif args.command == "scaling":
+            s3.run_scaling(fit, args.out)
+        elif args.command == "build-service":
+            s3.run_build_service(fit, args.out)
+        elif args.command == "latency":
+            service = s3.run_build_service(fit, args.out)
+            s3.run_latency(service, args.out, eval_split=fit["eval_split"])
+        elif args.command == "stage3":
+            s3.run_stage3(fit, args.out)
     elif args.command == "all":
         run_eda(pairs, args.out)
         run_evaluate(pairs, args.out)
@@ -334,6 +367,8 @@ def main() -> None:
         run_protocols(pairs, args.out)
         run_beyond(pairs, args.out)
         run_stage2(pairs, args.out)
+        import reclab.stage3 as s3
+        s3.run_stage3(s3.fit_stage3(pairs), args.out)
         print("\n=== reproduce complete ===")
 
 

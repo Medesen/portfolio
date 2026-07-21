@@ -112,20 +112,20 @@ An experimentation-and-uplift study I built to work through the three questions 
 
 ### 6. Recommender Systems - Two-Stage Retrieval & Ranking, and What the Evaluation Protocol Hides
 
-**Status:** Stages 1 & 2 of 3 complete  
+**Status:** Complete (all three stages)  
 **Domain:** Session-based recommendation on real e-commerce data  
-**Key Findings:** On the honest full-catalogue metric the simplest models win (ItemKNN/EASE NDCG@20 ≈ 0.319; ALS third at 0.264); the sampled-negative shortcut most papers used flips the order and **ALS jumps from last to first**. And the deeper Stage-2 finding: the two-tower **loses** on ranking (NDCG@20 0.260) but is the **best retriever** (Recall@2000 0.93 vs ItemKNN's 0.79) — the ranking winners are the retrieval losers, which is *why* two-stage systems exist  
-**Tech Stack:** NumPy/SciPy (EASE closed form, ItemKNN), implicit (ALS), PyTorch (two-tower, SASRec — CPU-only), pandas, Docker
+**Key Findings:** On the honest full-catalogue metric the simplest models win (ItemKNN/EASE NDCG@20 ≈ 0.319; ALS third at 0.264); the sampled-negative shortcut most papers used flips the order and **ALS jumps from last to first**. The two-tower **loses** on ranking (0.260) but is the **best retriever** (Recall@2000 0.93 vs ItemKNN's 0.79) — the ranking winners are the retrieval losers, which is *why* two-stage systems exist. The reranker lifts its retriever +13% but doesn't beat a good single model, because a 14k-item catalogue is small enough to rank directly — and a measured scaling curve shows EASE's fit time is already 8× ALS's and climbing as ~K³, headed for 442 GB at the full catalogue  
+**Tech Stack:** NumPy/SciPy (EASE, ItemKNN), implicit (ALS), PyTorch (two-tower, SASRec — CPU-only), LightGBM (LambdaMART reranker), hnswlib (HNSW ANN), FastAPI, pandas, Docker
 
-An honest evaluation study built on the field's reproducibility literature (Dacrema et al. 2019; Krichene & Rendle 2020; Ludewig & Jannach 2018). Classical and neural models are scored three ways — full-catalogue, sampled-negative, and leave-one-out — and made to disagree on which one wins, on RetailRocket's real click/cart/buy log (CC BY-NC-SA 4.0, bundled). The thesis: a recommender's reported quality depends more on the evaluation protocol than on the model. Stage 1 is the classical baseline layer and evaluation harness; Stage 2 adds neural retrieval (two-tower, SASRec) plus the retrieval-ceiling analysis that separates retrieval skill from ranking skill; Stage 3 adds a reranker and the scalability trade-offs that explain why industry deploys the models that lose the benchmark.
+An end-to-end study built on the field's reproducibility literature (Dacrema et al. 2019; Krichene & Rendle 2020; Ludewig & Jannach 2018), on RetailRocket's real click/cart/buy log (CC BY-NC-SA 4.0, bundled). Stage 1 is the classical baseline layer and honest-evaluation harness (models scored three ways — full-catalogue, sampled-negative, leave-one-out — and made to disagree on which wins); Stage 2 adds neural retrieval (two-tower, SASRec) and the retrieval-ceiling analysis that separates retrieval skill from ranking skill; Stage 3 adds a LightGBM reranker on a nested-window training design, an HNSW index with a measured recall-vs-latency curve, a FastAPI endpoint with per-stage latency, and the catalogue-scaling sweep — landing on the honest close that the two-stage architecture industry deploys is a scalability device this catalogue is too small to reward.
 
 **Highlights:**
 - Full-catalogue evaluation as the headline, with the sampled-negative shortcut computed *specifically to show it disagrees* — the Krichene-Rendle reversal reproduced on real data, and again as a synthetic-truth unit test
-- Retrieval-ceiling analysis (Recall@N to 2000 candidates) showing the ranking winners are the retrieval losers — the two-stage systems insight, with a committed figure
-- Two-tower (history-pooling, no user-ID embeddings; logQ correction) and SASRec (causal-masking test is the critical one) written from scratch in PyTorch, CPU-only, plugged into the *unchanged* Stage 1 harness; three ablations incl. the full-softmax-vs-sampled-BCE loss finding (Klenitskiy & Vasilev 2023)
-- Cold-start reported honestly: the two-tower breaks the classical models' structural 0.0, but a category-popularity heuristic still beats it, on a stated 3.7% slice
+- Retrieval-ceiling analysis showing the ranking winners are the retrieval losers; a two-stage LambdaMART reranker (nested-window training to prevent label leakage, with the leakage test written first) that lifts its retriever but honestly doesn't beat the best single model on a small catalogue
+- Two-tower (no user-ID embeddings; logQ correction) and SASRec (causal-masking test is the critical one) from scratch in PyTorch, CPU-only; three ablations incl. the full-softmax-vs-sampled-BCE loss finding (Klenitskiy & Vasilev 2023)
+- A measured catalogue-scaling curve (EASE ~K³ vs ALS linear) + HNSW recall/latency + a `/recommend` endpoint whose per-stage latency shows feature-assembly and ranking dominate cheap retrieval — the two-stage split made visible
 - A documented pivot from user-based to session-based after EDA (79.6% of visitors appear once); baselines genuinely tuned; a pre-registered viability bar cleared at 37×
-- 100 tests incl. temporal-leakage, SASRec causal-masking, and the sampled-metric reversal; fully reproducible (`make reproduce` + `make check-readme` verifies every README number)
+- 128 tests incl. temporal-leakage, SASRec causal-masking, ranker feature-leakage, and the sampled-metric reversal; fully reproducible (`make reproduce` + `make check-readme` verifies every README number)
 
 **[View Project →](recsys_two_stage/)**
 
@@ -245,7 +245,7 @@ portfolio/
 │   ├── docker-compose.yml      # Single-service orchestration
 │   ├── Makefile               # Command shortcuts incl. `make reproduce`
 │   └── setup.sh / setup.ps1   # Automated setup scripts
-├── recsys_two_stage/           # Project 6: Two-stage recommenders (Stage 1 of 3)
+├── recsys_two_stage/           # Project 6: Two-stage recommenders (complete)
 │   ├── README.md               # Complete documentation
 │   ├── DATA_NOTES.md           # EDA findings → design decisions
 │   ├── PLAN_STAGE1/2/3.md      # Full three-stage build plan
@@ -453,6 +453,6 @@ I built these projects to demonstrate end-to-end capability - from problem defin
 ---
 
 **Last Updated:** July 2026  
-**Current Projects:** 5 complete + 1 in progress (recommender systems, Stages 1 & 2 of 3), more coming soon  
+**Current Projects:** 6 complete, more coming soon  
 **License:** MIT — see [LICENSE](LICENSE). Bundled datasets carry their own terms, noted in each project's data documentation.
 

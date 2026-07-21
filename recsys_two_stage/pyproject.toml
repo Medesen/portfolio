@@ -13,11 +13,17 @@ dependencies = [
     # image does not balloon with CUDA libraries.
     "torch>=2.2",
     "matplotlib>=3.8",
+    # Stage 3: LightGBM reranker, HNSW approximate nearest neighbours, FastAPI serving.
+    "lightgbm>=4.3",
+    "hnswlib>=0.8",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "httpx>=0.27",  # FastAPI TestClient
 ]
 
 [project.scripts]

@@ -93,7 +93,12 @@ class ALS:
         self._YtY = self.item_factors_.T @ self.item_factors_
         return self
 
-    def score(self, history) -> np.ndarray:
+    def user_embeddings(self, history) -> np.ndarray:
+        """Fold each session's history into a latent user vector (n_sessions, factors).
+
+        This is the query vector an ANN index needs — the same solve ``score`` runs
+        before dotting against all items, exposed so retrieval can be done by vector
+        search instead of a dense product."""
         check_fitted(self, "item_factors_")
         Y = self.item_factors_
         reg_eye = self.regularization * np.eye(self.factors)
@@ -109,5 +114,7 @@ class ALS:
             A = self._YtY + self.alpha * (Ys.T @ Ys) + reg_eye
             b = (1.0 + self.alpha) * Ys.sum(axis=0)
             session_factors[row] = np.linalg.solve(A, b)
+        return session_factors
 
-        return session_factors @ Y.T
+    def score(self, history) -> np.ndarray:
+        return self.user_embeddings(history) @ self.item_factors_.T
