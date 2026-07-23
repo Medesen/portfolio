@@ -1,0 +1,11 @@
+services:
+  reclab:
+    build:
+      context: .
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    volumes:
+      - ./outputs:/app/outputs
+    ports:
+      - "8000:8000"  # FastAPI /recommend endpoint (reclab serve)

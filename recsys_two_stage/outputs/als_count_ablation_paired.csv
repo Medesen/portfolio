@@ -1,0 +1,2 @@
+comparison,metric,k,diff,ci_low,ci_high,resolves_winner,validation_winner,n_sessions
+count_minus_binary,ndcg,20,-0.0009796837280452888,-0.0023104238846612564,0.0003592845601863414,False,binary,18059

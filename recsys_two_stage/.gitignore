@@ -1,0 +1,34 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Ignore everything under outputs/ (models, ANN indexes, serving artifacts, plots,
+# local runs) EXCEPT the canonical result tables the README quotes and
+# scripts/check_readme.py verifies — those are committed so a fresh clone (and CI) can
+# audit the numbers and run check-readme without a ~45-min reproduce. Machine-dependent
+# tables (scaling/ANN/latency) are deliberately NOT committed as canonical.
+outputs/*
+outputs/serving/
+!outputs/metrics_full.csv
+!outputs/metrics_operational.csv
+!outputs/cohort_flow.csv
+!outputs/metrics_beyond.csv
+!outputs/protocol_comparison.csv
+!outputs/metrics_sampled.csv
+!outputs/protocol_disagreement.csv
+!outputs/metrics_neural.csv
+!outputs/ablations.csv
+!outputs/retrieval_ceiling.csv
+!outputs/retrieval_blend.csv
+!outputs/metrics_cold.csv
+!outputs/metrics_e2e.csv
+!outputs/paired_ci_full.csv
+!outputs/paired_ci_e2e.csv
+!outputs/als_count_ablation.csv
+!outputs/als_count_ablation_paired.csv
+!outputs/seed_sensitivity_summary.csv
+!outputs/seed_sensitivity_deltas.csv

@@ -1,0 +1,68 @@
+name: CI - Recsys Two-Stage
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'recsys_two_stage/**'
+      - '.github/workflows/ci-recsys-two-stage.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'recsys_two_stage/**'
+      - '.github/workflows/ci-recsys-two-stage.yml'
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: recsys_two_stage
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      # hnswlib has no wheel for this Python and compiles from source (mirrors the
+      # Dockerfile); the CPU-only PyTorch index keeps the neural deps from pulling CUDA.
+      - name: Install dependencies (from lock file)
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential python3-dev
+          pip install --upgrade pip
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.lock
+          pip install --no-deps .
+
+      - name: Lint (ruff — syntax errors and the full F rule class)
+        run: |
+          pip install ruff==0.15.22
+          ruff check --select E9,F .
+
+      - name: Run tests (full suite; the neural models are CPU-sized and fast)
+        run: |
+          pytest tests/ -q
+
+      # The committed reference tables under outputs/ are the canonical results the
+      # README quotes; this asserts the prose still matches them (stdlib-only checker).
+      - name: Verify README numbers against committed outputs
+        run: |
+          python scripts/check_readme.py
+
+      - name: CLI smoke test
+        run: |
+          reclab --help
+
+      - name: Package build validation
+        run: |
+          pip install build
+          python -m build --wheel
