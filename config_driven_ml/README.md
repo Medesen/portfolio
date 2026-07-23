@@ -1,6 +1,6 @@
 # Config-Driven ML - Hydra + Pydantic Configuration Layer
 
-A small, config-driven ML training pipeline built to demonstrate a pattern I consider essential for experiment-heavy ML work: Hydra for config composition and CLI overrides, Pydantic for schema validation, joined at a single validated boundary. The ML task itself (regression on scikit-learn's bundled diabetes dataset) is deliberately simple — the configuration layer is the point. Everything runs locally in Docker with no API keys and no downloads.
+A small, config-driven ML training pipeline built to demonstrate a pattern I consider essential for experiment-heavy ML work: Hydra for config composition and CLI overrides, Pydantic for schema validation, joined at a single validated boundary. The ML task itself (regression on scikit-learn's bundled diabetes dataset) is deliberately simple: the configuration layer is the point. Everything runs locally in Docker with no API keys and no downloads.
 
 ## Summary
 
@@ -8,7 +8,7 @@ A small, config-driven ML training pipeline built to demonstrate a pattern I con
 **Task:** Regression on the diabetes dataset (bundled with scikit-learn, 442 samples)  
 **Pattern:** Pydantic models as single source of truth → Hydra ConfigStore → validated CLI  
 **Models:** Gradient boosting (HistGradientBoostingRegressor) and Ridge, swappable via a config group  
-**Baseline Result:** Ridge RMSE 55.5 / R² 0.42 vs GBM RMSE 59.1 / R² 0.34 (seed 42) — on 442 rows the regularized linear model beats the boosted trees, which is exactly the kind of one-command comparison the config layer is for  
+**Baseline Result:** Ridge RMSE 55.5 / R² 0.42 vs GBM RMSE 59.1 / R² 0.34 (seed 42): on 442 rows the regularised linear model beats the boosted trees, which is exactly the kind of one-command comparison the config layer is for  
 **Tech Stack:** Hydra, Pydantic v2, scikit-learn, Docker  
 **Test Coverage:** 18 tests (schema constraints, Hydra composition, train/evaluate roundtrip, artifact integrity)  
 **Setup Time:** ~2 minutes
@@ -18,7 +18,7 @@ A small, config-driven ML training pipeline built to demonstrate a pattern I con
 - Invalid values rejected with readable errors before any training starts
 - Named experiment configs that inherit from the base and change only what differs
 - Multirun sweeps: `mlctl train -m model=ridge,gbm seed=0,1,2`
-- A config snapshot, the exact held-out row indices (`split.json`, with a dataset checksum), and a SHA-256 sidecar for the model artifact saved with every run — so any run can be re-evaluated from its output directory and tampered or drifted artifacts are refused rather than silently rescored
+- A config snapshot, the exact held-out row indices (`split.json`, with a dataset checksum), and a SHA-256 sidecar for the model artifact saved with every run, so any run can be re-evaluated from its output directory and tampered or drifted artifacts are refused rather than silently rescored
 
 ---
 
@@ -34,7 +34,7 @@ A small, config-driven ML training pipeline built to demonstrate a pattern I con
 - RAM: 2 GB
 - Disk space: ~1 GB (Docker image)
 
-**Windows users:** Use `.\setup.ps1` for setup (works out of the box, no tools needed). For the `make` commands below, either install Make (`choco install make`) or use Git Bash/WSL2 where it's preinstalled — or run the equivalent `docker compose` commands directly; they're listed in the [Makefile](Makefile).
+**Windows users:** Use `.\setup.ps1` for setup (works out of the box, no tools needed). For the `make` commands below, either install Make (`choco install make`) or use Git Bash/WSL2 where it's preinstalled, or run the equivalent `docker compose` commands directly; they're listed in the [Makefile](Makefile).
 
 ### One-Command Setup
 
@@ -77,7 +77,7 @@ make sweep
 # Re-score a finished run from its config snapshot
 make evaluate RUN=outputs/baseline/gbm/seed_42
 
-# Try to break it — validation catches bad values before training starts
+# Try to break it: validation catches bad values before training starts
 make train ARGS="model.max_iter=-5"
 # → Invalid configuration:
 #   model.gbm.max_iter
@@ -102,7 +102,7 @@ pytest tests/
 
 ### The Problem This Pattern Solves
 
-Hydra and Pydantic each solve half of the configuration problem. Hydra gives you composition — defaults lists, config groups, CLI overrides, multirun sweeps — but its native structured configs are dataclass-based with weak validation. Pydantic gives you real schemas — constrained fields, discriminated unions, readable errors — but has no composition or override story. Most ML codebases pick one and live with the missing half. Bridging the two is a recognized pattern in the Hydra community (it comes up in Hydra's issue tracker and in several blog posts); this project is my own small, from-scratch implementation of it.
+Hydra and Pydantic each solve half of the configuration problem. Hydra gives you composition (defaults lists, config groups, CLI overrides, multirun sweeps) but its native structured configs are dataclass-based with weak validation. Pydantic gives you real schemas (constrained fields, discriminated unions, readable errors) but has no composition or override story. Most ML codebases pick one and live with the missing half. Bridging the two is a recognised pattern in the Hydra community (it comes up in Hydra's issue tracker and in several blog posts); this project is my own small, from-scratch implementation of it.
 
 The two libraries meet at a single boundary (`src/mlctl/config_layer.py`, ~100 lines):
 
@@ -110,7 +110,7 @@ The two libraries meet at a single boundary (`src/mlctl/config_layer.py`, ~100 l
 
 2. **Hydra owns composition.** Defaults lists select from config groups, named experiment YAMLs inherit from the base config and change only what differs, and anything can be overridden from the CLI.
 
-3. **Validation happens exactly once, at the boundary.** The `@config_command` decorator composes the config, resolves interpolations, and validates the result against the Pydantic model. Commands receive a typed model — never a raw `DictConfig` — so downstream code gets IDE completion and type checking, and invalid configs fail with a readable message instead of a stack trace mid-training.
+3. **Validation happens exactly once, at the boundary.** The `@config_command` decorator composes the config, resolves interpolations, and validates the result against the Pydantic model. Commands receive a typed model, never a raw `DictConfig`, so downstream code gets IDE completion and type checking, and invalid configs fail with a readable message instead of a stack trace mid-training.
 
 The payoff is visible in the schema for model selection:
 
@@ -135,11 +135,11 @@ A Pydantic discriminated union and a Hydra config group are the same idea approa
 
 **Explicit factory over Hydra's `_target_` instantiation:** Hydra can instantiate classes directly from config via `_target_` fields. I deliberately used a plain factory function (`build_model`) instead. At this scale, `_target_` adds indirection and import-time magic without buying anything; at the scale of dozens of swappable components it earns its keep. Knowing where that line sits is part of the demonstration.
 
-**Config snapshots for reproducibility:** Every training run writes its fully resolved config next to the model artifact, plus `split.json` (the held-out row indices and a SHA-256 of the dataset) and `model.joblib.sha256` (an integrity sidecar for the artifact). The `evaluate` command recovers the exact test rows from `split.json` and verifies both checksums before deserializing anything — the roundtrip test asserts re-evaluation reproduces the training metrics bit-for-bit, and tamper tests assert a modified artifact or foreign dataset is refused. A `run_metadata.json` fingerprint (scikit-learn version, dataset shape) additionally warns if the environment has drifted. (The checksum establishes integrity — the artifact is what training wrote — not that an artifact from an untrusted source is safe to load.)
+**Config snapshots for reproducibility:** Every training run writes its fully resolved config next to the model artifact, plus `split.json` (the held-out row indices and a SHA-256 of the dataset) and `model.joblib.sha256` (an integrity sidecar for the artifact). The `evaluate` command recovers the exact test rows from `split.json` and verifies both checksums before deserialising anything: the roundtrip test asserts re-evaluation reproduces the training metrics bit-for-bit, and tamper tests assert a modified artifact or foreign dataset is refused. A `run_metadata.json` fingerprint (scikit-learn version, dataset shape) additionally warns if the environment has drifted. (The checksum establishes integrity: the artifact is what training wrote, not that an artifact from an untrusted source is safe to load.)
 
 **Deterministic output paths:** Output directories are built by interpolation (`outputs/${experiment_name}/${model.kind}/seed_${seed}`) rather than timestamps, so sweep runs land in predictable places and re-running a config overwrites its own results instead of accumulating clutter.
 
-**Clean CLI errors:** Both failure modes — missing required values and constraint violations — exit with a readable message and status 1, not a traceback. A config CLI is a user interface; it should behave like one.
+**Clean CLI errors:** Both failure modes (missing required values and constraint violations) exit with a readable message and status 1, not a traceback. A config CLI is a user interface; it should behave like one.
 
 **Dict-registry command router:** `mlctl <command>` dispatches through a dict, so adding a command is one line and the usage text stays in sync automatically.
 
@@ -216,7 +216,7 @@ mlctl train -m model=ridge,gbm seed=0,1,2
 mlctl train -m model=gbm model.learning_rate=0.01,0.05,0.1
 ```
 
-Stored experiment configs show the inheritance pattern — `ridge_strong.yaml` in its entirety:
+Stored experiment configs show the inheritance pattern; `ridge_strong.yaml` in its entirety:
 
 ```yaml
 defaults:
@@ -236,11 +236,11 @@ model:
 
 ### Why both Hydra and Pydantic? Isn't one enough?
 
-They cover different failure modes. With Hydra alone, a typo'd or out-of-range value flows silently into your training code and fails late (or worse, doesn't fail). With Pydantic alone, you get validation but no composition — no config groups, no stored experiments, no `-m` sweeps, and every script grows its own argparse. The bridge is small (~100 lines) and each library does only what it's good at.
+They cover different failure modes. With Hydra alone, a typo'd or out-of-range value flows silently into your training code and fails late (or worse, doesn't fail). With Pydantic alone, you get validation but no composition: no config groups, no stored experiments, no `-m` sweeps, and every script grows its own argparse. The bridge is small (~100 lines) and each library does only what it's good at.
 
 ### Why such a simple ML task?
 
-Deliberately. The diabetes dataset is bundled with scikit-learn (no download, no license concerns) and trains in under a second, so the config layer — the actual subject — can be exercised instantly. The pattern is the same one I'd use for a multi-day training job; the pipeline behind the config boundary is swappable by design.
+Deliberately. The diabetes dataset is bundled with scikit-learn (no download, no licence concerns) and trains in under a second, so the config layer (the actual subject) can be exercised instantly. The pattern is the same one I'd use for a multi-day training job; the pipeline behind the config boundary is swappable by design.
 
 ### Why not use Hydra's `_target_` auto-instantiation?
 
@@ -256,9 +256,9 @@ Yes. Docker Desktop covers all three; see the platform notes in [Quick Start](#q
 
 ---
 
-## License
+## Licence
 
-MIT — see the repository [LICENSE](../LICENSE). The diabetes dataset is
+MIT. See the repository [LICENSE](../LICENSE). The diabetes dataset is
 bundled with scikit-learn itself; no data files ship in this project.
 
 ---

@@ -11,7 +11,7 @@ A RAG (Retrieval-Augmented Generation) system built to compare chunking strategi
 **Tech Stack:** ChromaDB, sentence-transformers, BM25, Ollama (Llama 3.2), Docker  
 **Setup Time:** Approximately 10 minutes for complete environment  
 **Search Modes:** Hybrid (BM25 + semantic), semantic-only, keyword-only  
-**Query Enhancement:** LLM-based query rewriting with caching (off by default — measured harmful in the ablation below)  
+**Query Enhancement:** LLM-based query rewriting with caching (off by default; measured harmful in the ablation below)  
 **Reranking:** Cross-encoder reranking (enabled by default; gain within noise in the ablation below)
 
 **Evaluation Results:**
@@ -21,7 +21,7 @@ A RAG (Retrieval-Augmented Generation) system built to compare chunking strategi
 | Semantic | 0.46 | 0.48 | 0.36 |
 | Hierarchical | 0.49 | 0.46 | 0.36 |
 
-**Evaluation scope:** these numbers isolate the *chunking strategies* under plain semantic retrieval — no hybrid BM25 fusion, no query rewriting, no cross-encoder reranking. Holding the rest of the pipeline at its simplest configuration keeps the chunking comparison clean. The differences between strategies are small for a 35-question test set and should be read as directional, not definitive. The pipeline's other components are evaluated separately in the ablation below.
+**Evaluation scope:** these numbers isolate the *chunking strategies* under plain semantic retrieval: no hybrid BM25 fusion, no query rewriting, no cross-encoder reranking. Holding the rest of the pipeline at its simplest configuration keeps the chunking comparison clean. The differences between strategies are small for a 35-question test set and should be read as directional, not definitive. The pipeline's other components are evaluated separately in the ablation below.
 
 Based on this analysis, I recommend fixed chunking for technical documentation retrieval.
 
@@ -46,7 +46,7 @@ Per-step marginal contributions (paired deltas):
 
 **What the ablation showed, and what changed because of it:**
 
-- **LLM query rewriting significantly hurt ranking** (the only CI excluding zero) while adding ~1s per query: the 3B rewriter tends to paraphrase away the exact API names (`fit_transform`, `GridSearchCV`) that retrieval on technical docs depends on. **Query rewriting is now disabled by default** — the config change cites this measurement.
+- **LLM query rewriting significantly hurt ranking** (the only CI excluding zero) while adding ~1s per query: the 3B rewriter tends to paraphrase away the exact API names (`fit_transform`, `GridSearchCV`) that retrieval on technical docs depends on. **Query rewriting is now disabled by default**; the config change cites this measurement.
 - **BM25 fusion and reranking are within noise** on this benchmark. Reranking's point estimate is positive on MRR/NDCG at a real latency cost (~1.9s on CPU); both remain enabled by default, but on this evidence they are optional. A dense-only configuration is a defensible choice when latency matters.
 - Honest caveats: one 35-question benchmark, one corpus, doc-level relevance labels. The dense-arm numbers differ slightly from the chunking table above (0.54 vs 0.51 Recall@10) because the index was rebuilt for this run; the comparison *within* the ablation is paired and internally consistent.
 
@@ -93,7 +93,7 @@ equivalent `docker compose` commands afterwards (e.g.
 After setup completes, you can immediately start querying:
 
 ```bash
-# Query with LLM answer generation (default - retrieval + synthesized answer)
+# Query with LLM answer generation (default - retrieval + synthesised answer)
 make query Q="How do I use StandardScaler?"
 
 # Retrieval-only query (no LLM generation, for debugging)
@@ -124,15 +124,15 @@ I evaluated three chunking strategies using standard IR metrics (Recall@k, MRR, 
 
 I built the system with modular components: the architecture separates preprocessing, chunking, retrieval, and generation into distinct modules with clear interfaces (e.g., abstract `BaseChunker` class). All functions include type hints, and the codebase uses dependency injection for testability.
 
-The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. Everything runs locally without external API dependencies. Python dependencies are pinned via `requirements.lock` and the service images are version-pinned, so the environment is reproducible — note that the LLM's generated answer *text* is still non-deterministic across runs (the retrieval metrics are deterministic). The setup script automates the entire process from container builds to model downloads and initial indexing.
+The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. Everything runs locally without external API dependencies. Python dependencies are pinned via `requirements.lock` and the service images are version-pinned, so the environment is reproducible; note that the LLM's generated answer *text* is still non-deterministic across runs (the retrieval metrics are deterministic). The setup script automates the entire process from container builds to model downloads and initial indexing.
 
 ### Key Technical Decisions
 
 **Chunking comparison:** Rather than assume one approach is best, I implemented three strategies and measured their performance empirically. The evaluation showed fixed chunking winning, which makes sense for highly structured documentation where semantic boundaries don't necessarily align with information boundaries.
 
-**Hybrid search:** I implemented Reciprocal Rank Fusion (RRF) to combine BM25 keyword search with semantic embeddings. This addresses the weakness of pure semantic search on exact technical terms (e.g., "fit_transform", "GridSearchCV"). The alpha parameter (default 0.7) controls the balance: 70% semantic, 30% keyword. BM25 tokenization uses Porter stemming and stopword removal for better term matching.
+**Hybrid search:** I implemented Reciprocal Rank Fusion (RRF) to combine BM25 keyword search with semantic embeddings. This addresses the weakness of pure semantic search on exact technical terms (e.g., "fit_transform", "GridSearchCV"). The alpha parameter (default 0.7) controls the balance: 70% semantic, 30% keyword. BM25 tokenisation uses Porter stemming and stopword removal for better term matching.
 
-**Query rewriting:** Before retrieval, queries can be rewritten by the LLM: the rewriter clarifies ambiguous phrases, expands abbreviations (e.g., "PCA" → "Principal Component Analysis PCA"), adds relevant sklearn synonyms, and removes conversational filler, with caching and graceful fallback to the original query. The theory sounded good; the measurement disagreed. The retrieval ablation (Summary section) showed rewriting significantly *hurting* ranking on this corpus — paraphrasing tends to dilute the exact API tokens retrieval depends on — so it now ships disabled by default (`query_rewriting.enabled: false`), kept in the codebase as a config option and as a worked example of measuring before shipping.
+**Query rewriting:** Before retrieval, queries can be rewritten by the LLM: the rewriter clarifies ambiguous phrases, expands abbreviations (e.g., "PCA" → "Principal Component Analysis PCA"), adds relevant sklearn synonyms, and removes conversational filler, with caching and graceful fallback to the original query. The theory sounded good; the measurement disagreed. The retrieval ablation (Summary section) showed rewriting significantly *hurting* ranking on this corpus (paraphrasing tends to dilute the exact API tokens retrieval depends on) so it now ships disabled by default (`query_rewriting.enabled: false`), kept in the codebase as a config option and as a worked example of measuring before shipping.
 
 **Cross-encoder reranking:** After initial retrieval, results are reranked using a cross-encoder model (ms-marco-MiniLM-L-6-v2). The system over-fetches ~50 candidates, then the cross-encoder jointly scores each query-document pair for more accurate relevance estimates. This improves precision at the cost of added latency (~100-200ms). The model is lazy-loaded on first use to avoid startup overhead.
 
@@ -151,7 +151,7 @@ The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. E
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design and data flow
 - **[DESIGN.md](DESIGN.md)** - Design principles and trade-offs
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history
-- **[LICENSE](LICENSE)** - MIT license
+- **[LICENSE](LICENSE)** - MIT licence
 - **Development history** - See [CHANGELOG.md](CHANGELOG.md) for complete iteration details (Iterations 1-5)
 
 ---
@@ -160,7 +160,7 @@ The deployment uses Docker Compose to orchestrate Ollama and the RAG pipeline. E
 
 ### Unit Tests
 
-The project includes 113 unit tests demonstrating testing patterns for core components: configuration loading, chunking strategies, evaluation metrics, embedder functionality, hybrid search (BM25, RRF fusion, alpha weighting), query rewriting (LLM integration, caching, fallback behavior), and cross-encoder reranking (score reordering, fallback behavior, timing metadata). The systematic evaluation framework (35 test questions with IR metrics) serves as the primary validation mechanism for end-to-end behavior.
+The project includes 113 unit tests demonstrating testing patterns for core components: configuration loading, chunking strategies, evaluation metrics, embedder functionality, hybrid search (BM25, RRF fusion, alpha weighting), query rewriting (LLM integration, caching, fallback behaviour), and cross-encoder reranking (score reordering, fallback behaviour, timing metadata). The systematic evaluation framework (35 test questions with IR metrics) serves as the primary validation mechanism for end-to-end behaviour.
 
 **Test Results:** All 113 tests passing
 
@@ -184,7 +184,7 @@ make test-file F=test_metrics.py
 docker compose run --rm --entrypoint pytest rag-pipeline tests/ -v -k "test_recall"
 ```
 
-**Why Docker-only testing?** Running tests through Docker ensures consistent environment, all dependencies are present, same behavior as production deployment, and no need to set up local Python environment.
+**Why Docker-only testing?** Running tests through Docker ensures consistent environment, all dependencies are present, same behaviour as production deployment, and no need to set up local Python environment.
 
 **Advanced pytest control:** If you need custom pytest options, use:
 ```bash
@@ -212,7 +212,7 @@ rag_pipeline/
 │   ├── state/             # State tracking (gitignored)
 │   └── vector_store/      # ChromaDB indices (gitignored)
 ├── config/
-│   └── config.yaml        # Centralized configuration
+│   └── config.yaml        # Centralised configuration
 ├── scripts/               # Helper scripts
 ├── logs/                  # Application logs (gitignored)
 ├── main.py                # CLI entry point
@@ -228,7 +228,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system design.
 ## Domain & Dataset
 
 **Domain:** Technical documentation Q&A  
-**Dataset:** Scikit-learn 1.7.2 documentation (420 HTML documents; 416 processed — 4 are skipped for having <50 characters of extractable content)
+**Dataset:** Scikit-learn 1.7.2 documentation (420 HTML documents; 416 processed; 4 are skipped for having <50 characters of extractable content)
 
 **Corpus composition (416 processed documents):**
 - API documentation: 251 files (60.3%)
@@ -276,7 +276,7 @@ make clean-all          # Complete cleanup
 ### Query Examples
 
 ```bash
-# Query with LLM answer generation (default behavior)
+# Query with LLM answer generation (default behaviour)
 make query Q="How do I use StandardScaler?"
 
 # Retrieval only (no LLM generation, useful for debugging)
@@ -335,11 +335,11 @@ make clean-all
 
 ## Configuration
 
-Edit `config/config.yaml` to customize:
+Edit `config/config.yaml` to customise:
 
 ```yaml
 # Chunking strategies (note: nested under chunking.strategies, and each
-# strategy carries an enabled flag — this shape must match config/config.yaml,
+# strategy carries an enabled flag; this shape must match config/config.yaml,
 # which is validated on load)
 chunking:
   strategies:
@@ -418,9 +418,9 @@ reranking:
 
 ### Potential Future Enhancements
 
-- ~~Hybrid search (dense + BM25)~~ ✅ Implemented with RRF fusion
-- ~~Query rewriting/expansion~~ ✅ Implemented with LLM + caching
-- ~~Reranking with cross-encoders~~ ✅ Implemented with ms-marco-MiniLM
+- ~~Hybrid search (dense + BM25)~~ Implemented with RRF fusion
+- ~~Query rewriting/expansion~~ Implemented with LLM + caching
+- ~~Reranking with cross-encoders~~ Implemented with ms-marco-MiniLM
 - Streamlit UI
 
 ---
@@ -614,7 +614,7 @@ Several things documented in [DESIGN.md](DESIGN.md) (see "What Would Change for 
 
 ### How did you validate the evaluation metrics?
 
-I implemented standard Information Retrieval metrics (Recall@k, MRR, NDCG) following academic literature and validated them against 35 curated test questions with known relevant documents. Fixed chunking won with Recall@10 of 0.51, MRR of 0.51, and NDCG@10 of 0.40. Honest caveats: no statistical significance testing was performed, and with 35 questions the gaps between strategies (e.g. 0.51 vs 0.50 Recall@10) are within noise — the ranking is directional, not proof. The comparison also isolates chunking under semantic-only retrieval; see the evaluation-scope note in the Summary.
+I implemented standard Information Retrieval metrics (Recall@k, MRR, NDCG) following academic literature and validated them against 35 curated test questions with known relevant documents. Fixed chunking won with Recall@10 of 0.51, MRR of 0.51, and NDCG@10 of 0.40. Honest caveats: no statistical significance testing was performed, and with 35 questions the gaps between strategies (e.g. 0.51 vs 0.50 Recall@10) are within noise; the ranking is directional, not proof. The comparison also isolates chunking under semantic-only retrieval; see the evaluation-scope note in the Summary.
 
 ### Why local LLM instead of OpenAI?
 
@@ -679,9 +679,9 @@ Yes, the system is modular. You would need to:
 
 ---
 
-## License
+## Licence
 
-MIT — see [LICENSE](LICENSE) for details, including third-party component
+MIT. See [LICENSE](LICENSE) for details, including third-party component
 notes. The repository-wide [LICENSE](../LICENSE) applies the same terms.
 
 ---

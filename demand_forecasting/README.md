@@ -4,9 +4,9 @@ Rolling-origin evaluation of three forecasting approaches on 118 daily retail ti
 
 ## Summary
 
-I built this project to answer the two questions a demand planner actually asks: *how much will we sell?* and *what does a promotion buy us?* It compares a seasonal-naive baseline, per-series SARIMAX with promo/holiday regressors, and a single global LightGBM across all series — evaluated the only way time-series models should be: rolling-origin backtests, never a random split. The promotion question gets its own treatment: a Poisson (PPML) fixed-effects panel regression with cluster-robust inference, the standard econometric tool for count outcomes.
+I built this project to answer the two questions a demand planner actually asks: *how much will we sell?* and *what does a promotion buy us?* It compares a seasonal-naive baseline, per-series SARIMAX with promo/holiday regressors, and a single global LightGBM across all series, evaluated the only way time-series models should be: rolling-origin backtests, never a random split. The promotion question gets its own treatment: a Poisson (PPML) fixed-effects panel regression with cluster-robust inference, the standard econometric tool for count outcomes.
 
-The dataset is 5 years of daily sales for 118 pasta SKUs from an Italian retailer — to my knowledge the only openly licensed retail dataset combining daily granularity, multiple years, many series, and an explicit per-SKU promotion flag. It ships in this repository (872 KB, CC BY): clone and run, no accounts, no API keys.
+The dataset is 5 years of daily sales for 118 pasta SKUs from an Italian retailer, to my knowledge the only openly licensed retail dataset combining daily granularity, multiple years, many series, and an explicit per-SKU promotion flag. It ships in this repository (872 KB, CC BY): clone and run, no accounts, no API keys.
 
 **Key results (12 rolling folds × 28 trading days ahead, all 118 SKUs):**
 
@@ -16,7 +16,7 @@ The dataset is 5 years of daily sales for 118 pasta SKUs from an Italian retaile
 | seasonal-naive (m=7) | 1.002 | 1.027 | 8.75 |
 | **global LightGBM (Tweedie)** | **0.652** | **0.644** | **5.22** |
 
-The global model improves MASE by 35% over seasonal-naive, *uniformly across volume terciles* (low 0.64 / mid 0.66 / high 0.66) — it is not hiding poor slow-mover performance behind fast movers. Its P10–P90 quantile forecasts achieve 0.782 empirical coverage against a 0.80 target (rows rearranged so quantiles never cross).
+The global model improves MASE by 35% over seasonal-naive, *uniformly across volume terciles* (low 0.64 / mid 0.66 / high 0.66): it is not hiding poor slow-mover performance behind fast movers. Its P10-P90 quantile forecasts achieve 0.782 empirical coverage against a 0.80 target (rows rearranged so quantiles never cross).
 
 **On the 8 highest-volume SKUs, where classical assumptions hold (same folds):**
 
@@ -27,17 +27,17 @@ The global model improves MASE by 35% over seasonal-naive, *uniformly across vol
 | LightGBM (global training, evaluated on the subset) | 0.693 | 0.531 | 10.81 |
 | seasonal-naive | 1.043 | 0.835 | 18.01 |
 
-SARIMAX *wins* on this subset on MASE and WAPE — against LightGBM under **both** training scopes: trained on the 8 SKUs alone and trained globally on all 118 with cross-learning (`--train-scope global`), which lands within noise of the subset-trained run. LightGBM does keep the better RMSE (10.65/10.81 vs 11.29): the squared-error metric rewards its conservative behaviour on the largest spikes, while SARIMAX's exogenous promo/holiday terms win on the scale-free and volume-weighted views. That split is the honest headline of the comparison: a well-specified per-series classical model is hard to beat on long, regular, high-volume series, and cross-learning has nothing to add where each series already carries years of its own history. The global ML model earns its keep on *breadth* — the other 110 series, including the intermittent ones where a Gaussian state-space model has no business being fit.
+SARIMAX *wins* on this subset on MASE and WAPE, against LightGBM under **both** training scopes: trained on the 8 SKUs alone and trained globally on all 118 with cross-learning (`--train-scope global`), which lands within noise of the subset-trained run. LightGBM does keep the better RMSE (10.65/10.81 vs 11.29): the squared-error metric rewards its conservative behaviour on the largest spikes, while SARIMAX's exogenous promo/holiday terms win on the scale-free and volume-weighted views. That split is the honest headline of the comparison: a well-specified per-series classical model is hard to beat on long, regular, high-volume series, and cross-learning has nothing to add where each series already carries years of its own history. The global ML model earns its keep on *breadth*: the other 110 series, including the intermittent ones where a Gaussian state-space model has no business being fit.
 
 **Promotion lift (PPML, SKU + calendar fixed effects, SEs clustered by SKU, n = 212,164):**
 
-> A promotion multiplies expected daily units by ≈ 4.6× — **+364%** (95% CI [+307%, +429%]).
+> A promotion multiplies expected daily units by ≈ 4.6×: **+364%** (95% CI [+307%, +429%]).
 
 A log1p-OLS robustness check lands at +184%: attenuated exactly as theory predicts for a log1p approximation on low counts, which is why PPML is the headline estimator and OLS the check, not the other way round.
 
 ![Example forecast](assets/forecast_example.png)
 
-*28-day-ahead forecast for one SKU in the final backtest fold: the model anticipates the promo-driven spikes (shaded) because the promotion calendar is known in advance, and the P10–P90 band widens where it should.*
+*28-day-ahead forecast for one SKU in the final backtest fold: the model anticipates the promo-driven spikes (shaded) because the promotion calendar is known in advance, and the P10-P90 band widens where it should.*
 
 ## Quick Start (~5 minutes)
 
@@ -45,7 +45,7 @@ A log1p-OLS robustness check lands at +184%: attenuated exactly as theory predic
 
 - **Docker Desktop** with Docker Compose V2 (`docker compose`, not `docker-compose`)
 - ~2 GB free disk space
-- No API keys, no accounts, no data downloads — the dataset is in the repo
+- No API keys, no accounts, no data downloads: the dataset is in the repo
 
 ### One-Command Setup
 
@@ -99,18 +99,18 @@ demandcast backtest --model seasonal_naive
 - **Rolling-origin backtesting, never a random split.** Random splits leak future information into training; every number here comes from 12 expanding-window folds whose test windows tile roughly the final year of data.
 - **Baselines first.** Without the seasonal-naive reference there is no way to know whether any model adds value over "sell what you sold last week". Most forecasting write-ups skip this; the baseline rows in the tables above are the point of comparison for everything else.
 - **A true 28-day-ahead test for every day.** All LightGBM sales-history features are shifted ≥ 28 trading days, so no prediction quietly benefits from yesterday's sales. A dedicated test corrupts the future and asserts the forecasts don't move.
-- **Metrics chosen for the data, with reasons on record.** MASE (scale-free across 60× volume differences), WAPE, RMSE — and *not* sMAPE, which is undefined or explosive on zero-sales days. The reasoning lives in [DATA_NOTES.md](DATA_NOTES.md).
+- **Metrics chosen for the data, with reasons on record.** MASE (scale-free across 60× volume differences), WAPE, RMSE, and *not* sMAPE, which is undefined or explosive on zero-sales days. The reasoning lives in [DATA_NOTES.md](DATA_NOTES.md).
 
 ### Modelling judgment
 
-- **Right tool, right regime.** SARIMAX is fit only where its Gaussian assumptions roughly hold (an explicit, documented selection rule: top-8 volume, ≤ 10% zero days) — and it wins there. The global LightGBM covers the full assortment with a Tweedie objective suited to zero-inflated counts (ablated against Poisson and plain L2 in [DATA_NOTES.md](DATA_NOTES.md) §2 — L2 wins only on fast-mover-dominated RMSE). The comparison is run on the common subset instead of pretending one tool fits every series.
-- **Uncertainty as a first-class output.** Quantile LightGBM produces P10/P50/P90 forecasts evaluated with pinball loss and interval coverage — what a supply planner sizing safety stock actually consumes.
+- **Right tool, right regime.** SARIMAX is fit only where its Gaussian assumptions roughly hold (an explicit, documented selection rule: top-8 volume, ≤ 10% zero days), and it wins there. The global LightGBM covers the full assortment with a Tweedie objective suited to zero-inflated counts (ablated against Poisson and plain L2 in [DATA_NOTES.md](DATA_NOTES.md) §2: L2 wins only on fast-mover-dominated RMSE). The comparison is run on the common subset instead of pretending one tool fits every series.
+- **Uncertainty as a first-class output.** Quantile LightGBM produces P10/P50/P90 forecasts evaluated with pinball loss and interval coverage: what a supply planner sizing safety stock actually consumes.
 - **Known-in-advance covariates, stated explicitly.** The promotion calendar and holiday calendar are treated as known at forecast time (retail promos are planned weeks ahead). This is standard practice, but it is an assumption, so it is documented rather than smuggled in.
 
 ### Econometrics
 
-- **PPML as the main lift estimator** — consistent for count outcomes under conditional-mean correctness (Gourieroux et al. 1984; Santos Silva & Tenreyro 2006), zeros handled natively, coefficients are exact multiplicative effects. SKU fixed effects identify the lift from *within-SKU* promo timing only; SEs are clustered by SKU.
-- **Identification honesty.** Promotions are scheduled, not randomized. The estimate is a well-controlled association, and the write-up in [`promo_lift.py`](src/demandcast/analysis/promo_lift.py) states the exact assumption that would make it causal — and what would break it.
+- **PPML as the main lift estimator**: consistent for count outcomes under conditional-mean correctness (Gourieroux et al. 1984; Santos Silva & Tenreyro 2006), zeros handled natively, coefficients are exact multiplicative effects. SKU fixed effects identify the lift from *within-SKU* promo timing only; SEs are clustered by SKU.
+- **Identification honesty.** Promotions are scheduled, not randomised. The estimate is a well-controlled association, and the write-up in [`promo_lift.py`](src/demandcast/analysis/promo_lift.py) states the exact assumption that would make it causal, and what would break it.
 
 **Promotion lift by brand (PPML):**
 
@@ -121,16 +121,16 @@ demandcast backtest --model seasonal_naive
 | B3 | +598% | [+485%, +733%] | 21 | 0.15 |
 | B4 | +736% | [+564%, +953%] | 10 | 0.19 |
 
-B2's interval is the widest for a reason worth noticing: it is the perma-promo brand (15 SKUs on promotion >90% of days), so it contributes almost no within-SKU variation to identify the effect — the data-quality analysis predicted exactly this before the regression was run.
+B2's interval is the widest for a reason worth noticing: it is the perma-promo brand (15 SKUs on promotion >90% of days), so it contributes almost no within-SKU variation to identify the effect: the data-quality analysis predicted exactly this before the regression was run.
 
-One inferential caveat on this table: SEs are clustered by SKU, and cluster-robust inference is only asymptotically valid in the number of clusters — B1/B2 bring 42/45 clusters, but B3 has 21 and B4 just 10. Below ~30 clusters these CIs tend to under-cover, so read the B3 and especially B4 intervals as approximate rather than exact.
+One inferential caveat on this table: SEs are clustered by SKU, and cluster-robust inference is only asymptotically valid in the number of clusters: B1/B2 bring 42/45 clusters, but B3 has 21 and B4 just 10. Below ~30 clusters these CIs tend to under-cover, so read the B3 and especially B4 intervals as approximate rather than exact.
 
 ## Evaluation Design
 
 - **Folds:** 12 rolling-origin folds, 28 trading days each, non-overlapping, tiling roughly the final year (2018). Training windows expand; the model at fold *k* sees everything up to that fold's origin and nothing after.
-- **Horizon:** 28 trading days — a 4-week retail planning horizon.
-- **Trading-day grid:** the 27 calendar gaps in 5 years are Italian public-holiday store closures. They are left as gaps, not zero-filled (a zero would be a fake observation of demand that was never offered). Weekly seasonality is weekday-aligned for seasonal-naive (keyed on weekday) and LightGBM (`dayofweek` feature), so the gaps can't shift their cycle out of phase. SARIMAX, by contrast, uses a positional seasonal lag (s = 7) on the gapped grid, so each closure slips its weekly cycle by one position — 27 slips across 5 years, roughly one per ten weeks of training data. A small, accepted imperfection, stated rather than silently absorbed.
-- **Coverage enforcement:** the backtest runner fails loudly if a model leaves any (date, SKU) pair unpredicted — no silent dropping of hard series.
+- **Horizon:** 28 trading days, a 4-week retail planning horizon.
+- **Trading-day grid:** the 27 calendar gaps in 5 years are Italian public-holiday store closures. They are left as gaps, not zero-filled (a zero would be a fake observation of demand that was never offered). Weekly seasonality is weekday-aligned for seasonal-naive (keyed on weekday) and LightGBM (`dayofweek` feature), so the gaps can't shift their cycle out of phase. SARIMAX, by contrast, uses a positional seasonal lag (s = 7) on the gapped grid, so each closure slips its weekly cycle by one position: 27 slips across 5 years, roughly one per ten weeks of training data. A small, accepted imperfection, stated rather than silently absorbed.
+- **Coverage enforcement:** the backtest runner fails loudly if a model leaves any (date, SKU) pair unpredicted: no silent dropping of hard series.
 
 ## The Models
 
@@ -153,8 +153,8 @@ make test
 
 The ones I'd point a reviewer at:
 
-- **Two leakage tests.** Corrupt every value in the test window by +1,000,000 and assert the forecasts do not change — run against both the harness (via seasonal-naive) and the full LightGBM feature pipeline.
-- **PPML recovers a known effect.** A synthetic confounded panel (base rates differing 10×, promo propensity correlated with volume) with a true +50% lift; the fixed-effects estimator must land on it with a covering CI — a pooled comparison would not.
+- **Two leakage tests.** Corrupt every value in the test window by +1,000,000 and assert the forecasts do not change: run against both the harness (via seasonal-naive) and the full LightGBM feature pipeline.
+- **PPML recovers a known effect.** A synthetic confounded panel (base rates differing 10×, promo propensity correlated with volume) with a true +50% lift; the fixed-effects estimator must land on it with a covering CI: a pooled comparison would not.
 - **Metric correctness** against hand-computed values, including the zero-denominator edge cases that motivated the metric choices.
 - **Fold hygiene:** disjoint test windows, train strictly before test, complete prediction coverage.
 
@@ -166,7 +166,7 @@ demand_forecasting/
 ├── DATA_NOTES.md                # EDA findings → design decisions (worth reading first)
 ├── data/raw/
 │   ├── hierarchical_sales_data.csv   # The dataset (872 KB, bundled, CC BY)
-│   └── README.md                # Provenance, license, citation
+│   └── README.md                # Provenance, licence, citation
 ├── src/demandcast/
 │   ├── data/                    # Wide→long loader w/ validation; Italian holiday calendar
 │   ├── evaluation/              # Rolling-origin folds, backtest runner, metrics
@@ -183,19 +183,25 @@ demand_forecasting/
 
 - **No hyperparameter tuning.** LightGBM runs on fixed sensible values; nested-CV tuning is the correct next step and would likely close (some of) the SARIMAX gap on the subset.
 - **No deep learning column.** N-BEATS/TFT-class models are the natural third family, but a rushed, under-tuned DL comparison is worse than none; on 118 series the literature expects gradient boosting to remain competitive anyway.
-- **Interval calibration is good, not perfect.** 0.782 vs the 0.80 target overall, but 0.70 on the high-volume subset — conformal calibration on top of the quantile models is the obvious remedy.
+- **Interval calibration is good, not perfect.** 0.782 vs the 0.80 target overall, but 0.70 on the high-volume subset: conformal calibration on top of the quantile models is the obvious remedy.
 - **The lift estimate is an average.** A single promo coefficient hides heterogeneity (depth of discount is unobserved in this dataset; lift varies by brand as shown). With promo-depth data, an elasticity model would be the next step.
-- **Hierarchy is unused.** The SKUs belong to 4 brands; hierarchical reconciliation (brand/total coherence) is a natural extension — it is what the dataset's source paper (Mancuso et al. 2021) studies.
+- **Hierarchy is unused.** The SKUs belong to 4 brands; hierarchical reconciliation (brand/total coherence) is a natural extension: it is what the dataset's source paper (Mancuso et al. 2021) studies.
 
-## License, Dataset License & Citation
+## Licence, Dataset Licence & Citation
 
-The code in this project is MIT-licensed — see the repository
+The code in this project is MIT-licensed. See the repository
 [LICENSE](../LICENSE).
 
-Bundled dataset: "Hierarchical Sales Data" (UCI #611 / Mendeley `njdkntcpc9`), CC BY — details and citation in [data/raw/README.md](data/raw/README.md). Please cite Mancuso, Piccialli & Sudoso (2021), *Expert Systems with Applications* 182:115102 if you reuse the data.
+Bundled dataset: "Hierarchical Sales Data" (UCI #611 / Mendeley `njdkntcpc9`), CC BY; details and citation in [data/raw/README.md](data/raw/README.md). Please cite Mancuso, Piccialli & Sudoso (2021), *Expert Systems with Applications* 182:115102 if you reuse the data.
 
 ## Troubleshooting
 
-- **`docker-compose: command not found`** — this project needs Compose V2 (`docker compose`). Upgrade Docker, or see the portfolio root README for workarounds.
-- **Permission errors on `outputs/`** — run `make` targets (they create the directory host-side first) or `mkdir outputs` before `docker compose run`.
-- **Slow SARIMAX/LightGBM backtests** — expected: 12 folds × per-series fits (SARIMAX) or 12 × 4 boosted models (LightGBM). Each prints per-fold progress; ~10 min apiece on a modern laptop.
+- **`docker-compose: command not found`**: this project needs Compose V2 (`docker compose`). Upgrade Docker, or see the portfolio root README for workarounds.
+- **Permission errors on `outputs/`**: run `make` targets (they create the directory host-side first) or `mkdir outputs` before `docker compose run`.
+- **Slow SARIMAX/LightGBM backtests**. Expected: 12 folds × per-series fits (SARIMAX) or 12 × 4 boosted models (LightGBM). Each prints per-fold progress; ~10 min apiece on a modern laptop.
+
+---
+
+**Last Updated:** July 2026  
+**Docker Support:** Linux, macOS, Windows  
+**Total Setup Time:** ~5 minutes

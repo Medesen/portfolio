@@ -1,8 +1,8 @@
-# Experimentation & Uplift — A/B Analysis, CUPED, and Who-to-Target on a Randomized Trial
+# Experimentation & Uplift - A/B Analysis, CUPED, and Who-to-Target on a Randomised Trial
 
-An honest end-to-end analysis of a **randomized** e-mail marketing experiment:
+An honest end-to-end analysis of a **randomised** e-mail marketing experiment:
 estimate the treatment effect properly, try to make it more precise, and then use
-it to decide *whom* to treat next — with every claim checked against held-out data
+it to decide *whom* to treat next, with every claim checked against held-out data
 or a synthetic ground truth.
 
 ## Summary
@@ -14,9 +14,9 @@ an experiment, in order:
    in means, with unpooled CIs, a minimum-detectable-effect calculation, and
    multiplicity control across the arm × outcome grid.
 2. **Can we measure it more cheaply?** CUPED and regression adjustment for
-   variance reduction — and an honest accounting of when they *don't* help.
-3. **Whom should we target?** Uplift (heterogeneous-treatment-effect) models —
-   S-/T-/X-learners — with the "best" learner chosen on a validation fold,
+   variance reduction, and an honest accounting of when they *don't* help.
+3. **Whom should we target?** Uplift (heterogeneous-treatment-effect) models,
+   S-/T-/X-learners, with the "best" learner chosen on a validation fold,
    evaluated with Qini curves on an untouched test split, and turned into a
    concrete targeting policy.
 
@@ -28,7 +28,7 @@ conversion / spend measured over the next two weeks. It ships in this repository
 ### The honest headline
 
 **The men's e-mail has the larger average effect, but the women's e-mail is the
-one worth *targeting*** — and the variance-reduction step, done honestly, barely
+one worth *targeting***, and the variance-reduction step, done honestly, barely
 moves on this data because the pre-period covariates scarcely predict a two-week
 response. Sophistication is deployed where it pays (finding whom to target) and
 declined where it doesn't (CUPED on uncorrelated covariates). That discipline is
@@ -60,7 +60,7 @@ effect is comfortably above the detection floor.
 Variance reduction is bounded by the squared correlation between the covariate(s)
 and the outcome. Here the pre-period covariates explain only ~2.7% of `visit` and
 almost none of `spend`, so the CIs barely tighten. This is a **null with a
-reason**, not a failed step — and the mechanism is proven where it can be
+reason**, not a failed step, and the mechanism is proven where it can be
 controlled: on synthetic data, CUPED's variance reduction tracks ρ² exactly (a
 test asserts it). Many write-ups apply CUPED and quietly report a big win on a
 dataset engineered to produce one; this one shows the technique meeting a dataset
@@ -69,7 +69,7 @@ that doesn't cooperate, and says so.
 ### Whom to target
 
 Uplift models are trained on the **Women's-vs-control** contrast (the arm with real
-effect heterogeneity — see [DATA_NOTES.md](DATA_NOTES.md) §3) and evaluated on a
+effect heterogeneity; see [DATA_NOTES.md](DATA_NOTES.md) §3) and evaluated on a
 30% held-out split.
 
 ![Qini curves](assets/qini_curve.png)
@@ -83,7 +83,7 @@ large.*
 > the image shown above is the committed `assets/qini_curve.png`. Run
 > `make refresh-assets` to update the committed copy from a fresh run.
 
-**Targeting the top-k% by predicted uplift — incremental visits per 1,000 mailed (held-out):**
+**Targeting the top-k% by predicted uplift, incremental visits per 1,000 mailed (held-out):**
 
 | Target depth | By uplift | By response model | Random | Share of "mail-everyone" captured |
 |---|---|---|---|---|
@@ -93,29 +93,29 @@ large.*
 | top 50% | **68.6** | 58.2 | 60.1 | 75% |
 
 Ranking by predicted **uplift** beats both random targeting and the naive
-"response model" (target whoever is most likely to visit) at every depth —
+"response model" (target whoever is most likely to visit) at every depth:
 mailing only the **top 30%** captures **55%** of the incremental visits that
 mailing everyone would. At ~**$9.38 of incremental spend per incremental visit**
-— the ratio of the Women's-arm spend and visit ATEs, computed on the full
+(the ratio of the Women's-arm spend and visit ATEs, computed on the full
 experiment sample rather than the test split; indicative only, since
-spend's ATE carries a wide CI — that top-10% group is worth ~**$936 per 1,000
+spend's ATE carries a wide CI) that top-10% group is worth ~**$936 per 1,000
 mailed**. The
 decile table shows both the strength and the honest limit of the ranking: the
 model concentrates a ~10pp observed visit uplift in its top two deciles, and
 observed uplift declines broadly through decile 6. Below that, each decile
 (~1,280 customers) carries a standard error of ~2pp, so the bottom-decile
 estimates are statistically indistinguishable from noise. The model *predicts*
-negative uplift for its bottom decile — consistent with the prior
-men's-merchandise buyers whom the women's e-mail turns *off* (DATA_NOTES §3) —
+negative uplift for its bottom decile, consistent with the prior
+men's-merchandise buyers whom the women's e-mail turns *off* (DATA_NOTES §3),
 but the held-out data is too noisy to confirm that sign.
 
 One honest note: the *simplest* learner (S-learner) edges the fancier X-learner
-here (normalized Qini 0.06 vs 0.04 on the test split). The S-learner is selected
-on a validation fold carved out of the training side — never on the test split
-whose decile and targeting numbers are reported above — so the headline is free
+here (normalised Qini 0.06 vs 0.04 on the test split). The S-learner is selected
+on a validation fold carved out of the training side (never on the test split
+whose decile and targeting numbers are reported above) so the headline is free
 of winner's-curse bias; all three learners' test Qini values are reported as a
 pre-specified comparison in `outputs/uplift_qini.csv`. When heterogeneity is
-modest, meta-learner sophistication doesn't automatically pay — the same "right
+modest, meta-learner sophistication doesn't automatically pay: the same "right
 tool for the regime, stated plainly" lesson as the sibling forecasting project.
 
 ## Quick Start (~5 minutes)
@@ -124,7 +124,7 @@ tool for the regime, stated plainly" lesson as the sibling forecasting project.
 
 - **Docker Desktop** with Docker Compose V2 (`docker compose`, not `docker-compose`)
 - ~2 GB free disk space
-- No API keys, no accounts, no data downloads — the dataset is in the repo
+- No API keys, no accounts, no data downloads: the dataset is in the repo
 
 ### One-Command Setup
 
@@ -139,7 +139,7 @@ make setup        # Linux/macOS/WSL2/Git Bash
 ### Try It Out
 
 ```bash
-make balance    # covariate-balance check across the randomized arms
+make balance    # covariate-balance check across the randomised arms
 make ate        # treatment effects with CIs, MDE, and multiplicity control
 make cuped      # CUPED / regression-adjustment variance reduction
 make uplift     # uplift models, Qini curves, targeting simulation (~2 min)
@@ -159,34 +159,34 @@ upliftlab all
 
 ### Experimentation done right
 
-- **Balance before outcomes.** The first output is a standardized-mean-difference
-  table — you check randomization *before* you look at an effect.
+- **Balance before outcomes.** The first output is a standardised-mean-difference
+  table: you check randomisation *before* you look at an effect.
 - **Inference, not just point estimates.** Unpooled CIs; a minimum detectable
   effect so a null can be read as "no effect we could detect"; and Holm / BH
   adjustment because six simultaneous tests at α = 0.05 is not one test.
 - **The right outcome for the job.** `visit` for statistical power and uplift
-  ranking, `spend` for the business question but always with its wide CI — the
+  ranking, `spend` for the business question but always with its wide CI: the
   99% zero-inflation is stated, not smoothed over ([DATA_NOTES.md](DATA_NOTES.md)).
 
 ### Causal-inference judgment
 
-- **Identification from design.** Because assignment is randomized, the ATE needs
-  no model — a deliberate, documented contrast with the observational promo-lift
+- **Identification from design.** Because assignment is randomised, the ATE needs
+  no model: a deliberate, documented contrast with the observational promo-lift
   study in the sibling `demand_forecasting` project.
 - **Variance reduction understood, not cargo-culted.** CUPED (single covariate)
   and Lin (2013) regression adjustment (treatment × centered-covariate
-  interactions, robust SEs); reported with the honest ~0–3% gains this data
+  interactions, robust SEs); reported with the honest ~0-3% gains this data
   allows, and validated on synthetic data where the ρ² law is exact.
 
 ### Uplift / targeting
 
 - **Three meta-learners** (S/T/X) on a gradient-boosted base, evaluated the only
   honest way: the winner is selected on a **validation fold**, then Qini curves
-  and a decile table are reported on an untouched **held-out test** split —
+  and a decile table are reported on an untouched **held-out test** split:
   never in sample, and never selected on the split being reported.
 - **A decision, not just a model.** The targeting simulation converts the ranking
   into "mail the top k%," compares it against response-model and random targeting,
-  and prices it — the output a marketer would actually act on.
+  and prices it: the output a marketer would actually act on.
 
 ## Testing
 
@@ -203,9 +203,9 @@ The ones worth a reviewer's eye:
   with the true per-unit effect (Spearman > 0.3) and its mean matches the true
   ATE.
 - **The CUPED identity.** On synthetic data, variance reduction equals the squared
-  outcome–covariate correlation (not the raw noise knob) — the actual theorem,
+  outcome-covariate correlation (not the raw noise knob): the actual theorem,
   tested.
-- **The balance check earns its keep.** It passes on a randomized draw and *flags*
+- **The balance check earns its keep.** It passes on a randomised draw and *flags*
   a deliberately confounded one.
 - **Multiplicity is conservative.** Adjusted p-values are never smaller than raw
   ones; MDE shrinks with n.
@@ -218,7 +218,7 @@ causal_uplift/
 ├── DATA_NOTES.md                 # EDA findings → design decisions (worth reading first)
 ├── data/raw/
 │   ├── hillstrom_email.csv        # The dataset (3.96 MB, bundled)
-│   └── README.md                  # Provenance, license, citation
+│   └── README.md                  # Provenance, licence, citation
 ├── src/upliftlab/
 │   ├── data/                     # Loader + validation; synthetic RCT generator
 │   ├── experiment/               # Balance (SMD), ATE inference, CUPED / adjustment
@@ -233,13 +233,13 @@ causal_uplift/
 ## Honest Limitations & Future Work
 
 - **The natural next step is observational recovery.** The strongest possible
-  version of this project de-randomizes a subsample (drop treated units by a
+  version of this project de-randomises a subsample (drop treated units by a
   covariate), recovers the ATE with IPW / doubly-robust (AIPW) estimation, and
   validates it against the experimental benchmark this repo already computes.
   That closes the loop between the "identification from design" story here and the
   "identification by assumption" story in the forecasting project. It is scoped
   but not yet built.
-- **Uplift signal is modest.** Normalized Qini ~0.05: the heterogeneity is real
+- **Uplift signal is modest.** Normalised Qini ~0.05: the heterogeneity is real
   (a significant sign-flip by prior purchase category) but not large, so the
   learners separate only slightly. A dataset with stronger heterogeneity would
   show the X-learner's advantage more clearly.
@@ -253,22 +253,28 @@ causal_uplift/
 - **One experiment, one horizon.** Effects are the two-week campaign response; no
   long-run or repeated-exposure dynamics are in the data.
 
-## License, Dataset License & Citation
+## Licence, Dataset Licence & Citation
 
-The code in this project is MIT-licensed — see the repository
+The code in this project is MIT-licensed. See the repository
 [LICENSE](../LICENSE).
 
 Bundled dataset: Kevin Hillstrom's *MineThatData E-Mail Analytics And Data Mining
-Challenge* (2008) — the canonical public uplift benchmark. No formal license text
+Challenge* (2008), the canonical public uplift benchmark. No formal licence text
 accompanies the file; it is bundled for non-commercial, educational use with
 provenance attributed in [data/raw/README.md](data/raw/README.md). Please credit
 Kevin Hillstrom / MineThatData if you reuse it.
 
 ## Troubleshooting
 
-- **`docker-compose: command not found`** — this project needs Compose V2
+- **`docker-compose: command not found`**: this project needs Compose V2
   (`docker compose`). Upgrade Docker, or see the portfolio root README.
-- **Permission errors on `outputs/`** — run the `make` targets (they create the
+- **Permission errors on `outputs/`**: run the `make` targets (they create the
   directory host-side first) or `mkdir outputs` before `docker compose run`.
-- **Slightly different last-digit numbers** — LightGBM/threading can perturb the
+- **Slightly different last-digit numbers**: LightGBM/threading can perturb the
   uplift figures at the margin; the ATE, balance, and CUPED numbers are exact.
+
+---
+
+**Last Updated:** July 2026  
+**Docker Support:** Linux, macOS, Windows  
+**Total Setup Time:** ~5 minutes
