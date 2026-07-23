@@ -1,4 +1,4 @@
-.PHONY: help setup build eda tune evaluate sampled protocols beyond reproduce check-readme test shell clean
+.PHONY: help setup build eda tune evaluate als-count-ablation sampled protocols beyond reproduce check-readme test shell clean
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -22,6 +22,9 @@ tune: outputs ## Grid search on the validation window (slowest; regenerates TUNE
 
 evaluate: outputs ## Full-catalogue evaluation of all models (the honest protocol)
 	docker compose run --rm reclab evaluate
+
+als-count-ablation: outputs ## ALS repeat-count vs binary confidence weighting (tuned)
+	docker compose run --rm reclab als-count-ablation
 
 sampled: outputs ## Sampled-negative evaluation + the disagreement table
 	docker compose run --rm reclab sampled
@@ -65,7 +68,10 @@ serve: outputs ## Launch the FastAPI recommender on port 8000
 latency: outputs ## Per-stage serving latency harness
 	docker compose run --rm reclab latency
 
-reproduce: outputs ## Reproduce every number in the README (all three stages, ~45 min)
+seed-sensitivity: outputs ## Training-seed robustness of the neural/reranker claims (P1-5)
+	docker compose run --rm reclab seed-sensitivity
+
+reproduce: outputs ## Regenerate every reported number with the frozen tuned params (all 3 stages, ~45 min; tuning is separate — see `make tune`)
 	docker compose run --rm reclab all
 
 check-readme: ## Verify README headline numbers against outputs/ (run after reproduce)

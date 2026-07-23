@@ -77,6 +77,68 @@ class EvalResult:
         )
 
 
+def paired_bootstrap_diff(
+    values_a: np.ndarray,
+    values_b: np.ndarray,
+    n_boot: int = 1000,
+    seed: int = 0,
+    alpha: float = 0.05,
+) -> tuple[float, float, float]:
+    """Percentile bootstrap of the paired per-session difference ``a - b``.
+
+    ``values_a`` and ``values_b`` are per-session metric values for two models on the
+    *same* sessions in the *same* order. Resampling shared session indices preserves
+    the pairing, which a comparison of two marginal CIs throws away: two models can
+    have overlapping marginal CIs while the paired difference clearly excludes zero
+    (correlated per-session scores cancel in the difference), and vice versa. Returns
+    ``(mean_diff, low, high)``; the interval containing zero means this experiment
+    does not resolve a winner.
+    """
+    a = np.asarray(values_a, dtype=float)
+    b = np.asarray(values_b, dtype=float)
+    if a.shape != b.shape:
+        raise ValueError(f"paired arrays must align: {a.shape} vs {b.shape}")
+    diff = a - b
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(diff), size=(n_boot, len(diff)))
+    means = diff[idx].mean(axis=1)
+    return (
+        float(diff.mean()),
+        float(np.quantile(means, alpha / 2)),
+        float(np.quantile(means, 1 - alpha / 2)),
+    )
+
+
+def operational_bootstrap_ci(
+    values: np.ndarray,
+    n_forced_miss: int,
+    n_boot: int = 1000,
+    seed: int = 0,
+    alpha: float = 0.05,
+) -> tuple[float, float, float]:
+    """Bootstrap CI for the *operational* next-item metric (mean, low, high).
+
+    The conditional-warm ``values`` are per-session scores on the scoreable cohort; the
+    ``n_forced_miss`` cold-target sessions had an unscoreable (cold) true final item and
+    so score 0 for *every* model. The operational metric — the honest "how often does the
+    deployed system predict the actual next item" number — is the mean over both groups,
+    i.e. the warm scores padded with ``n_forced_miss`` zeros, bootstrapped over sessions.
+    Reported alongside the conditional headline so the ~14% cold-target cohort the warm
+    number conditions away is never silently hidden.
+    """
+    padded = np.concatenate(
+        [np.asarray(values, dtype=float), np.zeros(int(n_forced_miss), dtype=float)]
+    )
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(padded), size=(n_boot, len(padded)))
+    means = padded[idx].mean(axis=1)
+    return (
+        float(padded.mean()),
+        float(np.quantile(means, alpha / 2)),
+        float(np.quantile(means, 1 - alpha / 2)),
+    )
+
+
 def evaluate(
     model,
     split: SessionSplit,

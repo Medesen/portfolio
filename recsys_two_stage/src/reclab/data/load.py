@@ -161,10 +161,12 @@ def to_session_items(df: pd.DataFrame) -> pd.DataFrame:
     """Collapse to distinct (session, item) pairs, keeping first-touch order.
 
     Implicit-feedback models consume a binary session x item matrix, so repeat
-    views of the same item within a session collapse. The repeat *count* does
-    carry signal — P(purchase) rises from 0.4% at one view to 12.4% at six —
-    which is what ALS's confidence weighting exists to exploit, so the count is
-    retained in the ``n_events`` column rather than discarded.
+    views of the same item within a session collapse. The repeat *count* may carry
+    signal — P(purchase) rises from 0.4% at one view to 12.4% at six — which ALS's
+    confidence weighting could in principle exploit, so the count is retained in the
+    ``n_events`` column rather than discarded. Whether it *does* help is measured, not
+    assumed: the headline models still train on the binary matrix, and the count-vs-
+    binary comparison is an explicit ALS ablation (see run_als_count_ablation).
     """
     grouped = (
         df.groupby(["session", "itemid"], sort=False)

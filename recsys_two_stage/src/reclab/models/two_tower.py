@@ -40,12 +40,29 @@ from reclab.features.item_features import ItemFeatures
 from reclab.models.base import as_matrix, check_fitted
 
 
+def _collision_mask(batch_targets: torch.Tensor) -> torch.Tensor:
+    """Off-diagonal boolean mask marking in-batch *false* negatives.
+
+    In-batch sampled softmax treats every other row's target as this row's negative. When
+    two sessions in a batch share the same target item, that shared column is a positive
+    wrongly labelled negative — an "accidental hit". Returns a (B, B) mask that is True at
+    ``[i, j]`` (i != j) exactly when rows i and j target the same item, so those logits can
+    be dropped from the softmax denominator (Yi et al. 2019). The diagonal — each row's own
+    positive — is always False (kept).
+    """
+    collide = batch_targets.unsqueeze(0) == batch_targets.unsqueeze(1)
+    collide.fill_diagonal_(False)
+    return collide
+
+
 def _csr_to_torch(mat: sp.csr_matrix) -> torch.Tensor:
     """A scipy CSR as a torch sparse-COO tensor (for differentiable pooling)."""
     coo = mat.tocoo()
     idx = torch.as_tensor(np.vstack([coo.row, coo.col]), dtype=torch.long)
     val = torch.as_tensor(coo.data, dtype=torch.float32)
-    return torch.sparse_coo_tensor(idx, val, mat.shape).coalesce()
+    # Explicitly opt out of invariant checks (the indices are built correctly here) to
+    # silence torch's "implicitly disabled" warning; no behaviour change.
+    return torch.sparse_coo_tensor(idx, val, mat.shape, check_invariants=False).coalesce()
 
 
 class _ItemTower(nn.Module):
@@ -161,6 +178,11 @@ class TwoTower:
         hist_counts = np.asarray(history_mat.sum(axis=1)).ravel()
         hist_counts[hist_counts == 0] = 1.0
 
+        # logQ proxy: the in-batch negatives are other rows' *targets* (each session's last
+        # item), so their true sampling frequency is target-frequency. This approximates it
+        # with overall interaction popularity (all positions) — the standard, defensible
+        # proxy (Yi et al. 2019). The ablation treats logQ as directional and the numbers
+        # confirm the direction, so the approximation is not load-bearing.
         pop = np.asarray(split.train.sum(axis=0)).ravel() + 1.0
         log_sample_prob = torch.as_tensor(
             np.log(pop / pop.sum()), dtype=torch.float32, device=self.device
@@ -201,6 +223,10 @@ class TwoTower:
                     # Subtract log P(sampling the column's item) — the column item
                     # is the in-batch negative, sampled ~ its popularity.
                     logits = logits - log_sample_prob[targets[batch]].unsqueeze(0)
+                # Drop accidental hits: a duplicate target item elsewhere in the batch is
+                # a false negative for this row, so mask those off-diagonal cells to -inf.
+                batch_targets = torch.as_tensor(targets[batch], device=self.device)
+                logits = logits.masked_fill(_collision_mask(batch_targets), float("-inf"))
                 labels = torch.arange(len(batch), device=self.device)
                 loss = nn.functional.cross_entropy(logits, labels)
 

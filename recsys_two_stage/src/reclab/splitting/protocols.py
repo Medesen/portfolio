@@ -30,6 +30,46 @@ from reclab.data.filtering import FilterReport, k_core_filter
 
 
 @dataclass(frozen=True)
+class CohortReport:
+    """Where every post-cutoff test session went — so the warm headline's population is
+    accountable rather than implicit.
+
+    A session's *target* is its raw final interaction, chosen before any vocabulary
+    filtering: filtering only ever trims the prefix representation, it never moves the
+    target (the P0-1 correction). Each post-cutoff session lands in exactly one bucket:
+
+    - ``n_warm_target``  — raw final item is in the training vocabulary *and* at least one
+      in-vocab prefix item exists. The scoreable headline cohort every model is compared on.
+    - ``n_cold_target``  — raw final item is cold (absent from training) but a usable warm
+      prefix exists. Excluded from the conditional-warm headline; counted as a forced miss
+      in the operational next-item metric; studied directly on the Stage-2 cold-start track.
+    - ``n_insufficient`` — no in-vocab prefix item to encode a history from (whatever the
+      target's warmth). Unscoreable, excluded from both metrics.
+    """
+
+    n_post_cutoff: int
+    n_warm_target: int
+    n_cold_target: int
+    n_insufficient: int
+
+    @property
+    def n_operational(self) -> int:
+        """Sessions entering the operational metric: warm scoreable + cold forced-miss."""
+        return self.n_warm_target + self.n_cold_target
+
+    def as_dict(self) -> dict:
+        share = (lambda x: x / self.n_post_cutoff if self.n_post_cutoff else 0.0)
+        return {
+            "n_post_cutoff": self.n_post_cutoff,
+            "n_warm_target": self.n_warm_target,
+            "n_cold_target": self.n_cold_target,
+            "n_insufficient_prefix": self.n_insufficient,
+            "warm_target_share": share(self.n_warm_target),
+            "cold_target_share": share(self.n_cold_target),
+        }
+
+
+@dataclass(frozen=True)
 class SessionSplit:
     """A fitted split, ready for models and evaluation.
 
@@ -53,6 +93,17 @@ class SessionSplit:
     # a bag cannot be un-shuffled. Classical models ignore these.
     train_sequences: list[np.ndarray] | None = None
     test_prefix_sequences: list[np.ndarray] | None = None
+    # Count-weighted twin of ``train``: same shape/row-order, but each nonzero holds
+    # the within-session repeat count (``n_events``) instead of 1. Every model in the
+    # pipeline learns from the binary ``train``; this exists solely so the ALS
+    # repeat-count confidence weighting can be *measured* against binary as an ablation
+    # (see reclab.main.run_als_count_ablation) rather than asserted. None when the
+    # source frame carries no ``n_events`` column.
+    train_counts: sp.csr_matrix | None = None
+    # Cohort accounting for the temporal protocol: how the post-cutoff sessions divide
+    # into the warm (scoreable) headline, cold-target forced-misses, and prefix-less
+    # exclusions. None for leave-one-out, which has no cold/warm target distinction.
+    cohort: CohortReport | None = None
 
     @property
     def n_items(self) -> int:
@@ -81,13 +132,25 @@ class SessionSplit:
 
 
 def _build_matrix(
-    pairs: pd.DataFrame, item_to_col: dict[int, int], session_order: np.ndarray
+    pairs: pd.DataFrame,
+    item_to_col: dict[int, int],
+    session_order: np.ndarray,
+    value_col: str | None = None,
 ) -> sp.csr_matrix:
-    """Binary session x item matrix over the given session ordering."""
+    """Session x item matrix over the given session ordering.
+
+    Binary by default (each interacted cell = 1). With ``value_col`` (e.g.
+    ``"n_events"``) each nonzero carries that column's value instead — used to build the
+    count-weighted training matrix for the ALS confidence-weighting ablation. Rows are
+    distinct (session, item) pairs, so no cell is accidentally summed.
+    """
     session_to_row = {s: i for i, s in enumerate(session_order)}
     rows = pairs["session"].map(session_to_row).to_numpy()
     cols = pairs["itemid"].map(item_to_col).to_numpy()
-    data = np.ones(len(pairs), dtype=np.float32)
+    if value_col is not None and value_col in pairs.columns:
+        data = pairs[value_col].to_numpy(dtype=np.float32)
+    else:
+        data = np.ones(len(pairs), dtype=np.float32)
     return sp.csr_matrix(
         (data, (rows, cols)), shape=(len(session_order), len(item_to_col))
     )
@@ -174,18 +237,23 @@ def temporal_split(
     train_pairs = train_pairs[train_pairs["session"].isin(set(keep_train))]
     train_order = np.sort(train_pairs["session"].unique())
 
-    # Test sessions are restricted to the training vocabulary — an item with no
-    # training history is unscoreable by every model here, so evaluating on it
-    # would measure nothing. Those items are the cold-start question, taken up
-    # in Stage 2 on a separate evaluation track.
-    test_pairs = test_pairs_raw[test_pairs_raw["itemid"].isin(item_to_col)]
-    test_counts = test_pairs["session"].value_counts()
-    keep_test = test_counts.index[test_counts >= 2]  # need a prefix and a target
-    test_pairs = test_pairs[test_pairs["session"].isin(set(keep_test))]
-
     train = _build_matrix(train_pairs, item_to_col, train_order)
+    # Count-weighted twin, only when the frame actually carries repeat counts.
+    train_counts = (
+        _build_matrix(train_pairs, item_to_col, train_order, value_col="n_events")
+        if "n_events" in train_pairs.columns
+        else None
+    )
     train_sequences = _build_sequences(train_pairs, item_to_col, train_order)
-    prefix, target, prefix_sequences = _prefix_target(test_pairs, item_to_col)
+
+    # The target is each session's *raw* final interaction, chosen before any vocabulary
+    # filtering. Restricting the test set to the training vocabulary and *then* taking the
+    # last item — the previous behaviour — silently moved the target back to the last warm
+    # item whenever the true final item was cold, turning a guaranteed miss into a
+    # scoreable, easier prediction on ~14% of the cohort (the P0-1 correction). Filtering
+    # now trims only the prefix representation, never the target; cold-target sessions are
+    # excluded from this warm headline and counted separately (see CohortReport).
+    prefix, target, prefix_sequences, cohort = _prefix_target(test_pairs_raw, item_to_col)
 
     return SessionSplit(
         train=train,
@@ -199,29 +267,56 @@ def temporal_split(
         n_straddling_dropped=n_straddling,
         train_sequences=train_sequences,
         test_prefix_sequences=prefix_sequences,
+        train_counts=train_counts,
+        cohort=cohort,
     )
 
 
 def _prefix_target(
-    test_pairs: pd.DataFrame, item_to_col: dict[int, int]
-) -> tuple[sp.csr_matrix, np.ndarray, list[np.ndarray]]:
-    """Split each test session into (all items but the last, the last item).
+    test_pairs_raw: pd.DataFrame, item_to_col: dict[int, int]
+) -> tuple[sp.csr_matrix, np.ndarray, list[np.ndarray], CohortReport]:
+    """Warm-headline cohort: predict each session's *raw* final item from its warm prefix.
 
-    Order is first-touch time within the session. Predicting the final item from
-    its predecessors is the standard session-based protocol, which keeps these
-    numbers comparable to the session-based literature.
+    Order is first-touch time within the session. The held-out target is the raw final
+    interaction (any vocabulary); only the prefix is filtered to the training vocabulary,
+    because that is all a model can consume. A session enters the returned cohort only if
+    its raw final item is in-vocabulary (scoreable) *and* it has at least one in-vocab
+    prefix item. Cold-target and prefix-less sessions are tallied in the CohortReport but
+    not scored here — never relabelled onto an earlier warm item.
     """
-    ordered = test_pairs.sort_values(["session", "ts"], kind="mergesort")
+    ordered = test_pairs_raw.sort_values(["session", "ts"], kind="mergesort")
     is_last = ~ordered["session"].duplicated(keep="last")
+    last_rows = ordered[is_last]        # raw final item, one row per session
+    prefix_rows = ordered[~is_last]     # everything strictly before it
 
-    targets_df = ordered[is_last]
-    prefix_df = ordered[~is_last]
+    n_post_cutoff = int(ordered["session"].nunique())
+    warm_target = last_rows["itemid"].isin(item_to_col)
+    warm_target_sessions = set(last_rows.loc[warm_target, "session"])
+    cold_target_sessions = set(last_rows.loc[~warm_target, "session"])
 
+    # Prefix restricted to the training vocabulary — the only history a model can read.
+    prefix_vocab = prefix_rows[prefix_rows["itemid"].isin(item_to_col)]
+    prefix_len = prefix_vocab["session"].value_counts()
+    has_prefix = set(prefix_len.index[prefix_len >= 1])
+
+    keep = warm_target_sessions & has_prefix                # scoreable headline cohort
+    n_cold_target = len(cold_target_sessions & has_prefix)  # operational forced-misses
+    n_insufficient = n_post_cutoff - len(keep) - n_cold_target
+
+    targets_df = last_rows[last_rows["session"].isin(keep)]
     session_order = targets_df["session"].to_numpy()
+    prefix_df = prefix_vocab[prefix_vocab["session"].isin(keep)]
     prefix = _build_matrix(prefix_df, item_to_col, session_order)
     prefix_sequences = _build_sequences(prefix_df, item_to_col, session_order)
     target = targets_df["itemid"].map(item_to_col).to_numpy()
-    return prefix, target, prefix_sequences
+
+    cohort = CohortReport(
+        n_post_cutoff=n_post_cutoff,
+        n_warm_target=len(keep),
+        n_cold_target=n_cold_target,
+        n_insufficient=n_insufficient,
+    )
+    return prefix, target, prefix_sequences, cohort
 
 
 def leave_one_out_split(
@@ -240,7 +335,6 @@ def leave_one_out_split(
     kept_items = np.sort(filtered["itemid"].unique())
     item_to_col = {int(item): i for i, item in enumerate(kept_items)}
 
-    rng = np.random.default_rng(seed)
     shuffled = filtered.sample(frac=1.0, random_state=seed)
     held_out = shuffled.groupby("session", sort=False).head(1)
     held_idx = set(held_out.index)
@@ -261,7 +355,6 @@ def leave_one_out_split(
     prefix = _build_matrix(eval_pairs, item_to_col, eval_sessions)
     prefix_sequences = _build_sequences(eval_pairs, item_to_col, eval_sessions)
     target = held_out["itemid"].map(item_to_col).to_numpy()
-    _ = rng  # seeding is via sample(random_state=seed); kept for signature clarity
 
     return SessionSplit(
         train=train,

@@ -17,7 +17,7 @@ from reclab.serving.ann import ANNIndex
 from reclab.serving.pipeline import RecommenderService
 
 
-def _synthetic_service(n_items=500, dim=16, seed=0) -> RecommenderService:
+def _synthetic_service(n_items=500, dim=16, seed=0, n_candidates=100) -> RecommenderService:
     rng = np.random.default_rng(seed)
     item_factors = rng.normal(size=(n_items, dim)).astype(np.float64)
     # A tiny reranker trained on a synthetic frame so predict() works.
@@ -40,7 +40,7 @@ def _synthetic_service(n_items=500, dim=16, seed=0) -> RecommenderService:
         item_ids=np.arange(n_items), item_factors=item_factors,
         YtY=item_factors.T @ item_factors, alpha=40.0, reg=1.0,
         raw_cat=rng.integers(0, 10, n_items), available=rng.integers(0, 2, n_items).astype(float),
-        item_pop=rng.random(n_items), ann=ann, reranker=reranker.model_, n_candidates=100,
+        item_pop=rng.random(n_items), ann=ann, reranker=reranker.model_, n_candidates=n_candidates,
     )
 
 
@@ -82,6 +82,41 @@ class TestRecommendContract:
     def test_unknown_items_in_history_are_dropped_not_fatal(self, client):
         r = client.post("/recommend", json={"history": [1, 999_999], "k": 5})
         assert r.status_code == 200  # the unknown id is ignored, no crash
+
+    def test_response_reports_strategy_and_requested_k(self, client):
+        body = client.post("/recommend", json={"history": [1, 2, 3], "k": 7}).json()
+        assert body["strategy"] == "two_stage"     # warm path
+        assert body["requested_k"] == 7
+
+    def test_duplicate_history_ids_do_not_change_the_result(self, client):
+        # P2-3: repeated/retried ids are deduplicated, so the fold-in (and thus the
+        # recommendation) is invariant to how many times a client sends the same item.
+        once = client.post("/recommend", json={"history": [1, 2, 3], "k": 10}).json()
+        many = client.post("/recommend", json={"history": [1, 1, 2, 3, 3, 3, 2], "k": 10}).json()
+        assert once["items"] == many["items"]
+
+    def test_empty_history_uses_a_deterministic_popularity_fallback(self, client):
+        # P1-4: a cold (empty) history is served from a deterministic popularity list,
+        # flagged as such, not the ANN's arbitrary tied set.
+        a = client.post("/recommend", json={"history": [], "k": 8}).json()
+        b = client.post("/recommend", json={"history": [], "k": 8}).json()
+        assert a["strategy"] == "popularity_fallback"
+        assert a["items"] == b["items"]            # deterministic across calls
+        assert len(a["items"]) == 8
+
+
+class TestCapacity:
+    def test_tops_up_to_k_when_retrieval_is_short(self):
+        # P2-4: n_candidates is small, so ranking alone cannot supply k unseen items; the
+        # response is topped up from the popularity fallback and still returns exactly k,
+        # with no seen item, scores non-increasing, and the shortfall flagged via strategy.
+        svc = _synthetic_service(n_items=20, n_candidates=5, seed=1)
+        rec = svc.recommend([0, 1, 2], k=8)
+        assert len(rec.items) == 8
+        assert rec.requested_k == 8
+        assert rec.strategy == "two_stage+fallback"
+        assert not (set(rec.items) & {0, 1, 2})                      # seen excluded
+        assert all(a >= b for a, b in zip(rec.scores, rec.scores[1:]))  # non-increasing
 
 
 class TestValidation:

@@ -13,6 +13,11 @@ RUN groupadd -g ${GID} app && useradd -m -u ${UID} -g ${GID} app
 
 WORKDIR /app
 
+# Pin BLAS threading before any Python/numpy import so the dense EASE/ALS-fold-in
+# solves are deterministic and the scaling sweep's fit times don't depend on the
+# OpenBLAS pool size. Mirrors the setdefault in reclab/__init__.py.
+ENV OPENBLAS_NUM_THREADS=1
+
 # Dependencies come from requirements.lock (pip-compile of pyproject.toml, incl.
 # the dev extra) so rebuilds are reproducible; installed before the source copy
 # so code changes don't invalidate the dependency layer. The PyTorch CPU wheel

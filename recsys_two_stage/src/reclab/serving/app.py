@@ -36,6 +36,8 @@ class RecommendResponse(BaseModel):
     scores: list[float]
     timings_ms: dict[str, float]
     n_candidates: int
+    strategy: str
+    requested_k: int
 
 
 def get_service() -> RecommenderService:
@@ -63,4 +65,5 @@ def recommend(req: RecommendRequest) -> RecommendResponse:
     svc = get_service()
     rec = svc.recommend(req.history, k=req.k, ef_search=req.ef_search)
     return RecommendResponse(items=rec.items, scores=rec.scores,
-                             timings_ms=rec.timings_ms, n_candidates=rec.n_candidates)
+                             timings_ms=rec.timings_ms, n_candidates=rec.n_candidates,
+                             strategy=rec.strategy, requested_k=rec.requested_k)

@@ -22,7 +22,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from reclab.evaluation.metrics import hit_rate_at_k, ndcg_at_k, reciprocal_rank
+from reclab.evaluation.metrics import (
+    hit_rate_at_k,
+    ndcg_at_k,
+    order_by_score,
+    reciprocal_rank,
+)
 from reclab.splitting.protocols import SessionSplit
 
 METRICS = ("hit_rate", "ndcg", "mrr")
@@ -80,11 +85,11 @@ def sampled_metrics_from_scores(
 
         candidates = np.concatenate(([target], negatives))
         cand_scores = scores[row, candidates]
-        # Break ties randomly so a model that scores many candidates equal to the
-        # target is not silently rewarded by a stable argsort putting the target
-        # first. Descending sort of (score + tiny noise).
-        order = np.argsort(-(cand_scores + rng.random(len(candidates)) * 1e-12))
-        ranked = candidates[order]
+        # One tie policy everywhere (see order_by_score): break score ties by ascending
+        # item id, so a model that ties the target against negatives is neither rewarded
+        # nor penalised by candidate order — the same deterministic rule the full-catalogue
+        # and reranked paths use, rather than this path's own random jitter.
+        ranked = candidates[order_by_score(cand_scores, candidates)]
 
         relevant = {target}
         for k in ks:

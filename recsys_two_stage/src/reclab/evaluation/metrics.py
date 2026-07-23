@@ -45,6 +45,7 @@ __all__ = [
     "hit_rate_at_k",
     "evaluate_rankings",
     "top_k_from_scores",
+    "order_by_score",
 ]
 
 # Discount weights are reused across every user and every metric call; caching
@@ -141,6 +142,22 @@ def hit_rate_at_k(ranked: np.ndarray, relevant: set[int], k: int) -> float:
     return float(any(item in relevant for item in ranked[:cut]))
 
 
+def order_by_score(scores: np.ndarray, items: np.ndarray) -> np.ndarray:
+    """Order indices by ``scores`` descending, ties broken by ascending ``items`` (item id).
+
+    The project's single tie policy, shared by the sampled-negative and reranked paths so a
+    model that ties the target against other candidates is neither rewarded nor penalised by
+    an implicit, implementation-dependent order. Two stable passes: sort by item id, then a
+    stable sort by ``-score`` preserves that id order within each score tie. (The
+    full-catalogue path in ``top_k_from_scores`` gets the same policy for free, because its
+    columns are already laid out in item-id order.)
+    """
+    scores = np.asarray(scores, dtype=float)
+    items = np.asarray(items)
+    tie = np.argsort(items, kind="stable")
+    return tie[np.argsort(-scores[tie], kind="stable")]
+
+
 def top_k_from_scores(
     scores: np.ndarray, k: int, mask: np.ndarray | None = None
 ) -> np.ndarray:
@@ -151,6 +168,12 @@ def top_k_from_scores(
     that forgets to drop a user's training history scores spectacularly and
     meaninglessly, so the exclusion is the evaluation loop's job and a test
     asserts it holds for every model.
+
+    Ties are broken deterministically by ascending item index (the project's single tie
+    policy): a stable sort of ``-scores`` leaves equal-scoring items in column — i.e. item
+    id — order. Sparse recommenders produce many exact ties, so without a fixed policy the
+    boundary of the top-k would be implementation-dependent and protocol comparisons could
+    reflect the tie order rather than the models.
     """
     scores = np.asarray(scores, dtype=float)
     if scores.ndim != 2:
@@ -167,12 +190,11 @@ def top_k_from_scores(
         scores = np.where(mask, -np.inf, scores)
 
     cut = min(k, scores.shape[1])
-    # argpartition is O(n) per row vs O(n log n) for a full sort; only the top
-    # `cut` need ordering afterwards. Negated because it partitions ascending.
-    partitioned = np.argpartition(-scores, cut - 1, axis=1)[:, :cut]
-    row_index = np.arange(scores.shape[0])[:, None]
-    order = np.argsort(-scores[row_index, partitioned], axis=1)
-    return partitioned[row_index, order]
+    # Stable sort of -scores keeps equal scores in ascending column (item-id) order — the
+    # one tie policy. O(n log n) per row, but full-catalogue evaluation is not the pipeline
+    # bottleneck and cross-run/protocol determinism is worth more than argpartition's O(n).
+    order = np.argsort(-scores, axis=1, kind="stable")
+    return order[:, :cut]
 
 
 def evaluate_rankings(
@@ -186,6 +208,11 @@ def evaluate_rankings(
     ``top_k`` is (n_users, K) with K >= max(ks); ``relevant[i]`` is the held-out
     item set for row i. Returns one row per k with the mean of each metric and
     the user count behind it.
+
+    Standalone, unit-tested primitive: the production path (``full_catalogue.evaluate``)
+    keeps per-session values for bootstrap CIs and does not call this. It is retained
+    because it is the only place that exercises the ``normalize`` (min_k vs |relevant|)
+    recall convention against multi-item relevant sets.
     """
     if len(top_k) != len(relevant):
         raise ValueError(

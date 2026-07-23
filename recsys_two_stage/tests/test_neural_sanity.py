@@ -8,7 +8,6 @@ show a decreasing loss.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from reclab.evaluation.full_catalogue import evaluate

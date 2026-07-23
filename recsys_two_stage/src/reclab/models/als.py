@@ -20,24 +20,26 @@ the fold-in ourselves keeps ALS behind the same "score unseen sessions from thei
 history" contract as every other model here, and matches the no-per-user-identity
 constraint the dataset forces.
 
-Repeat-view counts carry real signal on this data — P(purchase) climbs from 0.4%
-at one view to 12.4% at six — which is exactly what the confidence weighting α is
-for. The training matrix passes those counts through (see ``use_counts``).
+Repeat-view counts plausibly carry signal on this data — P(purchase) climbs from
+0.4% at one view to 12.4% at six — which is what the confidence weighting α could
+exploit: with ``use_counts`` and a count-valued matrix, an item viewed k times in a
+session gets confidence 1 + α·k rather than 1 + α. Whether that actually helps is an
+empirical question, not an assumption, so it is *measured* against binary rather than
+asserted — see ``reclab.main.run_als_count_ablation``. The headline ALS numbers train
+on the binary matrix (``SessionSplit.train``); the ablation feeds ``train_counts``.
 """
 
 from __future__ import annotations
-
-import os
 
 import numpy as np
 import scipy.sparse as sp
 
 from reclab.models.base import as_matrix, check_fitted
 
-# implicit spawns a thread pool and prints a progress bar; keep both quiet and
-# deterministic. Threads default to 1 so results are reproducible; callers can
-# raise it for the full run where bit-reproducibility is not required.
-os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+# BLAS threading (OPENBLAS_NUM_THREADS) is pinned in ``reclab/__init__.py`` — it has
+# to be set before numpy first imports OpenBLAS, which a module-level assignment here
+# (after ``import numpy`` above) is too late to do. ``implicit``'s own thread pool is
+# a separate knob, controlled per-fit via ``num_threads``.
 
 
 class ALS:

@@ -1,15 +1,16 @@
-# setup.ps1 - Windows PowerShell Setup Script for Two-Stage Recommender (Stage 1)
-# This script provides the same functionality as setup.sh for Windows users
+# setup.ps1 - Windows PowerShell quick setup for the Two-Stage Recommender
+# Same as setup.sh: builds the image and runs the fast classical smoke (~5 min).
+# Full three-stage reproduction is `docker compose run --rm reclab all` (~45 min).
 
 Write-Host "================================================================================" -ForegroundColor Cyan
-Write-Host "Two-Stage Recommender (Stage 1) - Automated Setup (Windows)" -ForegroundColor Cyan
+Write-Host "Two-Stage Recommender - Quick Setup (Windows)" -ForegroundColor Cyan
 Write-Host "================================================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "This script will:" -ForegroundColor White
 Write-Host "  1. Build the Docker image" -ForegroundColor White
-Write-Host "  2. Run a full-catalogue evaluation of the four classical models" -ForegroundColor White
+Write-Host "  2. Run a full-catalogue evaluation of the four classical models (fast smoke)" -ForegroundColor White
 Write-Host ""
-Write-Host "Estimated time: ~5 minutes" -ForegroundColor Yellow
+Write-Host "Estimated time: ~5 minutes (all three stages: 'reclab all', ~45 minutes)" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Starting in 3 seconds... (Ctrl+C to cancel)" -ForegroundColor Yellow
 Start-Sleep -Seconds 3
@@ -70,7 +71,7 @@ Write-Host "====================================================================
 Write-Host "✅ SETUP COMPLETE!" -ForegroundColor Green
 Write-Host "================================================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "The Stage 1 recommender evaluation pipeline is ready to use!" -ForegroundColor White
+Write-Host "The recommender pipeline is ready - all three stages are available." -ForegroundColor White
 Write-Host ""
 Write-Host "Try these commands:" -ForegroundColor White
 Write-Host ""
@@ -80,7 +81,7 @@ Write-Host ""
 Write-Host "  # Coverage / Gini / popularity-bias metrics" -ForegroundColor Gray
 Write-Host "  docker compose run --rm reclab beyond" -ForegroundColor White
 Write-Host ""
-Write-Host "  # Reproduce every number in the README in one go (~15 min)" -ForegroundColor Gray
+Write-Host "  # Reproduce every number in the README end to end, all three stages (~45 min)" -ForegroundColor Gray
 Write-Host "  docker compose run --rm reclab all" -ForegroundColor White
 Write-Host ""
 Write-Host "================================================================================" -ForegroundColor Green

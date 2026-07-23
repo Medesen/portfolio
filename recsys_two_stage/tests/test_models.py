@@ -162,6 +162,24 @@ class TestALS:
         others = scores[items_per:].mean()
         assert own > others
 
+    def test_use_counts_changes_factors_only_on_count_valued_data(self):
+        # The ablation's premise: on a count-valued matrix, use_counts=True (confidence
+        # 1+alpha*count) must differ from the binarized fit — otherwise the ablation
+        # measures nothing. And on a purely binary matrix the two must coincide, which
+        # is exactly why the pipeline's headline binary ALS is unaffected by the flag.
+        X, _, n_clusters, items_per = self._clustered(seed=2)
+        Xc = X.tolil()
+        Xc[0, 0], Xc[1, 1], Xc[2, 2] = 5.0, 4.0, 3.0  # a few repeat counts > 1
+        Xc = Xc.tocsr()
+
+        f_true = ALS(factors=16, iterations=20, alpha=40.0, use_counts=True, seed=0).fit(Xc).item_factors_
+        f_false = ALS(factors=16, iterations=20, alpha=40.0, use_counts=False, seed=0).fit(Xc).item_factors_
+        assert not np.allclose(f_true, f_false)  # counts actually change the factorization
+
+        b_true = ALS(factors=16, iterations=20, alpha=40.0, use_counts=True, seed=0).fit(X).item_factors_
+        b_false = ALS(factors=16, iterations=20, alpha=40.0, use_counts=False, seed=0).fit(X).item_factors_
+        np.testing.assert_allclose(b_true, b_false)  # no-op on binary input
+
     def test_score_before_fit_raises(self):
         with pytest.raises(RuntimeError, match="not been fitted"):
             ALS().score(random_matrix(3, 5))

@@ -20,7 +20,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from reclab.evaluation.metrics import hit_rate_at_k, ndcg_at_k, reciprocal_rank
+from reclab.evaluation.metrics import (
+    hit_rate_at_k,
+    ndcg_at_k,
+    order_by_score,
+    reciprocal_rank,
+)
 from reclab.ranking.dataset import FEATURES, RankerFrame
 
 
@@ -94,8 +99,7 @@ def evaluate_e2e(reranker: Reranker, frame: RankerFrame, targets: np.ndarray,
         per.update({("ndcg", k): [] for k in ks})
         per.update({("mrr", k): [] for k in ks})
         for sess, items, sc in _score_blocks(scores, frame):
-            order = np.argsort(-sc)
-            ranked = items[order]
+            ranked = items[order_by_score(sc, items)]
             relevant = {int(targets[sess])}
             for k in ks:
                 per[("hit_rate", k)].append(hit_rate_at_k(ranked, relevant, k))
@@ -107,10 +111,28 @@ def evaluate_e2e(reranker: Reranker, frame: RankerFrame, targets: np.ndarray,
     return pd.DataFrame(rows)
 
 
+def e2e_per_session(
+    scores: np.ndarray, frame: RankerFrame, targets: np.ndarray, metric: str, k: int
+) -> np.ndarray:
+    """Per-session metric values for one candidate ordering (given its ``scores``).
+
+    Iterates ``frame``'s session blocks in a fixed order, so arrays returned for
+    different score vectors (reranked vs retrieval-only, lambdarank vs pointwise) are
+    session-aligned and can be fed to a *paired* bootstrap — the honest way to ask
+    whether reranking, or the listwise objective, actually resolves a difference.
+    """
+    metric_fn = {"hit_rate": hit_rate_at_k, "ndcg": ndcg_at_k, "mrr": reciprocal_rank}[metric]
+    vals = []
+    for sess, items, sc in _score_blocks(scores, frame):
+        ranked = items[order_by_score(sc, items)]
+        vals.append(metric_fn(ranked, {int(targets[sess])}, k))
+    return np.asarray(vals, dtype=float)
+
+
 def e2e_top_k(reranker: Reranker, frame: RankerFrame, k: int) -> dict[int, np.ndarray]:
     """Per session, the reranked top-k item indices — for beyond-accuracy metrics."""
     scores = reranker.predict(frame.X)
     out = {}
     for sess, items, sc in _score_blocks(scores, frame):
-        out[sess] = items[np.argsort(-sc)[:k]]
+        out[sess] = items[order_by_score(sc, items)[:k]]
     return out

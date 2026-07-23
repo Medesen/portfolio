@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from reclab.evaluation.beyond_accuracy import beyond_accuracy_metrics, gini
+from reclab.evaluation.full_catalogue import paired_bootstrap_diff
 from reclab.tuning.grid import grid_search, validation_split
 
 
@@ -47,6 +48,47 @@ class TestBeyondAccuracy:
     def test_k_beyond_supplied_raises(self):
         with pytest.raises(ValueError, match="exceeds"):
             beyond_accuracy_metrics(np.array([[0, 1]]), 5, np.ones(5), k=5)
+
+
+class TestPairedBootstrap:
+    def test_paired_resolves_what_marginal_overlap_hides(self):
+        # The exact failure mode the README's "tie (CIs overlap)" reasoning had:
+        # model A beats model B by a small, *consistent* per-session margin. The two
+        # models' per-session scores are highly correlated (they agree on which
+        # sessions are easy), so their marginal CIs overlap heavily — yet the paired
+        # difference is a near-constant positive, whose CI clearly excludes zero.
+        rng = np.random.default_rng(0)
+        n = 4000
+        shared = rng.normal(0.30, 0.20, n)  # session difficulty, shared by both models
+        a = shared + rng.normal(0.010, 0.002, n)  # A: consistently a hair better
+        b = shared
+
+        from reclab.evaluation.full_catalogue import EvalResult
+
+        def marginal_ci(values):
+            return EvalResult("m", "temporal", {("ndcg", 20): values}, n).bootstrap_ci("ndcg", 20)
+
+        _, a_lo, a_hi = marginal_ci(a)
+        _, b_lo, b_hi = marginal_ci(b)
+        # Marginal CIs overlap: the naive "tie" reading would fire here.
+        assert a_lo < b_hi and b_lo < a_hi
+
+        # The paired difference, however, resolves the winner: interval excludes zero.
+        diff, lo, hi = paired_bootstrap_diff(a, b)
+        assert diff > 0
+        assert lo > 0.0  # zero is not in the paired interval
+
+    def test_true_tie_includes_zero(self):
+        rng = np.random.default_rng(1)
+        base = rng.normal(0.30, 0.20, 4000)
+        a = base + rng.normal(0.0, 0.05, 4000)
+        b = base + rng.normal(0.0, 0.05, 4000)  # no systematic difference
+        diff, lo, hi = paired_bootstrap_diff(a, b)
+        assert lo <= 0.0 <= hi  # correctly does not resolve a winner
+
+    def test_misaligned_arrays_raise(self):
+        with pytest.raises(ValueError, match="align"):
+            paired_bootstrap_diff(np.zeros(5), np.zeros(6))
 
 
 def dense_log(n_sessions, n_items, days, seed=0):

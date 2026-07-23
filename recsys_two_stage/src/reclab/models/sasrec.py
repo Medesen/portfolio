@@ -36,6 +36,17 @@ from reclab.models.base import HistoryBatch, as_matrix, check_fitted
 PAD = 0
 
 
+def _sampled_negatives(rng, n_items: int, pos: np.ndarray) -> np.ndarray:
+    """One uniform negative per position, excluding the positive itself (P2-1).
+
+    Drawing from ``0..n_items-2`` and shifting any draw ``>= pos`` up by one maps uniformly
+    onto ``{0..n_items-1} \\ {pos}``, so a position is never scored against its own true next
+    item. ``pos`` and the result are 0-based real item ids."""
+    pos = np.asarray(pos)
+    neg = rng.integers(0, n_items - 1, size=len(pos))
+    return neg + (neg >= pos)
+
+
 class _SASRecNet(nn.Module):
     def __init__(self, n_items: int, emb_dim: int, max_len: int,
                  n_blocks: int, n_heads: int, dropout: float) -> None:
@@ -49,7 +60,11 @@ class _SASRecNet(nn.Module):
             d_model=emb_dim, nhead=n_heads, dim_feedforward=emb_dim * 4,
             dropout=dropout, batch_first=True, norm_first=True,
         )
-        self.encoder = nn.TransformerEncoder(layer, num_layers=n_blocks)
+        # enable_nested_tensor=False: the nested-tensor fast path does not apply with a
+        # causal mask (and warns when norm_first=True); disabling it silences the warning
+        # without changing outputs, which the causal-masking test pins exactly.
+        self.encoder = nn.TransformerEncoder(layer, num_layers=n_blocks,
+                                             enable_nested_tensor=False)
         nn.init.normal_(self.item_emb.weight, std=0.01)
         with torch.no_grad():
             self.item_emb.weight[PAD].zero_()
@@ -172,9 +187,11 @@ class SASRec:
         pos = tgt[mask] - 1  # back to 0-based real item ids
         if self.loss == "full_softmax":
             return nn.functional.cross_entropy(net.logits(h), pos)
-        # sampled_bce: one uniform negative per position (original SASRec).
+        # sampled_bce: one uniform negative per position (original SASRec), excluding the
+        # positive itself (see _sampled_negatives).
+        pos_np = pos.detach().cpu().numpy()
         neg = torch.as_tensor(
-            rng.integers(0, self.n_items, size=len(pos)), device=self.device
+            _sampled_negatives(rng, self.n_items, pos_np), device=self.device
         )
         item_w = net.item_emb.weight[1:]
         pos_score = (h * item_w[pos]).sum(-1)

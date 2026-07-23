@@ -11,7 +11,6 @@ import dataclasses
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from reclab.models import ItemKNN
 from reclab.ranking.dataset import build_ranker_frame, nested_split

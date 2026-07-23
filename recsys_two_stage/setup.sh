@@ -1,18 +1,19 @@
 #!/bin/bash
-# setup.sh - Complete two-stage recommender (Stage 1) setup
-# One-command setup for portfolio demonstration
+# setup.sh - Two-stage recommender: one-command quick setup
+# Builds the image and runs the fast classical smoke (~5 min). Full three-stage
+# reproduction is `make reproduce` (~45 min).
 
 set -e  # Exit on any error
 
 echo "================================================================================"
-echo "Two-Stage Recommender (Stage 1) - Automated Setup"
+echo "Two-Stage Recommender - Quick Setup"
 echo "================================================================================"
 echo ""
 echo "This script will:"
 echo "  1. Build the Docker image"
-echo "  2. Run a full-catalogue evaluation of the four classical models"
+echo "  2. Run a full-catalogue evaluation of the four classical models (fast smoke)"
 echo ""
-echo "Estimated time: ~5 minutes"
+echo "Estimated time: ~5 minutes (all three stages: 'make reproduce', ~45 minutes)"
 echo ""
 echo "Starting in 3 seconds... (Ctrl+C to cancel)"
 sleep 3
@@ -57,7 +58,7 @@ echo "==========================================================================
 echo "✅ SETUP COMPLETE!"
 echo "================================================================================"
 echo ""
-echo "The Stage 1 recommender evaluation pipeline is ready to use!"
+echo "The recommender pipeline is ready — all three stages are available via make."
 echo ""
 echo "Try these commands:"
 echo ""
@@ -67,7 +68,7 @@ echo ""
 echo "  # Coverage / Gini / popularity-bias metrics"
 echo "  make beyond"
 echo ""
-echo "  # Reproduce every number in the README in one go (~15 min)"
+echo "  # Reproduce every number in the README end to end, all three stages (~45 min)"
 echo "  make reproduce"
 echo ""
 echo "For help:"

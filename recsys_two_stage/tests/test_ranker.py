@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from reclab.ranking.dataset import FEATURES, RankerFrame
-from reclab.ranking.ranker import Reranker, e2e_top_k, evaluate_e2e
+from reclab.ranking.ranker import Reranker, e2e_per_session, e2e_top_k, evaluate_e2e
 
 
 def _synthetic_frame(n_sessions=200, n_cand=20, seed=0):
@@ -63,6 +63,18 @@ class TestReranker:
         two = res[(res.model == "two_stage") & (res.metric == "ndcg")].value.iloc[0]
         retr = res[(res.model == "retrieval_only") & (res.metric == "ndcg")].value.iloc[0]
         assert two >= retr - 0.02  # in-sample: the ranker recovers the retrieval signal
+
+    def test_per_session_mean_matches_evaluate_e2e(self):
+        # The paired-CI path (e2e_per_session) must be consistent with the reported
+        # mean (evaluate_e2e), or the interval would be around a different quantity.
+        frame, targets = _synthetic_frame(seed=2)
+        model = Reranker(n_estimators=40, seed=0).fit(frame)
+        res = evaluate_e2e(model, frame, targets, ks=(20,), label="two_stage")
+        reranked = model.predict(frame.X)
+        per = e2e_per_session(reranked, frame, targets, "ndcg", 20)
+        reported = res[(res.model == "two_stage") & (res.metric == "ndcg")].value.iloc[0]
+        assert per.mean() == pytest.approx(reported)
+        assert per.shape == (frame.n_sessions,)
 
     def test_reproducible_under_seed(self):
         frame, _ = _synthetic_frame()

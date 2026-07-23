@@ -5,9 +5,9 @@ to ``out`` and returns what downstream steps reuse, so ``reclab all`` can fit ea
 model once and thread the fitted objects through the analyses rather than retraining.
 
 Neural hyperparameters are lightly tuned by hand within the CPU budget rather than
-grid-searched: SASRec at ~2.5 min/run makes a large grid expensive for a result whose
-qualitative shape (neural loses the full-catalogue benchmark) is already clear. The
-values and that decision are documented in the README.
+grid-searched: SASRec at ~6 min/run (~48 s/epoch × 8 epochs) makes a large grid expensive
+for a result whose qualitative shape (neural loses the full-catalogue benchmark) is already
+clear. The values and that decision are documented in the README.
 """
 
 from __future__ import annotations

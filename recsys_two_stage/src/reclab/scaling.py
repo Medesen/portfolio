@@ -21,7 +21,6 @@ import time
 
 import numpy as np
 import pandas as pd
-import scipy.sparse as sp
 
 from reclab.models import ALS, EASE, estimate_memory_gb
 
@@ -34,7 +33,7 @@ def catalogue_scaling_sweep(
 
     Returns fit times and the analytical EASE dense-matrix footprint per K.
     """
-    als_params = als_params or dict(factors=128, regularization=1.0, alpha=40.0,
+    als_params = als_params or dict(factors=128, regularization=0.1, alpha=640.0,
                                     iterations=15, num_threads=4, seed=seed)
     train = split.train.tocsc()
     popularity = np.asarray(train.sum(axis=0)).ravel()

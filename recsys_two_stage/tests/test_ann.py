@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from reclab.serving.ann import ANNIndex, recall_at_k, sweep_ann
 

@@ -33,7 +33,6 @@ class ANNStats:
     p95_ms: float
     p99_ms: float
     build_s: float
-    end_to_end_ndcg: float | None = None
 
 
 class ANNIndex:

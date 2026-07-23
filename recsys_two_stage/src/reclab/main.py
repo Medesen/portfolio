@@ -1,8 +1,14 @@
-"""CLI: ``reclab {eda,tune,evaluate,sampled,protocols,beyond,all}``.
+"""CLI for the three-stage recommender study.
+
+Stage 1 (classical): ``eda tune evaluate sampled protocols beyond``.
+Stage 2 (neural):    ``features neural ablations ceiling cold-start stage2``.
+Stage 3 (two-stage): ``evaluate-e2e ann-sweep scaling build-service serve latency stage3``.
 
 Each subcommand writes CSV(s) to ``--out`` (default ``outputs/``) and prints a
-human-readable summary. ``all`` runs the full pipeline and reproduces every number
-in the README.
+human-readable summary. ``all`` runs the full pipeline across all three stages and
+regenerates every reported number in the README **given the frozen tuned parameters**;
+hyperparameter selection itself is a separate, auditable step (``reclab tune``), not
+part of ``all`` (see the tuning note below).
 
 Note on the metric set: because the session-based protocol holds out a single next
 item per test session, Recall@k collapses to HitRate@k (one relevant item), so the
@@ -27,7 +33,11 @@ import pandas as pd
 from reclab.data import load_events, sessionize, to_session_items
 from reclab.data.filtering import k_core_filter
 from reclab.evaluation.beyond_accuracy import evaluate_beyond_accuracy
-from reclab.evaluation.full_catalogue import evaluate
+from reclab.evaluation.full_catalogue import (
+    evaluate,
+    operational_bootstrap_ci,
+    paired_bootstrap_diff,
+)
 from reclab.evaluation.sampled import evaluate_sampled, protocol_disagreement
 from reclab.models import ALS, EASE, ItemKNN, Popularity
 from reclab.splitting import leave_one_out_split, temporal_split
@@ -45,10 +55,16 @@ KS = (10, 20, 50)
 GRIDS = {
     "itemknn": {"k": [50, 100, 200, 300], "shrink": [0.0, 50.0, 100.0, 500.0]},
     "ease": {"reg": [100.0, 250.0, 500.0, 1000.0, 2000.0]},
+    # alpha is ALS's confidence scale (confidence = 1 + alpha*value); on this sparse
+    # implicit data the validation optimum is far above the 20-40 first tried, so the
+    # grid runs up to 1280 (the optimum, alpha=640/reg=0.1, is interior — validation
+    # NDCG@20 rises to alpha=640 and falls again by 1280). Under-tuning alpha here is exactly the
+    # Dacrema-et-al. failure the project exists to avoid, so it is tuned as widely as
+    # the neighbourhood models are.
     "als": {
         "factors": [64, 128],
-        "regularization": [1.0, 10.0],
-        "alpha": [20.0, 40.0],
+        "regularization": [0.1, 1.0, 10.0],
+        "alpha": [40.0, 80.0, 160.0, 320.0, 640.0, 1280.0],
     },
 }
 ALS_FIXED = {"iterations": 15, "num_threads": 4, "seed": 0}
@@ -59,7 +75,7 @@ TUNED_PARAMS: dict[str, dict] = {
     "popularity": {},
     "itemknn": {"k": 300, "shrink": 100.0},
     "ease": {"reg": 500.0},
-    "als": {"factors": 128, "regularization": 1.0, "alpha": 40.0, **ALS_FIXED},
+    "als": {"factors": 128, "regularization": 0.1, "alpha": 640.0, **ALS_FIXED},
 }
 
 MODEL_CLASSES = {
@@ -159,8 +175,27 @@ def run_tune(pairs: pd.DataFrame, out: Path) -> None:
 
 def run_evaluate(pairs: pd.DataFrame, out: Path) -> pd.DataFrame:
     split = build_split(pairs)
-    rows = []
+    cohort = split.cohort
+    n_forced_miss = cohort.n_cold_target if cohort else 0
+
+    # Cohort flow: account for every post-cutoff session before quoting any accuracy.
+    print("\n=== Test cohort flow (temporal split) ===")
+    if cohort:
+        print(f"  post-cutoff sessions:        {cohort.n_post_cutoff:,}")
+        print(f"  warm-target (headline):      {cohort.n_warm_target:,} "
+              f"({cohort.n_warm_target / cohort.n_post_cutoff:.1%})")
+        print(f"  cold-target (forced miss):   {cohort.n_cold_target:,} "
+              f"({cohort.n_cold_target / cohort.n_post_cutoff:.1%})")
+        print(f"  insufficient warm prefix:    {cohort.n_insufficient:,}")
+        flow = {"n_straddling_dropped": split.n_straddling_dropped, **cohort.as_dict()}
+        out.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame([flow]).to_csv(out / "cohort_flow.csv", index=False)
+
+    rows, op_rows = [], []
+    ndcg20_per_session: dict[str, np.ndarray] = {}
     print("\n=== Full-catalogue evaluation (honest protocol) ===")
+    print("  (conditional = warm-target headline; operational = actual next item, "
+          "cold targets counted as misses)")
     for name in MODEL_CLASSES:
         model = build_model(name).fit(split.train)
         result = evaluate(model, split, ks=KS)
@@ -172,14 +207,123 @@ def run_evaluate(pairs: pd.DataFrame, out: Path) -> pd.DataFrame:
                     "value": mean, "ci_low": lo, "ci_high": hi,
                     "n_sessions": result.n_sessions,
                 })
+                if metric in ("hit_rate", "ndcg") and k in (10, 20):
+                    op_m, op_lo, op_hi = operational_bootstrap_ci(
+                        result.per_session[(metric, k)], n_forced_miss
+                    )
+                    op_rows.append({
+                        "model": name, "metric": metric, "k": k,
+                        "value": op_m, "ci_low": op_lo, "ci_high": op_hi,
+                        "n_sessions": result.n_sessions + n_forced_miss,
+                    })
+        ndcg20_per_session[name] = result.per_session[("ndcg", 20)]
         m, lo, hi = result.bootstrap_ci("ndcg", 20)
-        print(f"  {name:11s} NDCG@20={m:.4f} [{lo:.4f}, {hi:.4f}]  "
-              f"HR@20={result.per_session[('hit_rate', 20)].mean():.4f}")
+        op_m, op_lo, op_hi = operational_bootstrap_ci(
+            result.per_session[("ndcg", 20)], n_forced_miss
+        )
+        print(f"  {name:11s} NDCG@20 conditional={m:.4f} [{lo:.4f}, {hi:.4f}]  "
+              f"operational={op_m:.4f} [{op_lo:.4f}, {op_hi:.4f}]")
         del model
     table = pd.DataFrame(rows)
     out.mkdir(parents=True, exist_ok=True)
     table.to_csv(out / "metrics_full.csv", index=False)
-    print(f"\nwrote {out}/metrics_full.csv")
+    pd.DataFrame(op_rows).to_csv(out / "metrics_operational.csv", index=False)
+
+    # The two front-runners (ItemKNN, EASE) are within a hair on the marginal means,
+    # and their marginal CIs overlap — but overlapping marginal CIs are not a test of
+    # the difference. Both models score the *same* sessions, so the honest question is
+    # whether the paired per-session difference excludes zero. The interval and verdict
+    # are computed below and reported as whatever the data supports — "resolves a winner"
+    # when it excludes zero, "does not resolve" when it straddles it — never asserted.
+    diff_mean, diff_lo, diff_hi = paired_bootstrap_diff(
+        ndcg20_per_session["itemknn"], ndcg20_per_session["ease"]
+    )
+    resolves = not (diff_lo <= 0.0 <= diff_hi)
+    print(f"\n  paired NDCG@20 (ItemKNN - EASE) = {diff_mean:+.4f} "
+          f"[{diff_lo:+.4f}, {diff_hi:+.4f}] "
+          f"-> {'resolves a winner' if resolves else 'includes zero: no resolved winner'}")
+    pd.DataFrame([{
+        "comparison": "itemknn_minus_ease", "metric": "ndcg", "k": 20,
+        "diff": diff_mean, "ci_low": diff_lo, "ci_high": diff_hi,
+        "resolves_winner": resolves, "n_sessions": len(ndcg20_per_session["itemknn"]),
+    }]).to_csv(out / "paired_ci_full.csv", index=False)
+    print(f"\nwrote {out}/metrics_full.csv, {out}/metrics_operational.csv, "
+          f"{out}/cohort_flow.csv, {out}/paired_ci_full.csv")
+    return table
+
+
+def run_als_count_ablation(pairs: pd.DataFrame, out: Path) -> pd.DataFrame:
+    """Does ALS repeat-count confidence weighting actually beat binary on this data?
+
+    ALS's confidence is ``1 + alpha*value``; with counts an item viewed k times in a
+    session gets ``1 + alpha*k``. ``alpha`` is therefore the hyperparameter that
+    interacts with the count scale, so it is retuned *per variant* on the validation
+    window (factors/regularization held at their Stage-1 tuned values); each variant's
+    validation winner is then compared once on the test split with a paired bootstrap.
+    The default ALS stays binary unless count weighting wins on *validation* — selection
+    never touches test.
+    """
+    from reclab.tuning import validation_split
+
+    val = validation_split(
+        pairs, test_days=TEST_DAYS, val_days=VAL_DAYS,
+        min_session_items=MIN_SESSION_ITEMS, min_item_sessions=MIN_ITEM_SESSIONS,
+    )
+    split = build_split(pairs)
+    if val.train_counts is None or split.train_counts is None:
+        raise RuntimeError("count matrix unavailable; n_events missing from the frame")
+
+    factors, reg = 128, 0.1            # Stage-1 tuned values, held fixed
+    alpha_grid = [160.0, 320.0, 640.0, 1280.0]
+
+    def tune_alpha(train_matrix, use_counts):
+        best_a, best_s = None, -float("inf")
+        for a in alpha_grid:
+            model = ALS(factors=factors, regularization=reg, alpha=a,
+                        use_counts=use_counts, **ALS_FIXED).fit(train_matrix)
+            s = float(evaluate(model, val, ks=(20,)).per_session[("ndcg", 20)].mean())
+            if s > best_s:
+                best_s, best_a = s, a
+            del model
+        return best_a, best_s
+
+    print("\n=== ALS count-weighting ablation (binary vs count confidence) ===")
+    a_bin, val_bin = tune_alpha(val.train, use_counts=False)
+    a_cnt, val_cnt = tune_alpha(val.train_counts, use_counts=True)
+    print(f"  validation NDCG@20: binary={val_bin:.4f} (alpha={a_bin:g})  "
+          f"count={val_cnt:.4f} (alpha={a_cnt:g})")
+    decision = "count" if val_cnt > val_bin else "binary"
+
+    bin_model = ALS(factors=factors, regularization=reg, alpha=a_bin,
+                    use_counts=False, **ALS_FIXED).fit(split.train)
+    cnt_model = ALS(factors=factors, regularization=reg, alpha=a_cnt,
+                    use_counts=True, **ALS_FIXED).fit(split.train_counts)
+    res_bin, res_cnt = evaluate(bin_model, split, ks=(10, 20)), evaluate(cnt_model, split, ks=(10, 20))
+    b20, c20 = res_bin.per_session[("ndcg", 20)], res_cnt.per_session[("ndcg", 20)]
+    diff, lo, hi = paired_bootstrap_diff(c20, b20)
+    resolves = not (lo <= 0.0 <= hi)
+    print(f"  test NDCG@20: binary={b20.mean():.4f}  count={c20.mean():.4f}")
+    print(f"  paired (count - binary) = {diff:+.4f} [{lo:+.4f}, {hi:+.4f}] "
+          f"-> {'resolves a difference' if resolves else 'includes zero: no resolved difference'}")
+    print(f"  validation selects: {decision}  (ALS default stays binary unless count wins)")
+
+    table = pd.DataFrame([
+        {"variant": "binary", "alpha": a_bin, "val_ndcg@20": val_bin,
+         "test_ndcg@20": float(b20.mean()),
+         "test_hit_rate@20": float(res_bin.per_session[("hit_rate", 20)].mean())},
+        {"variant": "count", "alpha": a_cnt, "val_ndcg@20": val_cnt,
+         "test_ndcg@20": float(c20.mean()),
+         "test_hit_rate@20": float(res_cnt.per_session[("hit_rate", 20)].mean())},
+    ])
+    paired = pd.DataFrame([{
+        "comparison": "count_minus_binary", "metric": "ndcg", "k": 20,
+        "diff": diff, "ci_low": lo, "ci_high": hi, "resolves_winner": resolves,
+        "validation_winner": decision, "n_sessions": res_bin.n_sessions,
+    }])
+    out.mkdir(parents=True, exist_ok=True)
+    table.to_csv(out / "als_count_ablation.csv", index=False)
+    paired.to_csv(out / "als_count_ablation_paired.csv", index=False)
+    print(f"\nwrote {out}/als_count_ablation.csv, {out}/als_count_ablation_paired.csv")
     return table
 
 
@@ -273,13 +417,15 @@ def run_beyond(pairs: pd.DataFrame, out: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="reclab",
-        description="Two-stage recommender evaluation on RetailRocket (Stage 1).",
+        description="Two-stage recommender study on RetailRocket: classical baselines, "
+        "neural retrieval, reranking and serving (Stages 1-3).",
     )
     sub = parser.add_subparsers(dest="command", required=True)
     for name, help_text in [
         ("eda", "dataset summary + filter-threshold grid"),
         ("tune", "grid search on the validation window"),
         ("evaluate", "full-catalogue evaluation of all models"),
+        ("als-count-ablation", "ALS repeat-count vs binary confidence weighting"),
         ("sampled", "sampled-negative evaluation + disagreement table"),
         ("protocols", "temporal vs leave-one-out comparison"),
         ("beyond", "coverage / Gini / popularity-bias metrics"),
@@ -297,7 +443,8 @@ def main() -> None:
         ("serve", "launch the FastAPI recommender (uvicorn)"),
         ("latency", "per-stage serving latency harness"),
         ("stage3", "run only the Stage 3 pipeline (reranker, ANN, scaling, serving)"),
-        ("all", "run the whole pipeline (reproduce the README)"),
+        ("seed-sensitivity", "training-seed robustness of the neural/reranker claims (P1-5)"),
+        ("all", "regenerate every reported number (frozen tuned params; tuning is separate)"),
         ("stage2", "run only the Stage 2 pipeline (neural, ablations, ceiling, cold-start)"),
     ]:
         p = sub.add_parser(name, help=help_text)
@@ -321,6 +468,8 @@ def main() -> None:
         run_tune(pairs, args.out)
     elif args.command == "evaluate":
         run_evaluate(pairs, args.out)
+    elif args.command == "als-count-ablation":
+        run_als_count_ablation(pairs, args.out)
     elif args.command == "sampled":
         run_sampled(pairs, args.out)
     elif args.command == "protocols":
@@ -343,6 +492,9 @@ def main() -> None:
         s2.run_cold_start(pairs, build_split(pairs), args.out)
     elif args.command == "stage2":
         run_stage2(pairs, args.out)
+    elif args.command == "seed-sensitivity":
+        from reclab.sensitivity import run_seed_sensitivity
+        run_seed_sensitivity(pairs, args.out)
     elif args.command in ("evaluate-e2e", "ann-sweep", "scaling", "build-service",
                           "latency", "stage3"):
         import reclab.stage3 as s3
@@ -363,12 +515,15 @@ def main() -> None:
     elif args.command == "all":
         run_eda(pairs, args.out)
         run_evaluate(pairs, args.out)
+        run_als_count_ablation(pairs, args.out)
         run_sampled(pairs, args.out)
         run_protocols(pairs, args.out)
         run_beyond(pairs, args.out)
         run_stage2(pairs, args.out)
         import reclab.stage3 as s3
         s3.run_stage3(s3.fit_stage3(pairs), args.out)
+        from reclab.sensitivity import run_seed_sensitivity
+        run_seed_sensitivity(pairs, args.out)
         print("\n=== reproduce complete ===")
 
 

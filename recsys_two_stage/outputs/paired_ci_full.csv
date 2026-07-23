@@ -1,0 +1,2 @@
+comparison,metric,k,diff,ci_low,ci_high,resolves_winner,n_sessions
+itemknn_minus_ease,ndcg,20,0.0008528716604818765,-0.000257598313586184,0.0018920644691488625,False,18059

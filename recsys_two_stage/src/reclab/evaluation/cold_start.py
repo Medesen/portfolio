@@ -39,6 +39,7 @@ class ColdStartEval:
     cold_item_ids: np.ndarray
     cold_share: float                   # cold targets / all evaluable test targets
     near_cold_share: float              # targets with <5 train interactions
+    session_ts: np.ndarray              # each session's prediction time (its target's ts)
 
     @property
     def n_sessions(self) -> int:
@@ -75,7 +76,6 @@ def build_cold_start_eval(
     post = session_items[session_items["ts"] >= cutoff].sort_values(
         ["session", "ts"], kind="mergesort"
     )
-    is_warm = post["itemid"].isin(warm_ids)
     is_cold_item = ~post["itemid"].isin(pre_cutoff_items)
 
     # Cold candidates: strictly-new items with enough post-cutoff support to evaluate.
@@ -105,6 +105,10 @@ def build_cold_start_eval(
     # Evaluable cold sessions: a cold target that clears min support and a warm prefix.
     cold_targets = evaluable[evaluable["itemid"].isin(cold_to_idx)].copy()
     keep_sessions = cold_targets["session"].to_numpy()
+    # The prediction time for each session is its target's timestamp — the moment a
+    # deployed system would have to recommend, and the horizon past which no popularity
+    # signal may be used (see evaluate_category_popularity_cold).
+    session_ts = cold_targets["ts"].to_numpy()
     row_of_session = {int(s): i for i, s in enumerate(keep_sessions)}
 
     kept_prefix = warm_prefix_pairs[warm_prefix_pairs["session"].isin(set(keep_sessions))]
@@ -129,6 +133,7 @@ def build_cold_start_eval(
         cold_item_ids=cold_ids,
         cold_share=cold_share,
         near_cold_share=near_cold_share,
+        session_ts=np.asarray(session_ts),
     )
 
 
@@ -160,33 +165,75 @@ def evaluate_two_tower_cold(model, cold: ColdStartEval, ks=(10, 20, 50)) -> pd.D
     return pd.DataFrame(rows)
 
 
+def _asof_cold_frequencies(
+    event_cidx: np.ndarray, event_ts: np.ndarray, session_ts: np.ndarray, n_cold: int
+) -> np.ndarray:
+    """Per session, cold-item occurrence counts accrued *strictly before* its prediction time.
+
+    This is the whole anti-leak point of the baseline. Counting every cold-item event
+    in the test period — the naive implementation — lets each session's ranking use
+    events that happen *after* it, including the session's own target occurrence, which
+    a deployed "most-popular-new-item" heuristic could never know. Sweeping the events
+    and the session timestamps together in time order gives each session only its own
+    past. Returns an ``(n_sessions, n_cold)`` count matrix aligned to ``session_ts``.
+    """
+    event_ts = np.asarray(event_ts)
+    event_cidx = np.asarray(event_cidx)
+    session_ts = np.asarray(session_ts)
+
+    ev_order = np.argsort(event_ts, kind="mergesort")
+    event_ts, event_cidx = event_ts[ev_order], event_cidx[ev_order]
+
+    freq = np.zeros((len(session_ts), n_cold), dtype=np.float64)
+    running = np.zeros(n_cold, dtype=np.float64)
+    j = 0
+    for s in np.argsort(session_ts, kind="mergesort"):
+        t = session_ts[s]
+        while j < len(event_ts) and event_ts[j] < t:  # strict: excludes the target itself
+            running[int(event_cidx[j])] += 1.0
+            j += 1
+        freq[s] = running
+    return freq
+
+
 def evaluate_category_popularity_cold(
     cold: ColdStartEval, session_items: pd.DataFrame, warm_split,
     warm_features: ItemFeatures, ks=(10, 20, 50),
 ) -> pd.DataFrame:
     """Baseline: recommend the most popular cold items in the session's category.
 
-    The category of a session is the most common category among its warm prefix
-    items (as-of cutoff); cold candidates in that category are ranked by their
-    post-cutoff frequency. This is what a sensible engineer ships without a model —
-    the bar the two-tower must clear, not zero. Warm and cold categories share the
-    one vocabulary, so matching a session's category to a cold item's is meaningful.
+    The category of a session is the most common category among its warm prefix items
+    (as-of cutoff). Cold candidates in that category are ranked by their popularity **as
+    of the session's own prediction time** — the count of that cold item's occurrences
+    strictly before the session, never the whole-test-period count. That distinction is
+    the difference between a deployable heuristic and an oracle: whole-period popularity
+    would let the baseline see events after the session (and the target's own
+    occurrence), inflating it. This is the bar the two-tower must clear, honestly
+    measured. Warm and cold categories share the one vocabulary, so matching a session's
+    category to a cold item's is meaningful.
     """
     warm_cat = warm_features.category_ids  # (n_warm,)
     cold_cat = cold.cold_features.category_ids  # (n_cold,)
 
+    cold_to_idx = {int(i): k for k, i in enumerate(cold.cold_item_ids)}
     post = session_items[session_items["ts"] >= warm_split.cutoff]
-    cold_pop = post["itemid"].value_counts()
-    cold_freq = np.array([cold_pop.get(int(i), 0) for i in cold.cold_item_ids])
+    cold_events = post[post["itemid"].isin(cold_to_idx)]
+    freq_by_session = _asof_cold_frequencies(
+        cold_events["itemid"].map(cold_to_idx).to_numpy(),
+        cold_events["ts"].to_numpy(),
+        cold.session_ts,
+        len(cold.cold_item_ids),
+    )
 
     rows = []
     for k in ks:
         hits, ndcgs = [], []
         for s in range(cold.n_sessions):
+            cold_freq = freq_by_session[s]  # popularity known to session s at its own time
             hist_cats = warm_cat[cold.warm_prefix[s].indices]
             hist_cats = hist_cats[hist_cats != 0]
             pred_cat = np.bincount(hist_cats).argmax() if len(hist_cats) else 0
-            # Rank cold candidates: same-category first, then by frequency.
+            # Rank cold candidates: same-category first, then by as-of-time frequency.
             score = cold_freq + (cold_cat == pred_cat) * (cold_freq.max() + 1)
             ranked = np.argsort(-score)[:k]
             target = int(cold.cold_target_idx[s])

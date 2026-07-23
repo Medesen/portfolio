@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
-from reclab.evaluation.cold_start import build_cold_start_eval
+from reclab.evaluation.cold_start import _asof_cold_frequencies, build_cold_start_eval
 from reclab.features.item_features import ItemFeatures
 from reclab.splitting import temporal_split
 
@@ -111,6 +110,59 @@ class TestStructuralZeros:
                    for i in cold.cold_item_ids)
         # (n_warm marks where cold candidates begin in evaluate_two_tower_cold.)
         assert n_warm == split.n_items
+
+
+class TestColdBaselineNoLeak:
+    """The category-popularity baseline must rank on popularity known *at the session's
+    time*, never the full test period — otherwise it is an oracle, not a heuristic."""
+
+    def _t(self, minutes):
+        return np.datetime64("2015-08-01T00:00:00") + np.timedelta64(minutes, "m")
+
+    def test_only_past_events_count(self):
+        # One session at t=100. Cold item 0 has an event before it; cold item 1 after.
+        freq = _asof_cold_frequencies(
+            event_cidx=np.array([0, 1]),
+            event_ts=np.array([self._t(50), self._t(150)]),
+            session_ts=np.array([self._t(100)]),
+            n_cold=2,
+        )
+        assert freq[0, 0] == 1.0  # the earlier event is counted
+        assert freq[0, 1] == 0.0  # the later event is NOT
+
+    def test_event_at_prediction_time_is_excluded(self):
+        # The target's own occurrence sits at exactly the prediction time; strict '<'
+        # keeps it out, so the baseline cannot count the very event it is predicting.
+        freq = _asof_cold_frequencies(
+            np.array([0]), np.array([self._t(100)]), np.array([self._t(100)]), n_cold=1
+        )
+        assert freq[0, 0] == 0.0
+
+    def test_appending_a_later_event_does_not_change_the_ranking(self):
+        # Codex's requested property: mutate interactions occurring after an evaluated
+        # session; its baseline popularity vector must be unchanged.
+        events_ts = [self._t(10), self._t(20), self._t(30)]
+        events_cidx = [0, 1, 0]
+        sessions = np.array([self._t(25)])
+        before = _asof_cold_frequencies(np.array(events_cidx), np.array(events_ts), sessions, 2)
+        # Append a future event (t=40 > session t=25) for a cold item.
+        after = _asof_cold_frequencies(
+            np.array(events_cidx + [1]),
+            np.array(events_ts + [self._t(40)]),
+            sessions,
+            2,
+        )
+        assert np.array_equal(before, after)
+
+    def test_build_populates_session_ts_aligned_to_targets(self):
+        log = _synthetic_log(seed=1)
+        split = temporal_split(log, test_days=7, min_item_sessions=5)
+        cold = build_cold_start_eval(log, split, _warm_features(split.item_ids),
+                                     min_cold_support=2)
+        assert cold.session_ts.shape == (cold.n_sessions,)
+        # Every prediction time is post-cutoff (targets are post-cutoff by construction).
+        ts = pd.to_datetime(cold.session_ts, utc=True)
+        assert (ts >= split.cutoff).all()
 
 
 def test_rejects_missing_warm_prefix_gracefully():
